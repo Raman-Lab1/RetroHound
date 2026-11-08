@@ -1,0 +1,13 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"npm install left-pad-example"}
+{"category":"process_creation","tool_name":"Bash","command_line":"pip install examplepkg-xyz"}
+{"category":"process_creation","tool_name":"Bash","command_line":"yarn add example-lib"}
+{"category":"process_creation","tool_name":"Bash","command_line":"python -m pip install examplepkg"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm install -g example-cli"}
+{"category":"process_creation","tool_name":"Bash","command_line":"pip install --upgrade examplepkg"}
+{"category":"process_creation","tool_name":"Bash","command_line":"pip install pip-example-evil"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm install --save-dev example-lib"}
+{"category":"process_creation","tool_name":"Bash","command_line":"go get example.invalid/mod"}
+{"category":"process_creation","tool_name":"Bash","command_line":"python3 - <<'EOF'\nimport subprocess\nsubprocess.run('pip install examplepkg-xyz', shell=True)\nEOF"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm install && npm i example-lib"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "npm install --global --offline --cache \"$CACHE\" example-cli"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "npm install \"example-lib\""}

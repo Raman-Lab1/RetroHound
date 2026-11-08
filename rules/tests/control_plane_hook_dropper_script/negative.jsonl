@@ -1,0 +1,7 @@
+{"category":"process_creation","tool_name":"hook:SessionStart","command_line":"node \"$CLAUDE_PROJECT_DIR/.claude/helpers/hook-handler.cjs\" pre-bash"}
+{"category":"process_creation","tool_name":"hook:SessionStart","command_line":"echo done"}
+{"category":"process_creation","tool_name":"Bash","command_line":"node .claude/setup.mjs"}
+{"category":"process_creation","tool_name":"hook:SessionStart","command_line":"node ./scripts/lint.js"}
+{"category":"process_creation","tool_name":"hook:SessionStart","command_line":"/usr/local/bin/notify"}
+{"category":"process_creation","tool_name":"hook:SessionStart","command_line":"bash ~/.claude/plugins/x/hook.sh"}
+{"category":"process_creation","tool_name":"hook:SessionStart","command_line":"python3 .github/hooks/check.py"}

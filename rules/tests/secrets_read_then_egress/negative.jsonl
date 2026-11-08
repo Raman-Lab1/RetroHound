@@ -1,0 +1,10 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s https://api.example.invalid"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env.example"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm test"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env","outcome":"blocked","denial_kind":"automode-blocked"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s http://localhost:8080/health"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat .env | head -1; curl -s http://127.0.0.1:3000"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s https://api.example.invalid","ts":"2026-01-01T03:00:00.000Z"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "grep -nE \"^\\.env|/\\.env\" .gitignore", "ts": "2026-01-01T05:00:00.000Z"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "curl -s https://api.example.invalid", "ts": "2026-01-01T05:00:30.000Z"}

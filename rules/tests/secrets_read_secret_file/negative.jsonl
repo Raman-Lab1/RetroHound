@@ -1,0 +1,5 @@
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env.example"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/.ssh/id_rsa.pub"}
+{"category":"file_access","tool_name":"Read","target_path":"/etc/ssl/ca.pem"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/src/env.ts"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/.env","content":"KEY=placeholder","tool_input":"{\"file_path\":\"/home/dev/app/.env\",\"content\":\"KEY=placeholder\"}"}

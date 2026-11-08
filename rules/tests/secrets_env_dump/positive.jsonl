@@ -1,0 +1,26 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"env"}
+{"category":"process_creation","tool_name":"Bash","command_line":"printenv"}
+{"category":"process_creation","tool_name":"Bash","command_line":"env | sort"}
+{"category":"process_creation","tool_name":"Bash","command_line":"export -p"}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"Get-ChildItem env:"}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"gci env:"}
+{"category":"process_creation","tool_name":"Bash","command_line":"env | grep -i ANTHROPIC"}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"[Environment]::GetEnvironmentVariables()"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cd app && env"}
+{"category":"process_creation","tool_name":"Bash","command_line":"set"}
+{"category":"process_creation","tool_name":"Bash","command_line":"python3 - <<'EOF'\nimport os\nprint(os.environ)\nEOF"}
+{"category":"process_creation","tool_name":"Bash","command_line":"python3 - <<'EOF'\nimport os, json\nprint(json.dumps(dict(os.environ)))\nEOF"}
+{"category":"process_creation","tool_name":"Bash","command_line":"bash <<'EOF'\ncd /tmp\nenv\nEOF"}
+{"category":"process_creation","tool_name":"Bash","command_line":"node -e 'console.log(process.env)'"}
+{"category":"process_creation","tool_name":"Bash","command_line":"ENV"}
+{"category":"process_creation","tool_name":"Bash","command_line":"out=$(printenv); echo done"}
+{"category":"process_creation","tool_name":"Bash","command_line":"(env) > /tmp/e.txt"}
+{"category":"process_creation","tool_name":"Bash","command_line":"/usr/bin/env | sort"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "SET"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "SET | more"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "cmd /c \"set\""}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "cmd.exe /c set > env.txt"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "node -e 'console.log(JSON.stringify(process.env, null, 2))'"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "python3 -c 'import json, os; print(json.dumps(dict(os.environ), indent=2))'"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "env 2>&1"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "printenv 2>/dev/null | head -50"}

@@ -1,0 +1,3 @@
+{"category":"file_event","tool_name":"Write","target_path":"/home/x/proj/.vscode/tasks.json","content":"{\"tasks\":[{\"label\":\"build\",\"command\":\"npm run build\"}]}"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/x/proj/docs/vscode.md","content":"Set \"runOn\": \"folderOpen\" to start a task"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/x/proj/.vscode/tasks.json","content":"\"runOn\":\"folderOpen\""}

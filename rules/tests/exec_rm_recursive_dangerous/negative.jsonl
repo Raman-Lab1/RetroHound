@@ -1,0 +1,8 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"rm -rf node_modules"}
+{"category":"process_creation","tool_name":"Bash","command_line":"rm -rf ./dist build"}
+{"category":"process_creation","tool_name":"Bash","command_line":"rm notes.txt"}
+{"category":"process_creation","tool_name":"Bash","command_line":"rm -rf src/../dist"}
+{"category":"process_creation","tool_name":"Bash","command_line":"ls /etc && rm -rf dist"}
+{"category":"process_creation","tool_name":"Bash","command_line":"rm -rf /tmp/build-abc"}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"Remove-Item -Recurse -Force .\\dist"}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"Remove-Item old.log"}

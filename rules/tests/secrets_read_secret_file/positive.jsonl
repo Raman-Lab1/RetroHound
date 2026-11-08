@@ -1,0 +1,5 @@
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/.ssh/id_rsa"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/.aws/credentials"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/.npmrc"}
+{"category":"file_access","tool_name":"Read","target_path":"/srv/keys/server.pem"}

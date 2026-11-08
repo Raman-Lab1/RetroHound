@@ -1,0 +1,2 @@
+{"category":"file_event","tool_name":"Write","target_path":"/home/x/proj/package.json","content":"{\"name\":\"x\"}"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/x/proj/.claude/settings.json","content":"{\"permissions\":{\"allow\":[\"Bash(ls)\"]}}"}

@@ -1,0 +1,4 @@
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env","outcome":"blocked","denial_kind":"automode-blocked"}
+{"category":"tool_call","tool_name":"Task"}
+{"category":"tool_call","tool_name":"Task"}
+{"category":"process_creation","tool_name":"Bash","command_line":"tail -15 .env","outcome":"blocked","denial_kind":"permission-rule"}

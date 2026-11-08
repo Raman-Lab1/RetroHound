@@ -1,0 +1,9 @@
+{"category":"file_event","tool_name":"Write","project_path":"/home/dev/proj","target_path":"/home/dev/proj/src/a.ts"}
+{"category":"file_event","tool_name":"Write","project_path":"/home/dev/proj","target_path":"src/a.ts"}
+{"category":"file_event","tool_name":"Write","project_path":"C:\\Users\\dev\\proj","target_path":"c:/users/dev/proj/src/a.ts"}
+{"category":"file_event","tool_name":"Write","target_path":"/tmp/x"}
+{"category":"file_event","tool_name":"Write","project_path":"/home/dev/proj"}
+{"category":"tool_call","tool_name":"Bash","project_path":"/home/dev/proj","target_path":"/etc/hosts"}
+{"category":"file_event","tool_name":"Write","project_path":"/Users/dev/proj","target_path":"/private/tmp/claude-501/-Users-dev-proj/0b3c9a1e-0000-4000-8000-000000000001/scratchpad/notes.md"}
+{"category":"file_event","tool_name":"Write","project_path":"C:/Users/dev/proj","target_path":"C:/Users/dev/AppData/Local/Temp/claude/ab12/0b3c9a1e-0000-4000-8000-000000000001/scratchpad/x.ts"}
+{"category":"file_event","tool_name":"Write","project_path":"/Users/dev/proj","target_path":"/Users/dev/.claude/projects/-Users-dev-proj/memory/MEMORY.md"}

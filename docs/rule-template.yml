@@ -1,0 +1,46 @@
+# Rule template. Copy to rules/ai_coding_agent/<category>/<prefix>_<what>.yml and edit.
+# Do not leave this file under rules/ai_coding_agent: the loader would load it.
+# Fields and limits: docs/logsource.md. Process: CONTRIBUTING-RULES.md.
+
+name: exec_example_thing            # must equal the file stem and the rules/tests/<name>/ directory
+id: 00000000-0000-4000-8000-000000000000   # a new UUID, unique across all rules
+author: Your Name                    # credited under DRL 1.1 (rules/LICENSE)
+title: One-line title of what was seen
+status: experimental
+description: >
+  What the rule matches, what it deliberately does not, and any known blind spot.
+level: medium                       # informational | low | medium | high | critical
+tags:
+  - attack.execution                # ATT&CK tactic or technique, e.g. attack.t1059
+  - owasp_agentic.asi02
+falsepositives:
+  - A benign case the user may have asked for.
+x-retrohound:
+  lane: hunt                        # hunt (attack-shaped, quiet) | enforce (candidate for blocking in v0.2)
+logsource:
+  product: ai_coding_agent
+  category: process_creation        # always set one: a rule without it runs on every event
+  # service: claude_code
+detection:
+  selection:                        # map = AND, list = OR; plain values are case-insensitive, * and ? are globs
+    tool_name: Bash
+    command_line|contains:          # prefer contains/startswith/endswith over re
+      - 'example.invalid'
+  # selection_re:
+  #   command_line|re|i: '\bfoo\b[^;&|]{0,200}\sbar'   # bounded; at most one .* or .+; sees first 8 KiB only
+  filter_benign:
+    outcome: blocked                # e.g. skip what Claude Code already blocked, if you only want actions that ran
+  condition: selection and not filter_benign
+
+# Correlation (a second document in the same file, after ---). Delete if not needed.
+# ---
+# name: exec_example_sequence
+# id: 00000000-0000-4000-8000-000000000001
+# title: Step one then step two in one session
+# level: medium
+# x-retrohound: { lane: hunt }
+# correlation:
+#   type: temporal_ordered          # or event_count (with condition: { gte: N })
+#   rules: [exec_example_thing, other_rule_name]
+#   group-by: [session_id]          # session_id required; add agent_id for per-sub-agent streams
+#   timespan: 1h

@@ -1,0 +1,30 @@
+title: File written outside the project root
+id: 6f1b8c52-3d47-4a0e-9b5a-2e7c41d0a9f3
+name: files_write_outside_project
+author: Raman Kumar
+status: experimental
+description: >
+  The agent wrote or edited a file that is not under the session's project directory. Agents normally stay inside the
+  project; a write elsewhere (shell profile, ssh config, another repo) is worth a look.
+logsource:
+  product: ai_coding_agent
+  category: file_event
+detection:
+  selection:
+    target_outside_project: true
+  # Claude Code's own per-session scratchpad (/tmp/claude-<uid>/…, %TEMP%\claude\…) and auto-memory folder.
+  filter_scratchpad:
+    target_path|contains|all: ['/claude', '/scratchpad/']
+  filter_memory:
+    target_path|contains|all: ['/.claude/projects/', '/memory/']
+  condition: selection and not 1 of filter_*
+level: medium
+tags:
+  - attack.persistence
+  - attack.t1546
+  - owasp_agentic.t2
+falsepositives:
+  - Scratch files in a temp directory other than Claude Code's own scratchpad, or a monorepo sibling package opened from a parent project root.
+  - A session whose project_path is a subdirectory while the agent legitimately edits the repo root.
+x-retrohound:
+  lane: hunt

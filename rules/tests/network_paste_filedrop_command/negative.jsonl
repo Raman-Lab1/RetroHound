@@ -1,0 +1,2 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"curl https://example.invalid/x"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm install ngrok-wrapper-example"}

@@ -1,0 +1,39 @@
+name: files_persistence_location
+author: Raman Kumar
+id: 2a26f88b-c644-4b50-8bfc-c4d850beb44f
+title: Startup or persistence location written
+status: experimental
+description: >
+  The agent writes (Write/Edit) to a LaunchAgent/LaunchDaemon, Windows Startup folder, cron, systemd unit, autostart
+  entry or a shell profile (.bashrc, .zshrc, PowerShell profile). Reads are not matched. Shell commands that do the
+  same (crontab, schtasks /create, launchctl load, the Run registry key) are files_persistence_command.
+level: medium
+tags: [attack.persistence, attack.t1547, attack.t1546.004, attack.t1053, owasp_agentic.asi05]
+falsepositives:
+  - Adding a PATH entry or alias to a shell profile because the user asked.
+  - Setting up a dev service or scheduled job on request.
+x-retrohound: { lane: hunt }
+logsource: { product: ai_coding_agent, category: file_event }
+detection:
+  written_path:
+    - target_path|contains:
+        - '/library/launchagents/'
+        - '/library/launchdaemons/'
+        - '/start menu/programs/startup/'
+        - '/var/spool/cron'
+        - '/etc/cron.'
+        - '/etc/systemd/system/'
+        - '/.config/systemd/user/'
+        - '/.config/autostart/'
+        - '/etc/profile.d/'
+    - target_path|endswith:
+        - '/.bashrc'
+        - '/.bash_profile'
+        - '/.bash_login'
+        - '/.zshrc'
+        - '/.zprofile'
+        - '/.zshenv'
+        - '/.profile'
+        - '/microsoft.powershell_profile.ps1'
+        - '/profile.ps1'
+  condition: written_path

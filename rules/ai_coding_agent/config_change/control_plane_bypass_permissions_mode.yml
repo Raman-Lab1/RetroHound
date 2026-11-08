@@ -1,0 +1,23 @@
+title: Session ran in bypassPermissions mode
+id: 3811fca5-8b3d-48d1-8f02-8736246d8341
+name: control_plane_bypass_permissions_mode
+author: Raman Kumar
+status: experimental
+description: >-
+  Claude Code wrote a permission-mode line of `bypassPermissions`: every tool call in that stretch ran without a
+  prompt. This is the user's own choice, so it is an inventory item, not an alert.
+tags:
+  - attack.defense_evasion
+  - attack.t1562
+logsource:
+  product: ai_coding_agent
+  category: config_change
+detection:
+  selection:
+    permission_mode: bypassPermissions
+  condition: selection
+falsepositives:
+  - Deliberate use of bypass mode in a sandbox or container
+level: informational
+x-retrohound:
+  lane: hunt

@@ -1,0 +1,28 @@
+# Real transcripts: never commit
+fixtures/raw/
+node_modules/
+dist/
+*.db
+.retrohound/
+.DS_Store
+
+# Ruflo local secrets and runtime data
+.env
+.env.local
+.env.*.local
+.claude-flow/data/
+.claude-flow/logs/
+.claude-flow/sessions/
+.claude/settings.json.bak-*
+.code-review-graph/
+.claude-flow/metrics/
+.claude-flow/policy/
+.claude-flow/security/
+.research-scratch/
+.claude-flow/tasks/
+.claude-flow/memory-package.json
+.claude/worktrees/
+agentdb.rvf*
+.claude/security-scans/
+.claude-flow/
+.swarm/

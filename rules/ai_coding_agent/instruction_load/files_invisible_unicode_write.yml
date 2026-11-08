@@ -1,0 +1,39 @@
+name: files_invisible_unicode_write
+author: Raman Kumar
+id: e4b8a1d6-2c35-4f7a-8b19-6d0a7c3e5f82
+title: Invisible or bidirectional Unicode written to an agent instruction file
+status: experimental
+description: >
+  Tag-block characters (U+E0000 to U+E007F), bidi controls (U+202A-202E, U+2066-2069), zero-width space or word joiner
+  in text the agent wrote to an instruction file (CLAUDE.md, AGENTS.md, SKILL.md, .cursorrules,
+  copilot-instructions.md, .mdc). Same characters as files_invisible_unicode_instruction.
+  U+200C, U+200D (emoji and Persian
+  text) and U+FEFF (a BOM at the start) are left out on purpose. Hidden characters carry instructions a reviewer cannot see.
+level: high
+tags: [attack.defense_evasion, attack.t1027, owasp_agentic.asi01, owasp_agentic.asi06]
+falsepositives:
+  - Right-to-left documentation that uses bidi controls on purpose.
+  - Zero-width space pasted from a web page into a rule file.
+x-retrohound: { lane: hunt }
+logsource: { product: ai_coding_agent, category: file_event }
+detection:
+  written_path:
+    target_path|endswith: ['/claude.md', '/agents.md', '/skill.md', '/.cursorrules', '/copilot-instructions.md', '.mdc']
+  invisible:
+    content|contains: [
+      "\u200b", "\u2060", "\u202a", "\u202b", "\u202c", "\u202d", "\u202e", "\u2066",
+      "\u2067", "\u2068", "\u2069", "\U000e0001", "\U000e0020", "\U000e0021", "\U000e0022", "\U000e0023",
+      "\U000e0024", "\U000e0025", "\U000e0026", "\U000e0027", "\U000e0028", "\U000e0029", "\U000e002a", "\U000e002b",
+      "\U000e002c", "\U000e002d", "\U000e002e", "\U000e002f", "\U000e0030", "\U000e0031", "\U000e0032", "\U000e0033",
+      "\U000e0034", "\U000e0035", "\U000e0036", "\U000e0037", "\U000e0038", "\U000e0039", "\U000e003a", "\U000e003b",
+      "\U000e003c", "\U000e003d", "\U000e003e", "\U000e003f", "\U000e0040", "\U000e0041", "\U000e0042", "\U000e0043",
+      "\U000e0044", "\U000e0045", "\U000e0046", "\U000e0047", "\U000e0048", "\U000e0049", "\U000e004a", "\U000e004b",
+      "\U000e004c", "\U000e004d", "\U000e004e", "\U000e004f", "\U000e0050", "\U000e0051", "\U000e0052", "\U000e0053",
+      "\U000e0054", "\U000e0055", "\U000e0056", "\U000e0057", "\U000e0058", "\U000e0059", "\U000e005a", "\U000e005b",
+      "\U000e005c", "\U000e005d", "\U000e005e", "\U000e005f", "\U000e0060", "\U000e0061", "\U000e0062", "\U000e0063",
+      "\U000e0064", "\U000e0065", "\U000e0066", "\U000e0067", "\U000e0068", "\U000e0069", "\U000e006a", "\U000e006b",
+      "\U000e006c", "\U000e006d", "\U000e006e", "\U000e006f", "\U000e0070", "\U000e0071", "\U000e0072", "\U000e0073",
+      "\U000e0074", "\U000e0075", "\U000e0076", "\U000e0077", "\U000e0078", "\U000e0079", "\U000e007a", "\U000e007b",
+      "\U000e007c", "\U000e007d", "\U000e007e", "\U000e007f",
+    ]
+  condition: written_path and invisible

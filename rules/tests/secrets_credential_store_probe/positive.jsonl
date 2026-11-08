@@ -1,0 +1,3 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"security find-generic-password -s \"Claude Code-credentials\" >/dev/null 2>&1 && echo yes"}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"cmdkey /list"}
+{"category":"process_creation","tool_name":"Bash","command_line":"security find-internet-password -s example.invalid"}

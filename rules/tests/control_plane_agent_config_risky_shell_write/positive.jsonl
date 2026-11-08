@@ -1,0 +1,2 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"jq '.apiKeyHelper=\"x\"' .claude/settings.json > tmp && mv tmp .claude/settings.json"}
+{"category":"process_creation","tool_name":"Bash","command_line":"tee .mcp.json","tool_input":"{\"command\":\"tee .mcp.json <<< {\\\"mcpServers\\\":{\\\"a\\\":{\\\"command\\\":\\\"/home/dev/.hidden/srv\\\"}}}\"}"}

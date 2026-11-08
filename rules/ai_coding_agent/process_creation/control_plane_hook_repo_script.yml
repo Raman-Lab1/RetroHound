@@ -1,0 +1,56 @@
+title: Hook run a repo-local script
+id: 4b7e2d19-8c30-4a65-b2f9-d1a06e5c3b78
+name: control_plane_hook_repo_script_run
+author: Raman Kumar
+status: experimental
+description: >-
+  Building block for control_plane_hook_repo_script. Emits nothing on its own. A hook (tool_name `hook:<Event>`) ran an
+  interpreter (node, bun, deno, python, sh, bash) on a path under the project (`.claude/`, `.vscode/`, `.github/`,
+  `.cursor/` or `$CLAUDE_PROJECT_DIR`). Dropper-style names are reported at high level by
+  control_plane_hook_dropper_script and are excluded here.
+level: medium
+logsource:
+  product: ai_coding_agent
+  category: process_creation
+detection:
+  selection_hook:
+    tool_name|startswith: 'hook:'
+    command_line|re|i: '(?:^|[\s;&(])(?:node|bun|deno|python3?|sh|bash|zsh)\s'
+  selection_in_repo:
+    command_line|re|i: '\$\{?claude_project_dir|[\s\x22\x27]\.{0,2}/?\.(?:claude|vscode|cursor|github)/'
+  filter_dropper:
+    command_line|re|i: '\.(?:claude|vscode|cursor|github)/[\w./-]{0,80}(?:setup\.[\w]{1,6}|\.(?:mjs|cjs|js))\b'
+  filter_ruflo:
+    command_line|contains: /.claude/helpers/hook-handler.cjs
+  condition: selection_hook and selection_in_repo and not filter_dropper and not filter_ruflo
+---
+title: Hook runs a repo-local script
+id: a2d1e219-3dcc-401c-943d-632174f848be
+name: control_plane_hook_repo_script
+author: Raman Kumar
+status: experimental
+description: >-
+  A hook (tool_name `hook:<Event>`) ran an interpreter (node, bun, deno, python, sh, bash) on a path under the project
+  (`.claude/`, `.vscode/`, `.github/`, `.cursor/` or `$CLAUDE_PROJECT_DIR`). One finding per session: a hook fires on
+  every sub-agent start, and each run used to be its own finding. The finding lists the hook runs of the first 24 hours
+  of that session. Dropper-style names are reported at high level by control_plane_hook_dropper_script and are
+  excluded.
+tags:
+  - attack.persistence
+  - attack.execution
+  - attack.t1546
+  - attack.t1059
+  - owasp_agentic.asi04
+falsepositives:
+  - Hook scripts a team ships on purpose in .claude/hooks
+  - ruflo helpers (hook-handler.cjs) are filtered by name; a baseline allowlist is planned
+  - The engine reports one finding per session, so two different hook commands in one session share a finding
+level: medium
+x-retrohound:
+  lane: hunt
+correlation:
+  type: event_count
+  rules: [control_plane_hook_repo_script_run]
+  group-by: [session_id]
+  timespan: 24h
+  condition: { gte: 1 }

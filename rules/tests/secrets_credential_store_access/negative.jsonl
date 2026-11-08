@@ -1,0 +1,8 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"security find-identity -v -p codesigning"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh auth status"}
+{"category":"process_creation","tool_name":"Bash","command_line":"security find-generic-password -s \"Claude Code-credentials\" >/dev/null 2>&1 && echo yes"}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"cmdkey /list"}
+{"category":"process_creation","tool_name":"Bash","command_line":"ls ~/.docker"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/docker-compose.yml"}
+{"category":"process_creation","tool_name":"Bash","command_line":"kubectl get pods"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/README.md"}

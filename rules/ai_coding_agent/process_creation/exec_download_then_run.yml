@@ -1,0 +1,22 @@
+name: exec_download_then_run
+author: Raman Kumar
+id: 3cb848ed-c372-4588-8911-7af1ed7e0945
+title: Downloaded file run in the same command
+status: experimental
+description: >
+  One command line downloads a file (curl -o/-O, wget, iwr -OutFile, certutil -urlcache, a downloader's > redirect) and
+  then runs that same file: through a shell, source or ., an interpreter (python, perl, ruby, node, php, pwsh), or as a
+  command after chmod +x. The content runs unreviewed, as with a pipe to sh, but leaves a copy on disk. Matching is done by
+  the engine's download_executed field (docs/logsource.md). Known gaps: paths held in variables, cd between the steps,
+  and a download and run in two separate tool calls.
+level: high
+tags: [attack.execution, attack.t1059, attack.t1105, owasp_agentic.asi05]
+falsepositives:
+  - Vendor installers the user asked for, saved first and then run (rustup-init, get-docker.sh).
+  - A downloaded CLI binary run by its bare name (wget …/jq && jq …).
+x-retrohound: { lane: enforce }
+logsource: { product: ai_coding_agent, category: process_creation }
+detection:
+  selection:
+    download_executed: true
+  condition: selection

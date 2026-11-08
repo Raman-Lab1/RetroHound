@@ -1,0 +1,32 @@
+name: files_instruction_concealment
+author: Raman Kumar
+id: bcc37559-a4bd-4f07-924b-01cde7b0d098
+title: Instruction text asks the agent to hide actions from the user
+status: experimental
+description: >
+  A loaded instruction file (CLAUDE.md, AGENTS.md, rules) contains concealment or override phrasing such
+  as "do not tell the user", "without telling the user" or "ignore previous instructions". Plain substring matching on
+  the full text (Skill bodies: files_instruction_concealment_skill), so a quoted phrase in a security guide also matches.
+level: high
+tags: [attack.defense_evasion, owasp_agentic.asi01, owasp_agentic.asi06, owasp_agentic.asi09]
+falsepositives:
+  - Security documentation or a prompt-injection test suite that quotes these phrases.
+x-retrohound: { lane: hunt }
+logsource: { product: ai_coding_agent, category: instruction_load }
+detection:
+  phrase:
+    content|contains:
+      - 'do not tell the user'
+      - "don't tell the user"
+      - 'do not mention this to the user'
+      - 'do not inform the user'
+      - 'do not reveal this to the user'
+      - 'do not show the user'
+      - 'without telling the user'
+      - 'without informing the user'
+      - 'hide this from the user'
+      - 'ignore previous instructions'
+      - 'ignore all previous instructions'
+      - 'ignore prior instructions'
+      - 'disregard previous instructions'
+  condition: phrase

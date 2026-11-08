@@ -1,0 +1,22 @@
+name: False positive
+description: A rule fired on something benign.
+labels: [false-positive, rules]
+body:
+  - type: input
+    id: rule
+    attributes:
+      label: Rule
+      placeholder: secrets_read_secret_file_shell
+    validations: { required: true }
+  - type: textarea
+    id: event
+    attributes:
+      label: The event (defanged)
+      description: "From `retrohound scan --format json`, the finding's first event. Replace hosts with example.invalid and keys with placeholders."
+      render: json
+    validations: { required: true }
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it is benign
+    validations: { required: true }

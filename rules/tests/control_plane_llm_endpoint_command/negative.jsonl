@@ -1,0 +1,12 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"export ANTHROPIC_BASE_URL=https://api.anthropic.com"}
+{"category":"process_creation","tool_name":"Bash","command_line":"export OPENAI_BASE_URL=http://localhost:4000"}
+{"category":"process_creation","tool_name":"Bash","command_line":"echo $ANTHROPIC_BASE_URL"}
+{"category":"process_creation","tool_name":"Bash","command_line":"export FOO_API_BASE_URL=https://x.example.invalid"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat > rules/llm_override.yml <<EOF","content":"detection:\n  sel:\n    command_line|contains: ANTHROPIC_BASE_URL=https://llm-proxy.example.invalid"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat <<EOF > docs/guide.md","content":"export OPENAI_BASE_URL=https://llm-proxy.example.invalid"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat > .env <<EOF","content":"OPENAI_BASE_URL=http://localhost:4000"}
+{"category":"process_creation","tool_name":"Bash","command_line":"OPENAI_API_BASE=http://host.docker.internal:54321 node test.mjs"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git commit -m \"$(cat <<EOF\n)\"","content":"Set ANTHROPIC_BASE_URL=https://llm-proxy.example.invalid in docs"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "launchctl setenv ANTHROPIC_BASE_URL http://localhost:4000"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "tee -a docs/setup.md >/dev/null <<EOF", "content": "export OPENAI_BASE_URL=https://llm-proxy.example.invalid"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "cd docs && cat > 'notes.md' <<EOF", "content": "export OPENAI_BASE_URL=https://llm-proxy.example.invalid"}

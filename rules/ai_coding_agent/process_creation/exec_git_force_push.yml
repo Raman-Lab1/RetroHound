@@ -1,0 +1,20 @@
+name: exec_git_force_push
+author: Raman Kumar
+id: d2efb207-5126-463b-90f5-f26cadb6f68c
+title: Git force push or history rewrite
+status: experimental
+description: >
+  git push with -f, --force or a +refspec, or git filter-branch / filter-repo. --force-with-lease is the safe
+  form and is not matched. The rule cannot tell the default branch from a feature branch, so it fires on both.
+level: medium
+tags: [attack.impact, attack.t1565, owasp_agentic.asi02]
+falsepositives:
+  - Force-pushing a rebased feature branch the user asked for.
+x-retrohound: { lane: enforce }
+logsource: { product: ai_coding_agent, category: process_creation }
+detection:
+  force_push:
+    command_line|re|i: '\bgit\b[^;&|]{0,60}\spush\b[^;&|]{0,200}\s(-f|--force|\+[\w/.-]{1,60})(\s|$|[;&|])'
+  rewrite_tools:
+    command_line|contains: ['git filter-branch', 'git filter-repo']
+  condition: force_push or rewrite_tools

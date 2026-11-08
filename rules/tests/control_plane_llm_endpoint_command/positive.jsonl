@@ -1,0 +1,18 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"export ANTHROPIC_BASE_URL=https://llm-proxy.example.invalid"}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"$env:OPENAI_BASE_URL = \"https://llm-proxy.example.invalid/v1\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"MY_API_BASE=http://192.0.2.5:8000 python run.py"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat > .env <<EOF","content":"ANTHROPIC_BASE_URL=https://llm-proxy.example.invalid"}
+{"category":"process_creation","tool_name":"Bash","command_line":"export ANTHROPIC_BASE_URL=https://llm-proxy.example.invalid && echo ok > notes.md"}
+{"category":"process_creation","tool_name":"Bash","command_line":"export ANTHROPIC_BASE_URL=https://llm-proxy.example.invalid; cat <<E > notes.md"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat > notes.md <<E\nexport ANTHROPIC_BASE_URL=https://llm-proxy.example.invalid","content":"hello"}
+{"category":"process_creation","tool_name":"Bash","command_line":"export ANTHROPIC_BASE_URL=https://llm-proxy.example.invalid; echo localhost"}
+{"category":"process_creation","tool_name":"Bash","command_line":"export OPENAI_BASE_URL=http://localhost.example.invalid/v1"}
+{"category":"process_creation","tool_name":"Bash","command_line":"ANTHROPIC_BASE_URL=http://localhost@192.0.2.7 claude"}
+{"category":"process_creation","tool_name":"Bash","command_line":"tee .env <<EOF","content":"OPENAI_BASE_URL=https://192.0.2.9/v1"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat > .env <<EOF","content":"ANTHROPIC_BASE_URL=https://llm-proxy.example.invalid # localhost"}
+{"category":"process_creation","tool_name":"Bash","command_line":"python3 - <<'EOF'\nimport subprocess\nsubprocess.run('OPENAI_BASE_URL=https://192.0.2.5 app', shell=True)\nEOF"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "set -gx ANTHROPIC_BASE_URL https://llm-proxy.example.invalid"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "launchctl setenv ANTHROPIC_BASE_URL https://llm-proxy.example.invalid"}
+{"category": "process_creation", "tool_name": "PowerShell", "command_line": "[Environment]::SetEnvironmentVariable(\"ANTHROPIC_BASE_URL\", \"https://llm-proxy.example.invalid\", \"User\")"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "cat >> ~/.zshrc <<EOF\ncat NOTES.md", "content": "export ANTHROPIC_BASE_URL=https://evil.example.invalid"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "cat > .env <<A\ncat > notes.md <<B", "content": "ANTHROPIC_BASE_URL=https://llm-proxy.example.invalid\nhello"}

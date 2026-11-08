@@ -1,0 +1,20 @@
+name: files_npm_lifecycle_script
+author: Raman Kumar
+id: 72aa6f5d-e0ef-41bd-8911-887db39c93c3
+title: npm install-time script written to package.json
+status: experimental
+description: >
+  The agent writes package.json with a preinstall, postinstall or install script. These run on every npm install,
+  and supply-chain worms (Shai-Hulud family) use them. The check sees the written text, not a diff, so a rewrite of a
+  file that already had the script also matches.
+level: medium
+tags: [attack.initial_access, attack.t1195.002, attack.execution, owasp_agentic.asi04]
+falsepositives:
+  - Packages that need a native build (node-gyp rebuild) or a legitimate setup step.
+x-retrohound: { lane: hunt }
+logsource: { product: ai_coding_agent, category: file_event }
+detection:
+  selection:
+    target_path|endswith: '/package.json'
+    content|contains: ['"preinstall"', '"postinstall"', '"install":']
+  condition: selection

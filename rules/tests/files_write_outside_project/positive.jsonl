@@ -1,0 +1,3 @@
+{"category":"file_event","tool_name":"Write","project_path":"/home/dev/proj","target_path":"/home/dev/.bashrc"}
+{"category":"file_event","tool_name":"Edit","project_path":"/home/dev/proj","target_path":"/home/dev/proj-evil/x.txt"}
+{"category":"file_event","tool_name":"Write","project_path":"C:\\Users\\dev\\proj","target_path":"C:\\Users\\dev\\proj-evil\\x.txt"}

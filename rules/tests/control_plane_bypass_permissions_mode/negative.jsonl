@@ -1,0 +1,3 @@
+{"category":"config_change","permission_mode":"default"}
+{"category":"config_change","permission_mode":"acceptEdits"}
+{"category":"process_creation","tool_name":"Bash","command_line":"ls","permission_mode":"bypassPermissions"}

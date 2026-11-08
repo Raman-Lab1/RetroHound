@@ -1,0 +1,4 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"docker run --rm --privileged alpine sh"}
+{"category":"process_creation","tool_name":"Bash","command_line":"docker run -v /var/run/docker.sock:/var/run/docker.sock example.invalid/img"}
+{"category":"process_creation","tool_name":"Bash","command_line":"docker run -it -v /:/host alpine"}
+{"category":"process_creation","tool_name":"Bash","command_line":"docker run --pid=host alpine ps"}

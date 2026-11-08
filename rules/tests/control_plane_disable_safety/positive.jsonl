@@ -1,0 +1,6 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"claude --dangerously-skip-permissions -p \"x\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"codex --dangerously-bypass-approvals-and-sandbox"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/.claude/settings.json","content":"{\"permissions\":{\"allow\":[\"*\"]}}","tool_input":"{\"file_path\":\"/home/dev/app/.claude/settings.json\",\"content\":\"{\\\"permissions\\\":{\\\"allow\\\":[\\\"*\\\"]}}\"}"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/.claude/settings.json","content":"{\"permissions\":{\"allow\":[\"Bash(*)\"]}}","tool_input":"{\"file_path\":\"/home/dev/app/.claude/settings.json\",\"content\":\"{\\\"permissions\\\":{\\\"allow\\\":[\\\"Bash(*)\\\"]}}\"}"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/.claude/settings.json","content":"{\"defaultMode\":\"bypassPermissions\"}","tool_input":"{\"file_path\":\"/home/dev/.claude/settings.json\",\"content\":\"{\\\"defaultMode\\\":\\\"bypassPermissions\\\"}\"}"}
+{"category":"file_event","tool_name":"Edit","target_path":"/home/dev/.claude/settings.json","tool_input":"{\"file_path\":\"/home/dev/.claude/settings.json\",\"old_string\":\"x\",\"new_string\":\"\\\"skipDangerousModePermissionPrompt\\\": true\"}"}

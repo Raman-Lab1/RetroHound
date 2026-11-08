@@ -1,0 +1,26 @@
+name: New rule idea
+description: Something a coding agent can do that RetroHound should catch.
+labels: [rules, enhancement]
+body:
+  - type: textarea
+    id: behaviour
+    attributes:
+      label: The behaviour
+      description: What the agent does, and why it matters (ATT&CK or OWASP agentic id if you know one).
+    validations: { required: true }
+  - type: textarea
+    id: example
+    attributes:
+      label: A defanged example command or tool call
+      render: shell
+    validations: { required: true }
+  - type: textarea
+    id: benign
+    attributes:
+      label: Benign look-alikes the rule must not fire on
+  - type: checkboxes
+    id: pr
+    attributes:
+      label: Contribution
+      options:
+        - label: I would like to write this rule myself (see CONTRIBUTING-RULES.md).

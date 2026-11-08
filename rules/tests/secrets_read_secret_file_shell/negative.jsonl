@@ -1,0 +1,9 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"source .env"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cp .env .env.bak"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat README.md"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat .envrc"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat .env.example"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat ~/.ssh/id_rsa.pub"}
+{"category":"process_creation","tool_name":"Bash","command_line":"echo done"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "grep '\\.env' .gitignore"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "grep -nE \"^\\.env|/\\.env\" .gitignore"}

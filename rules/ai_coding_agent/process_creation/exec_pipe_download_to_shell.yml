@@ -1,0 +1,37 @@
+name: exec_pipe_download_to_shell
+author: Raman Kumar
+id: 9017f6c1-501f-45e2-9706-32a0aaae92bc
+title: Remote script piped straight into a shell
+status: experimental
+description: >
+  A download (curl, wget, aria2c, lwp-download, xh, httpie; iwr, irm, DownloadString in PowerShell) is executed without
+  being saved or reviewed: piped, possibly through other commands such as tee, into a shell (sh, bash, zsh, dash, ksh,
+  fish, csh, pwsh) or an interpreter reading stdin (python, perl, ruby, node, php); run through process substitution
+  (`bash <(…)`, `source <(…)`, `. <(…)`), `$(…)` or backticks passed to `sh -c`, `eval` or `python -c`, or a here-string;
+  or fed to iex or [scriptblock]::Create. A path, sudo/doas/env/nohup/timeout/nice/stdbuf before the shell, and quote or
+  backslash obfuscation of the names (`c"u"rl`, `c\url`) do not hide it. Known gaps: names built from variables
+  (`$c URL | sh`), aliases and functions, a download to a file run later (see exec_download_then_run), and shells reached
+  through xargs or find -exec.
+level: high
+tags: [attack.execution, attack.t1059, attack.t1105, owasp_agentic.asi05]
+falsepositives:
+  - Vendor installers the user asked for (rustup, nvm, brew, deno) are piped to sh on purpose.
+  - Quoted text that shows such a command, for example a commit message or an echo, matches as if it ran.
+x-retrohound: { lane: enforce }
+logsource: { product: ai_coding_agent, category: process_creation }
+detection:
+  # Downloader ... | [prefix …] shell-or-stdin-interpreter, within one pipeline (no ; & or newline in between, not ||).
+  posix_pipe:
+    command_line_unquoted|re: '\b(?:curl|wget|aria2c|lwp-download|xh|https?)\s[^\n;&]{0,2000}[^|]\|\s{0,5}(?:(?:[\w.~-]{0,60}/){0,8}(?:sudo|doas|env|nohup|exec|command|time|timeout|nice|stdbuf)(?:\s{1,5}[^\s|;&]{1,200}){0,6}?\s{1,5})?(?:[\w.~-]{0,60}/){0,8}(?:(?:(?:ba|z|da|k|fi|c|tc)?sh|pwsh|powershell)\b|(?:python[\d.]{0,5}|perl|ruby|node|php)\b\s{0,5}(?:-\s{0,5})?(?:$|[;&|)\n]))'
+  # A shell, source, ., eval or `python -c` reading a downloader through <(…), $(…), backticks or <<<.
+  posix_subst:
+    command_line_unquoted|re: '(?:\b(?:(?:ba|z|da|k|fi|c|tc)?sh|pwsh)\s{0,5}(?:-[\w-]{1,20}\s{1,5}){0,4}(?:<<<|<)?|\bsource|\beval|(?:^|[\s;&|(])\.|\b(?:python[\d.]{0,5}|perl|ruby|node|php)\s{1,5}-[a-z]{0,5}[cer])\s{0,5}(?:<\(|\$\(|`)\s{0,5}(?:[\w.~-]{0,60}/){0,8}(?:curl|wget|aria2c|lwp-download|xh|https?)\s'
+  ps_iex_nested:
+    command_line|re|i: '\b(iex|invoke-expression)\b[\s(]{0,5}\(?\s{0,5}(iwr|irm|curl|wget|invoke-webrequest|invoke-restmethod|\(?new-object)'
+  ps_iex_pipe:
+    command_line|re|i: '\b(iwr|irm|invoke-webrequest|invoke-restmethod)\b[^|]{0,2000}\|\s{0,5}(iex|invoke-expression)\b'
+  ps_downloadstring:
+    command_line|contains: ['downloadstring*| iex', 'downloadstring*|iex', 'downloadstring*invoke-expression']
+  ps_scriptblock:
+    command_line|re|i: '\[scriptblock\]::create\b[^\n]{0,300}\b(iwr|irm|invoke-webrequest|invoke-restmethod|downloadstring)\b'
+  condition: 1 of posix_* or 1 of ps_*

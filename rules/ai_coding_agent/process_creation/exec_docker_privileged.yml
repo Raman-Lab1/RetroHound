@@ -1,0 +1,28 @@
+name: exec_docker_privileged
+author: Raman Kumar
+id: a1a1b68c-6979-4d17-a58a-447912fe5dc0
+title: Container started with host-level access
+status: experimental
+description: >
+  docker, podman or nerdctl run with --privileged, the host root mounted, the Docker socket mounted, the host PID
+  namespace or CAP_SYS_ADMIN. Each gives the container a way to escape to the host.
+level: high
+tags: [attack.privilege_escalation, attack.t1611, owasp_agentic.asi05]
+falsepositives:
+  - CI helpers and tools that mount docker.sock on purpose (testcontainers, portainer, buildx).
+x-retrohound: { lane: enforce }
+logsource: { product: ai_coding_agent, category: process_creation }
+detection:
+  selection:
+    command_line|contains:
+      - 'docker run*--privileged'
+      - 'podman run*--privileged'
+      - 'nerdctl run*--privileged'
+      - 'docker run*-v /:'
+      - 'docker run*--volume /:'
+      - 'docker run*--volume=/:'
+      - 'docker run*docker.sock'
+      - 'docker run*--pid=host'
+      - 'docker run*--cap-add=sys_admin'
+      - 'docker run*--cap-add sys_admin'
+  condition: selection

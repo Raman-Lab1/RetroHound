@@ -1,0 +1,3 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"chmod +x scripts/build.sh"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s https://example.invalid/x -o x.json"}
+{"category":"process_creation","tool_name":"Bash","command_line":"chmod 644 README.md"}

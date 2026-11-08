@@ -1,0 +1,49 @@
+title: Agent wrote its own control-plane config from a shell command
+id: 6f2d8b90-4c17-4e35-a9d1-b07e5a3c8d24
+name: control_plane_agent_config_shell_write
+author: Raman Kumar
+status: experimental
+description: >-
+  A shell command (sed -i, redirect, tee, cp, mv, sponge, Set-Content, Add-Content, Out-File) writes an AI-tool
+  control-plane file: .claude/settings.json, .claude/settings.local.json, .mcp.json, ~/.claude.json,
+  .gemini/settings.json, .cursor/mcp.json, .continue/config.json, .windsurf/mcp.json or the Claude Desktop config.
+  Write/Edit are control_plane_agent_config_write. Commands that add hooks, SessionStart, a *_BASE_URL, apiKeyHelper
+  or MCP auto-enable are control_plane_agent_config_risky_shell_write.
+tags:
+  - attack.persistence
+  - attack.t1546
+  - owasp_agentic.asi04
+logsource:
+  product: ai_coding_agent
+  category: process_creation
+detection:
+  selection_bash:
+    command_line|contains:
+      - .claude?settings.json
+      - .claude?settings.local.json
+      - .mcp.json
+      - .claude.json
+      - .gemini?settings.json
+      - .cursor?mcp.json
+      - .continue?config.json
+      - .windsurf?mcp.json
+      - claude_desktop_config.json
+    command_line|re|i: '(?:^|[\s;&|(`])(?:sed\s(?:\S{1,12}\s){0,3}-[a-z]{0,6}i\b|tee\s|cp\s|mv\s|sponge\s|set-content\s|add-content\s|out-file\s)|[^>\d&]>{1,2}\s{0,3}[^\s;&|]{0,200}(?:settings(?:\.local)?\.json|mcp\.json|\.claude\.json|config\.json)'
+  selection_risky:
+    - command_line|contains: &risky
+        - '"hooks"'
+        - '\"hooks\"'
+        - sessionstart
+        - _base_url"
+        - '_base_url\"'
+        - apikeyhelper
+        - enableallprojectmcpservers
+        - enabledmcpjsonservers
+    - tool_input|contains: *risky
+    - tool_input|re|i: '(?:mcpservers)[^}]{0,400}command\\{0,2}"\s{0,3}:\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
+  condition: selection_bash and not selection_risky
+falsepositives:
+  - Users and tools such as ruflo legitimately edit these files (a model swap, a version pin)
+level: medium
+x-retrohound:
+  lane: hunt # a version pin with sed -i fired on real developer history; only the risky variant enforces

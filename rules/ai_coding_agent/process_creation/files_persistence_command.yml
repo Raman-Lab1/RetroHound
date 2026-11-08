@@ -1,0 +1,36 @@
+name: files_persistence_command
+author: Raman Kumar
+id: 9a4e1c57-3b08-4d62-8f1a-e5c7b2d06a93
+title: Startup or persistence location set from a shell command
+status: experimental
+description: >
+  A shell command runs crontab, schtasks /create, launchctl load, registers a scheduled task, edits the Run registry
+  key, or appends to a shell profile (.bashrc, .zshrc, .profile, $PROFILE). Writes through Write/Edit are
+  files_persistence_location.
+level: medium
+tags: [attack.persistence, attack.t1547, attack.t1546.004, attack.t1053, owasp_agentic.asi05]
+falsepositives:
+  - Adding a PATH entry or alias to a shell profile because the user asked.
+  - Setting up a dev service or scheduled job on request.
+x-retrohound: { lane: hunt }
+logsource: { product: ai_coding_agent, category: process_creation }
+detection:
+  command:
+    command_line|contains:
+      - '| crontab -'
+      - 'crontab /'
+      - 'schtasks /create'
+      - 'schtasks.exe /create'
+      - 'new-scheduledtask'
+      - 'register-scheduledtask'
+      - 'launchctl load'
+      - 'launchctl bootstrap'
+      - 'currentversion\run'
+      - '>>*.bashrc'
+      - '>>*.zshrc'
+      - '>>*.profile'
+      - '>>*.bash_profile'
+      - 'tee -a*.bashrc'
+      - 'tee -a*.zshrc'
+      - 'add-content*$profile'
+  condition: command

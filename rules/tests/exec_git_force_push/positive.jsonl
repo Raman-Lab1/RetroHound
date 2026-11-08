@@ -1,0 +1,5 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"git push --force origin main"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git push -f origin main"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git push origin +main"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git filter-branch --env-filter 'true' HEAD"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git filter-repo --path src"}

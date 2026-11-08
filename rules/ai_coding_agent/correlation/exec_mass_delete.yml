@@ -1,0 +1,36 @@
+name: exec_delete_command
+author: Raman Kumar
+id: 26bd573e-4ba0-472c-94d6-327ee70add63
+title: A delete command ran
+status: experimental
+description: Building block for exec_mass_delete. Emits nothing on its own.
+level: informational
+logsource: { product: ai_coding_agent, category: process_creation }
+detection:
+  posix:
+    command_line|re|i: '(^|[;&|(]\s{0,5}|\bsudo\s{1,5})(rm|rmdir|unlink|shred)\s'
+  git_clean:
+    command_line|contains: ['git clean -f', 'find*-delete']
+  ps_cmd:
+    command_line|re|i: '\b(remove-item|ri|del|erase|rd)\s'
+  condition: 1 of posix or git_clean or ps_cmd
+---
+name: exec_mass_delete
+author: Raman Kumar
+id: 6d9285da-7273-407c-8061-25b15f5e4225
+title: Many delete commands in one session
+status: experimental
+description: >
+  25 or more delete commands (rm, rmdir, Remove-Item, del, git clean, find -delete) from one session (main agent and
+  sub-agents together) within an hour. Counts commands, not files, so one rm of a thousand files is a single hit.
+level: medium
+tags: [attack.impact, attack.t1485, owasp_agentic.asi08]
+falsepositives:
+  - Large refactors and cleanup tasks that remove many files one command at a time.
+x-retrohound: { lane: hunt }
+correlation:
+  type: event_count
+  rules: [exec_delete_command]
+  group-by: [session_id]
+  timespan: 1h
+  condition: { gte: 25 }

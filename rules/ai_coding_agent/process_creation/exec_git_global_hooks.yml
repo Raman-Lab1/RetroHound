@@ -1,0 +1,23 @@
+name: exec_git_global_hooks
+author: Raman Kumar
+id: 3985942b-11ee-4bad-82ec-879cf4be7ae1
+title: Global git hook redirection
+status: experimental
+description: >
+  git config --global (or --system) sets init.templateDir or core.hooksPath, so hooks run in every repository on the
+  machine. Project-local core.hooksPath (husky style) is not matched. Writes into ~/.git-templates/hooks are not
+  covered by this rule.
+level: high
+tags: [attack.persistence, attack.t1546, owasp_agentic.asi05]
+falsepositives:
+  - A user who sets up a global hooks directory for a whole team on purpose.
+x-retrohound: { lane: enforce }
+logsource: { product: ai_coding_agent, category: process_creation }
+detection:
+  scope:
+    command_line|contains|all: ['git config', '--global']
+  scope_system:
+    command_line|contains|all: ['git config', '--system']
+  key:
+    command_line|contains: ['init.templatedir', 'core.hookspath']
+  condition: 1 of scope* and key

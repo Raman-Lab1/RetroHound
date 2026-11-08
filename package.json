@@ -1,0 +1,54 @@
+{
+  "name": "retrohound",
+  "version": "0.1.0",
+  "description": "Audit what your AI coding agent did: Sigma rules over Claude Code, Codex and Antigravity transcripts, local and offline.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Raman Kumar",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Raman-Lab1/RetroHound.git"
+  },
+  "homepage": "https://github.com/Raman-Lab1/RetroHound#readme",
+  "bugs": {
+    "url": "https://github.com/Raman-Lab1/RetroHound/issues"
+  },
+  "keywords": [
+    "security",
+    "sigma",
+    "detection-engineering",
+    "claude-code",
+    "codex",
+    "ai-agents",
+    "audit",
+    "cli"
+  ],
+  "bin": {
+    "retrohound": "dist/cli.mjs"
+  },
+  "files": [
+    "dist/cli.mjs",
+    "dist/THIRD_PARTY_LICENSES",
+    "NOTICE",
+    "rules/LICENSE",
+    "rules/ai_coding_agent",
+    "rules/tests"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "build": "bun scripts/build.mjs",
+    "prepublishOnly": "bun scripts/build.mjs",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "check": "tsc --noEmit && bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "commander": "^15.1.0",
+    "picocolors": "^1.1.1",
+    "typescript": "^7",
+    "yaml": "^2.9.1"
+  }
+}

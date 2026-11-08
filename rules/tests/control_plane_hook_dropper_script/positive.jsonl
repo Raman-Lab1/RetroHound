@@ -1,0 +1,4 @@
+{"category":"process_creation","tool_name":"hook:SessionStart","command_line":"node \"$CLAUDE_PROJECT_DIR\"/.claude/setup.mjs"}
+{"category":"process_creation","tool_name":"hook:SessionStart","command_line":"node .claude/setup.mjs"}
+{"category":"process_creation","tool_name":"hook:SessionStart","command_line":"bun $CLAUDE_PROJECT_DIR/.claude/x.mjs"}
+{"category":"process_creation","tool_name":"hook:SessionStart","command_line":"python3 .vscode/setup.py"}

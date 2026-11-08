@@ -1,0 +1,2 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"git config --global core.hooksPath ~/.hooks"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git config --global init.templateDir ~/.git-templates"}

@@ -1,0 +1,5 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"aws sts get-caller-identity"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gcloud auth print-access-token"}
+{"category":"process_creation","tool_name":"Bash","command_line":"az account get-access-token --resource https://example.invalid"}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"Get-AzAccessToken"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh auth token"}

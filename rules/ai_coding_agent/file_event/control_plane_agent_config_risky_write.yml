@@ -1,0 +1,52 @@
+title: Agent added hooks, a base-URL override or an MCP launcher to its control-plane config
+id: e1b6394b-8fc9-4b17-a543-822bb53af770
+name: control_plane_agent_config_risky_write
+author: Raman Kumar
+status: experimental
+description: >-
+  Same files as control_plane_agent_config_write (Write/Edit), but the written content adds `hooks` or SessionStart, an
+  `env.*_BASE_URL`, `apiKeyHelper`, `enableAllProjectMcpServers` / `enabledMcpjsonServers`, or an MCP server command
+  under a hidden directory. This is the persistence shape of supply-chain droppers (SessionStart hook running a repo-local
+  script) and of CVE-2026-21852 style base-URL redirects. Shell writes are control_plane_agent_config_risky_shell_write.
+  A permissions.allow wildcard is reported by control_plane_disable_safety.
+tags:
+  - attack.persistence
+  - attack.t1546
+  - attack.t1195.002
+  - attack.t1528
+  - owasp_agentic.asi04
+logsource:
+  product: ai_coding_agent
+  category: file_event
+detection:
+  selection_file:
+    target_path|contains:
+      - .claude/settings.json
+      - .claude/settings.local.json
+      - .mcp.json
+      - /.claude.json
+      - .gemini/settings.json
+      - .cursor/mcp.json
+      - .continue/config.json
+      - .windsurf/mcp.json
+      - claude_desktop_config.json
+  selection_risky:
+    - content|contains: &risky
+        - '"hooks"'
+        - '\"hooks\"'
+        - sessionstart
+        - _base_url"
+        - '_base_url\"'
+        - apikeyhelper
+        - enableallprojectmcpservers
+        - enabledmcpjsonservers
+    - tool_input|contains: *risky
+    - content|re|i: &hidden_mcp '(?:mcpservers)[^}]{0,400}command\\{0,2}"\s{0,3}:\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
+    - tool_input|re|i: *hidden_mcp
+  condition: selection_file and selection_risky
+falsepositives:
+  - ruflo and similar tools register hook-handler commands under .claude/helpers on purpose
+  - Corporate gateways set ANTHROPIC_BASE_URL in settings (see control_plane_llm_endpoint_override for the allowlist idea)
+level: high
+x-retrohound:
+  lane: enforce

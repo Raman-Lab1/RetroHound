@@ -1,0 +1,25 @@
+name: Bug report
+description: RetroHound crashed, mis-parsed a transcript, or printed something wrong.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Never paste a real transcript, path with your name, or secret. Reduce it to the smallest defanged example."
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes:
+      label: Command and output
+      description: The exact `retrohound ...` command and its output (masked values are fine to paste).
+      render: shell
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes:
+      label: Versions
+      description: "`retrohound --version`, OS, Node or Bun version, and the agent (Claude Code / Codex / Antigravity) with its version."
+    validations: { required: true }

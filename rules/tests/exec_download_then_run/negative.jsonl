@@ -1,0 +1,12 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s https://example.invalid/api | jq ."}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -fsSL https://example.invalid/x.sh -o x.sh && sha256sum x.sh"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s https://example.invalid/a | shasum -a 256"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -o out.json https://example.invalid/api && jq . out.json"}
+{"category":"process_creation","tool_name":"Bash","command_line":"wget https://example.invalid/x.tgz && tar xf x.tgz"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -o /tmp/a.sh https://example.invalid/a.sh && bash /tmp/other.sh"}
+{"category":"process_creation","tool_name":"Bash","command_line":"ls -la | sh -n"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat > docs/install.md <<EOF","content":"curl -fsSL https://example.invalid/i.sh | bash"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat > rules/pipe.yml <<EOF","content":"detection:\n  sel:\n    command_line|re: curl https://example.invalid/x.sh | sh"}
+{"category":"process_creation","tool_name":"Bash","command_line":"grep -rn \"curl.*| *sh\" docs/"}
+{"category":"process_creation","tool_name":"Bash","command_line":"shellcheck install.sh && bash install.sh"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -fsSL https://example.invalid/i.sh | less"}

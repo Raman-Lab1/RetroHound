@@ -1,0 +1,8 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"security find-generic-password -s \"Claude Code-credentials\" -w"}
+{"category":"process_creation","tool_name":"Bash","command_line":"security find-generic-password -ga example-account"}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"vaultcmd /listcreds:\"Windows Credentials\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat ~/.config/gh/hosts.yml"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/.docker/config.json"}
+{"category":"file_access","tool_name":"Read","target_path":"/Users/dev/Library/Application Support/Google/Chrome/Default/Login Data"}
+{"category":"file_access","tool_name":"Read","target_path":"C:/Users/dev/AppData/Local/Google/Chrome/User Data/Default/Cookies"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/.claude/.credentials.json"}

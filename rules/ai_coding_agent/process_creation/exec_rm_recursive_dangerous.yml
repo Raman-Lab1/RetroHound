@@ -1,0 +1,21 @@
+name: exec_rm_recursive_dangerous
+author: Raman Kumar
+id: 187d19ea-1bdd-4ede-bc13-ef9637148ef9
+title: Recursive delete of home, root, a drive or a parent directory
+status: experimental
+description: >
+  rm -rf, Remove-Item -Recurse, rd /s or del /s aimed at ~, $HOME, /, a drive root, a top-level system directory
+  or a path that climbs out of the project with ../. Known gap: a path under home or /tmp, or an absolute path
+  outside the project, is not caught: shell events carry only command_line, no target_path, so target_outside_project
+  cannot be evaluated (a file_event complement would never fire).
+level: high
+tags: [attack.impact, attack.t1485, owasp_agentic.asi02]
+falsepositives:
+  - Cleaning a sibling build directory with ../ (rm -rf ../build).
+  - Deleting a user-chosen scratch root such as /var itself after the user asked for it.
+x-retrohound: { lane: enforce }
+logsource: { product: ai_coding_agent, category: process_creation }
+detection:
+  selection:
+    command_line|re|i: '\b(rm|ri|rd|rmdir|del|erase|remove-item)\s(?:[^;&|]{0,80}\s)?(?:-[a-z]{0,6}r[a-z]{0,6}|/s|--recursive)\b[^;&|]{0,80}\s["'']?(~[/*]{0,2}|/\*?|\$\{?home\}?[/*]{0,2}|\$env:userprofile[\\/*]{0,2}|%userprofile%[\\/*]{0,2}|\.\.(/[^\s;&|]{0,60})?|/(home|users|etc|usr|var|root|opt)/?\*?|[a-z]:[\\/]\*?)["'']?(\s|$|[;&|])'
+  condition: selection

@@ -1,0 +1,18 @@
+name: files_mcp_server_command
+author: Raman Kumar
+id: 1d6c8e35-a972-4b04-9c1e-7f3a5b2d8e60
+title: MCP server added by a shell command
+status: experimental
+description: >
+  The agent runs `claude mcp add`, `codex mcp add` or `gemini mcp add`. A new MCP server gives a third party tool access
+  inside the session. Config files that define mcpServers are files_mcp_server_added.
+level: medium
+tags: [attack.persistence, attack.t1546, owasp_agentic.asi04, owasp_agentic.asi02]
+falsepositives:
+  - A user who asked the agent to set up a known MCP server.
+x-retrohound: { lane: hunt }
+logsource: { product: ai_coding_agent, category: process_creation }
+detection:
+  command:
+    command_line|contains: ['claude mcp add', 'codex mcp add', 'gemini mcp add']
+  condition: command

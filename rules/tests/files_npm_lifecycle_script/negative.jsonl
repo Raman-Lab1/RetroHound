@@ -1,0 +1,3 @@
+{"category":"file_event","tool_name":"Write","target_path":"/home/x/proj/package.json","content":"{\"scripts\":{\"build\":\"tsc\",\"test\":\"bun test\",\"prepare\":\"husky\"}}"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/x/proj/README.md","content":"Add a \"postinstall\" script to package.json"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/x/proj/package.json","content":"\"postinstall\":\"x\""}

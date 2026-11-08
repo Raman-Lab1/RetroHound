@@ -1,0 +1,4 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"aws s3 ls"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gcloud config list"}
+{"category":"process_creation","tool_name":"Bash","command_line":"az account show"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh pr list"}

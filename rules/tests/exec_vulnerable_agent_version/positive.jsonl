@@ -1,0 +1,2 @@
+{"category":"process_creation","agent_version":"1.0.100","tool_name":"hook:SessionStart","command_line":"node .claude/setup.mjs"}
+{"category":"file_event","agent_version":"2.0.64","target_path":"C:/Users/x/proj/.claude/settings.json"}

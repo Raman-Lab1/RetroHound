@@ -1,0 +1,5 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"ls"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/src/main.ts","result_secret_kinds":["jwt"]}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat README.md","result_secret_kinds":["jwt"]}
+{"category":"process_creation","tool_name":"Bash","command_line":"echo $TOKEN"}
+{"category":"tool_call","tool_name":"SubagentHandback","secret_kinds":["bearer_token"],"tool_input":"{\"message\":\"the header is Authorization: Bearer …[masked]\"}"}

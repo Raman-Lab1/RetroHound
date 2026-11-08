@@ -1,0 +1,39 @@
+# Typecheck, tests and the bundled CLI on Linux and macOS arm64, under the oldest supported Node and the current one.
+# tests/smoke.test.ts runs dist/cli.mjs with the `node` on PATH, so the matrix node is what gets smoke-tested.
+name: ci
+on:
+  push:
+    branches: [main, "phase*", "wave*", collectors]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest] # macos-latest runs on arm64; macos-14 is retired
+        node: ["22.13.0", "24"]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+      - run: bun install --frozen-lockfile
+      - run: bunx tsc --noEmit
+      - run: bun test
+      - name: bundled CLI under Node prints nothing on stderr
+        run: |
+          node --version
+          node dist/cli.mjs --version 2> stderr.txt
+          node dist/cli.mjs scan --root fixtures/redacted --db "$RUNNER_TEMP/i.db" --format json > /dev/null 2>> stderr.txt
+          cat stderr.txt
+          test ! -s stderr.txt

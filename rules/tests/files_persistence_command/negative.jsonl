@@ -1,0 +1,3 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"crontab -l"}
+{"category":"process_creation","tool_name":"Bash","command_line":"echo hi >> notes.txt"}
+{"category":"process_creation","tool_name":"Bash","command_line":"schtasks /query"}

@@ -1,0 +1,50 @@
+title: Agent wrote its own control-plane config
+id: 2393f285-6ad0-4e42-b5c0-8c396370b262
+name: control_plane_agent_config_write
+author: Raman Kumar
+status: experimental
+description: >-
+  The agent edited an AI-tool control-plane file through Write/Edit: .claude/settings.json, .claude/settings.local.json,
+  .mcp.json, ~/.claude.json, .gemini/settings.json, .cursor/mcp.json, .continue/config.json, .windsurf/mcp.json or the
+  Claude Desktop config. Shell writes (sed -i, redirect, tee, cp, mv, Set-Content) are control_plane_agent_config_shell_write.
+  Writes that add hooks, SessionStart, a *_BASE_URL, apiKeyHelper or MCP auto-enable are the higher-level
+  control_plane_agent_config_risky_write.
+tags:
+  - attack.persistence
+  - attack.t1546
+  - owasp_agentic.asi04
+logsource:
+  product: ai_coding_agent
+  category: file_event
+detection:
+  selection_file:
+    target_path|contains:
+      - .claude/settings.json
+      - .claude/settings.local.json
+      - .mcp.json
+      - /.claude.json
+      - .gemini/settings.json
+      - .cursor/mcp.json
+      - .continue/config.json
+      - .windsurf/mcp.json
+      - claude_desktop_config.json
+  selection_risky:
+    - content|contains: &risky
+        - '"hooks"'
+        - '\"hooks\"'
+        - sessionstart
+        - _base_url"
+        - '_base_url\"'
+        - apikeyhelper
+        - enableallprojectmcpservers
+        - enabledmcpjsonservers
+    - tool_input|contains: *risky
+    - content|re|i: &hidden_mcp '(?:mcpservers)[^}]{0,400}command\\{0,2}"\s{0,3}:\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
+    - tool_input|re|i: *hidden_mcp
+  condition: selection_file and not selection_risky
+falsepositives:
+  - Users and tools such as ruflo legitimately edit these files (a model swap, a version pin)
+  - A bare `claude mcp add` run by the agent is not seen here, only direct file writes
+level: medium
+x-retrohound:
+  lane: hunt # routine edits (version pins, model swaps) would be asked on every time; only the risky variant enforces

@@ -1,0 +1,9 @@
+RetroHound
+Copyright 2026 Raman Kumar
+
+This product includes software developed by Raman Kumar (https://github.com/Raman-Lab1/RetroHound).
+
+The code is licensed under the Apache License, Version 2.0 (LICENSE). The detection rules under rules/ are
+licensed under the Detection Rule License (DRL) 1.1 (rules/LICENSE).
+
+The bundled CLI (dist/cli.mjs) inlines third-party packages; their licences are in dist/THIRD_PARTY_LICENSES.

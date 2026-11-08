@@ -1,0 +1,33 @@
+title: Hook runs a dropper-style script from the repo
+id: df7dd2a6-2b61-4a77-926e-c22c1cce7a4c
+name: control_plane_hook_dropper_script
+author: Raman Kumar
+status: experimental
+description: >-
+  A hook (tool_name `hook:<Event>`) ran an interpreter on a `setup.*` script or a `.mjs`/`.cjs`/`.js` file inside
+  `.claude/`, `.vscode/`, `.cursor/` or `.github/` of the project. This is how a planted SessionStart hook launches a
+  dropper (ChainDrop, Miasma). The hook runs outside any tool call, so this is a hunt rule: there is nothing to block.
+tags:
+  - attack.persistence
+  - attack.execution
+  - attack.t1546
+  - attack.t1059.007
+  - attack.t1195.002
+  - owasp_agentic.asi04
+  - owasp_agentic.asi05
+logsource:
+  product: ai_coding_agent
+  category: process_creation
+detection:
+  selection_hook:
+    tool_name|startswith: 'hook:'
+    command_line|re|i: '(?:^|[\s;&(])(?:node|bun|deno|python3?|sh|bash|zsh)\s(?:\S{1,60}\s){0,3}[\x22\x27]?(?:\$\{?claude_project_dir\}?|\.{0,2}/?)[\x22\x27]?/?\.(?:claude|vscode|cursor|github)/[\w./-]{0,80}(?:setup\.[\w]{1,6}|\.(?:mjs|cjs|js))\b'
+  filter_ruflo:
+    command_line|contains: /.claude/helpers/hook-handler.cjs
+  condition: selection_hook and not filter_ruflo
+falsepositives:
+  - ruflo helpers (`$CLAUDE_PROJECT_DIR/.claude/helpers/hook-handler.cjs`) are filtered by name; other project hook scripts are legitimate too
+  - A `retrohound baseline` allowlist keyed on exact command and project is planned
+level: high
+x-retrohound:
+  lane: hunt

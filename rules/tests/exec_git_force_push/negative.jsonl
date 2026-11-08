@@ -1,0 +1,5 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"git push origin feature"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git push --force-with-lease origin feature"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git push -u origin main"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git pull --force"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git log --oneline"}

@@ -1,0 +1,5 @@
+{"category":"process_creation","tool_name":"hook:SessionStart","command_line":"python3 .github/hooks/check.py"}
+{"category":"process_creation","tool_name":"hook:SessionStart","command_line":"bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/lint.sh\""}
+{"category":"process_creation","tool_name":"hook:SessionStart","command_line":"node ./.cursor/hooks/x.ts"}
+{"category":"process_creation","tool_name":"hook:SubagentStart","command_line":"bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/lint.sh\""}
+{"category":"process_creation","tool_name":"hook:SubagentStart","command_line":"bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/lint.sh\""}

@@ -1,0 +1,51 @@
+title: Shell command added hooks, a base-URL override or an MCP launcher to the agent control-plane config
+id: c8a5e3f1-7d29-4b60-9e84-1f0b6d2a7c35
+name: control_plane_agent_config_risky_shell_write
+author: Raman Kumar
+status: experimental
+description: >-
+  Same files as control_plane_agent_config_shell_write, but the command adds `hooks` or SessionStart, an
+  `env.*_BASE_URL`, `apiKeyHelper`, `enableAllProjectMcpServers` / `enabledMcpjsonServers`, or an MCP server command
+  under a hidden directory. This is the persistence shape of supply-chain droppers and of CVE-2026-21852 style base-URL
+  redirects. Write/Edit are control_plane_agent_config_risky_write.
+tags:
+  - attack.persistence
+  - attack.t1546
+  - attack.t1195.002
+  - attack.t1528
+  - owasp_agentic.asi04
+logsource:
+  product: ai_coding_agent
+  category: process_creation
+detection:
+  selection_bash:
+    command_line|contains:
+      - .claude?settings.json
+      - .claude?settings.local.json
+      - .mcp.json
+      - .claude.json
+      - .gemini?settings.json
+      - .cursor?mcp.json
+      - .continue?config.json
+      - .windsurf?mcp.json
+      - claude_desktop_config.json
+    command_line|re|i: '(?:^|[\s;&|(`])(?:sed\s(?:\S{1,12}\s){0,3}-[a-z]{0,6}i\b|tee\s|cp\s|mv\s|sponge\s|set-content\s|add-content\s|out-file\s)|[^>\d&]>{1,2}\s{0,3}[^\s;&|]{0,200}(?:settings(?:\.local)?\.json|mcp\.json|\.claude\.json|config\.json)'
+  selection_risky:
+    - command_line|contains: &risky
+        - '"hooks"'
+        - '\"hooks\"'
+        - sessionstart
+        - _base_url"
+        - '_base_url\"'
+        - apikeyhelper
+        - enableallprojectmcpservers
+        - enabledmcpjsonservers
+    - tool_input|contains: *risky
+    - tool_input|re|i: '(?:mcpservers)[^}]{0,400}command\\{0,2}"\s{0,3}:\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
+  condition: selection_bash and selection_risky
+falsepositives:
+  - ruflo and similar tools register hook-handler commands under .claude/helpers on purpose
+  - Corporate gateways set ANTHROPIC_BASE_URL in settings (see control_plane_llm_endpoint_command for the allowlist idea)
+level: high
+x-retrohound:
+  lane: enforce

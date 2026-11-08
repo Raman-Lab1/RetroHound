@@ -1,0 +1,22 @@
+name: exec_vulnerable_agent_version
+author: Raman Kumar
+id: dc1ef183-7369-428f-b46a-43098b397b2b
+title: Hook or agent-config activity under a Claude Code version with a known trust-prompt CVE
+status: experimental
+description: >
+  The session ran Claude Code older than 2.0.65 (CVE-2025-59536 fixed in 1.0.111, CVE-2026-21852 in 2.0.65) and a
+  hook ran or an agent settings file was written. Historical sessions are informational. Simplified from the join
+  with other hits: it fires on the risky surface itself.
+level: informational
+tags: [attack.initial_access, attack.t1195.002, owasp_agentic.asi04]
+falsepositives:
+  - Old sessions on a machine that has since been updated.
+x-retrohound: { lane: hunt }
+logsource: { product: ai_coding_agent, service: claude_code }
+detection:
+  old_version:
+    agent_version|re: '^v?(0|1)\.\d{1,3}\.\d{1,3}|^v?2\.0\.([0-5]?\d|6[0-4])(\D|$)'
+  risky_surface:
+    - tool_name|startswith: 'hook:'
+    - target_path|endswith: ['/.claude/settings.json', '/.claude/settings.local.json', '/.mcp.json']
+  condition: old_version and risky_surface

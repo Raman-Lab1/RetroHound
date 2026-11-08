@@ -1,0 +1,5 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"echo \"use --dangerously-skip-permissions\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"grep -r dangerously-skip-permissions docs"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/.claude/settings.json","content":"{\"permissions\":{\"allow\":[\"Bash(npm run *)\",\"Bash(git status)\"]}}","tool_input":"{\"file_path\":\"/home/dev/app/.claude/settings.json\",\"content\":\"{\\\"permissions\\\":{\\\"allow\\\":[\\\"Bash(npm run *)\\\",\\\"Bash(git status)\\\"]}}\"}"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/.claude/settings.json","content":"{\"model\":\"opus\"}","tool_input":"{\"file_path\":\"/home/dev/app/.claude/settings.json\",\"content\":\"{\\\"model\\\":\\\"opus\\\"}\"}"}
+{"category":"file_event","tool_name":"Edit","target_path":"/home/dev/app/.claude/settings.json","tool_input":"{\"file_path\":\"/home/dev/app/.claude/settings.json\",\"old_string\":\"x\",\"new_string\":\"{\\\"permissions\\\":{\\\"allow\\\":[\\\"Bash(git status)\\\"]}}\"}"}

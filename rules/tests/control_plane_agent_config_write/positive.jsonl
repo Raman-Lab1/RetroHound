@@ -1,0 +1,5 @@
+{"category":"file_event","tool_name":"Edit","target_path":"/home/dev/app/.claude/settings.json","tool_input":"{\"file_path\":\"/home/dev/app/.claude/settings.json\",\"old_string\":\"x\",\"new_string\":\"\\\"model\\\": \\\"opus\\\"\"}"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/.mcp.json","content":"{\"x\":1}","tool_input":"{\"file_path\":\"/home/dev/app/.mcp.json\",\"content\":\"{\\\"x\\\":1}\"}"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/.gemini/settings.json","content":"{}","tool_input":"{\"file_path\":\"/home/dev/.gemini/settings.json\",\"content\":\"{}\"}"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/.claude.json","content":"{}","tool_input":"{\"file_path\":\"/home/dev/.claude.json\",\"content\":\"{}\"}"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/.cursor/mcp.json","content":"{}","tool_input":"{\"file_path\":\"/home/dev/.cursor/mcp.json\",\"content\":\"{}\"}"}

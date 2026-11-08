@@ -1,0 +1,49 @@
+name: exec_package_install_new
+author: Raman Kumar
+id: f4363b0b-9b13-4887-a773-ea5d61d2f85a
+title: Agent installs a named package
+status: experimental
+description: >
+  npm, pnpm, yarn, bun, pip, uv, cargo, go or gem install of a named package (slopsquatting surface). v0.1 matches
+  the install command only, with no registry age or popularity check, so it is informational and very noisy.
+level: informational
+tags: [attack.initial_access, attack.t1195.001, owasp_agentic.asi04]
+falsepositives:
+  - Every ordinary dependency install. Installs from a manifest or lockfile (pip install -r, pip install ., flags-only npm/pnpm install) and bootstraps of pip, setuptools, wheel, pipx, uv, npm, pnpm and yarn are filtered out.
+x-retrohound: { lane: hunt }
+logsource: { product: ai_coding_agent, category: process_creation }
+detection:
+  selection:
+    command_line|contains:
+      - 'npm install '
+      - 'npm i '
+      - 'npm add '
+      - 'pnpm add '
+      - 'pnpm install '
+      - 'yarn add '
+      - 'bun add '
+      - 'pip install '
+      - 'pip3 install '
+      - 'uv add '
+      - 'cargo add '
+      - 'go get '
+      - 'gem install '
+  filter_manifest:
+    command_line|contains: ['install -r ', 'install --requirement', 'install -e .', 'install .', 'install -c ']
+  # flags before -r: pip install -q -r requirements.txt (the file is the manifest)
+  filter_requirements_flags:
+    command_line|re|i: '\bpip3?\s+install\s+(--?[a-z][a-z-]*\s+)*(-r|--requirement)[\s=]'
+  # install from a local path: go get ./...
+  filter_path:
+    command_line|contains|all: ['go get', ' ./']
+  # Only flags, no package name: npm install --frozen-lockfile, pnpm install --legacy-peer-deps (installs the lockfile).
+  # Also a bare install that a closing quote or `)` ends, as in a Dockerfile `RUN npm install` line held in a string
+  # literal or `bash -c "npm install"`; `npm install "left-pad"` (an opening quote) still fires.
+  filter_flags_only:
+    command_line|re|i: '\b(npm|pnpm|yarn|bun)\s+(install|i)((\s+--?[a-z][a-z-]*(=\S+)?)+\s*($|[;&|])|\s*[)\x22\x27\x60]($|[\s,;)\]\x22\x27\x60]))'
+  # Tool bootstraps: pip install --upgrade pip setuptools wheel, npm install -g pnpm.
+  filter_bootstrap_py:
+    command_line|re|i: '\bpip3?\s+install\s+(--?[a-z-]+\s+)*(pip|setuptools|wheel|pipx|uv|virtualenv|build|poetry)(\s|$|[;&|])'
+  filter_bootstrap_js:
+    command_line|re|i: '\b(npm|pnpm)\s+(install|i|add)\s+(--?[a-z-]+\s+)*(npm|pnpm|yarn|corepack)(@[\w.-]+)?(\s|$|[;&|])'
+  condition: selection and not 1 of filter_*

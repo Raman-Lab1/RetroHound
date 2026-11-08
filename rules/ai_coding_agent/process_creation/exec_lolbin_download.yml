@@ -1,0 +1,26 @@
+name: exec_lolbin_download
+author: Raman Kumar
+id: a86f94f7-0048-44d4-8aa2-abcc8eb145ff
+title: Windows LOLBin used to download or run remote content
+status: experimental
+description: >
+  certutil -urlcache / -verifyctl, bitsadmin /transfer, Start-BitsTransfer, mshta or regsvr32 on a URL, msiexec /i http.
+  A coding agent has curl and iwr; reaching for these signals evasion or a copied attack one-liner.
+level: medium
+tags: [attack.command_and_control, attack.t1105, attack.defense_evasion, owasp_agentic.asi05]
+falsepositives:
+  - An agent that finds curl blocked and retries with certutil or bitsadmin (seen as a benign pattern in R7).
+x-retrohound: { lane: hunt }
+logsource: { product: ai_coding_agent, category: process_creation }
+detection:
+  selection:
+    command_line|contains:
+      - 'certutil*-urlcache'
+      - 'certutil*-verifyctl'
+      - 'bitsadmin*/transfer'
+      - 'bitsadmin*/addfile'
+      - 'start-bitstransfer'
+      - 'mshta*http'
+      - 'regsvr32*/i:http'
+      - 'msiexec*/i http'
+  condition: selection

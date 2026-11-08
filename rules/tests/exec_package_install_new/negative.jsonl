@@ -1,0 +1,17 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"pip install -r requirements.txt"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm install"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm ci"}
+{"category":"process_creation","tool_name":"Bash","command_line":"pip install -e ."}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm run build"}
+{"category":"process_creation","tool_name":"Bash","command_line":"pnpm install --frozen-lockfile"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cd web && npm install --legacy-peer-deps && npm run build"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm install --package-lock-only"}
+{"category":"process_creation","tool_name":"Bash","command_line":"python -m pip install --upgrade pip"}
+{"category":"process_creation","tool_name":"Bash","command_line":"pip3 install -U pip setuptools wheel"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm install -g pnpm"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm i -g npm@latest"}
+{"category":"process_creation","tool_name":"Bash","command_line":"go get ./..."}
+{"category":"process_creation","tool_name":"Bash","command_line":"pip install -q -r requirements.txt"}
+{"category":"process_creation","tool_name":"Bash","command_line":"pip3 install --no-cache-dir --requirement=requirements.txt"}
+{"category":"process_creation","tool_name":"Bash","command_line":"python3 - <<'EOF'\nopen('Dockerfile','a').write('''COPY package.json .\nRUN npm install ''')\nEOF"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "bash -lc \"cd web && npm install\""}

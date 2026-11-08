@@ -1,0 +1,19 @@
+name: files_vscode_task_autorun
+author: Raman Kumar
+id: 1737b9f4-028b-4f86-87e9-ab9778aa7a1b
+title: VS Code task set to run when the folder opens
+status: experimental
+description: >
+  The agent writes .vscode/tasks.json with runOptions.runOn set to folderOpen, so a command runs the next time anyone
+  opens the project in VS Code (a persistence and supply-chain trick). Only the file body is checked.
+level: high
+tags: [attack.persistence, attack.t1546, attack.t1195.002, owasp_agentic.asi05]
+falsepositives:
+  - A user who asked for a task that starts a dev server or watcher on open.
+x-retrohound: { lane: enforce }
+logsource: { product: ai_coding_agent, category: file_event }
+detection:
+  selection:
+    target_path|endswith: '/.vscode/tasks.json'
+    content|contains: 'folderopen'
+  condition: selection

@@ -1,0 +1,5 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -H 'Authorization: Bearer eyJ…[masked]' https://api.example.invalid","secret_kinds":["bearer_token"]}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env","result_secret_kinds":["aws_access_key"]}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat .env","result_secret_kinds":["sk_key"]}
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/config.ts","content":"const k = 'ghp_…[masked]'","tool_input":"{\"file_path\":\"/home/dev/app/config.ts\",\"content\":\"const k = 'ghp_…[masked]'\"}","secret_kinds":["github_token"]}
+{"category":"tool_call","tool_name":"Task","tool_input":"{\"prompt\":\"call the API with key sk-ant-…[masked]\"}","secret_kinds":["anthropic_key"]}

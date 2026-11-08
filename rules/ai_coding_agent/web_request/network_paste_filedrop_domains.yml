@@ -1,0 +1,84 @@
+name: network_paste_filedrop_domains
+author: Raman Kumar
+id: 52501a9a-858e-4404-8800-ba3202569794
+title: Traffic to a paste, file-drop, tunnel or webhook service
+status: experimental
+description: >
+  A web request that reaches a paste site, anonymous file host, tunnel (ngrok, trycloudflare),
+  request catcher (webhook.site, interact.sh) or a Discord/Slack webhook. These are common exfiltration endpoints. Shell commands are network_paste_filedrop_command.
+level: medium
+tags: [attack.exfiltration, attack.t1567, attack.t1041, owasp_agentic.asi01]
+falsepositives:
+  - Sharing a log on pastebin or testing a webhook with webhook.site because the user asked for it.
+  - ngrok or a tunnel used to demo a local dev server.
+x-retrohound: { lane: hunt }
+logsource: { product: ai_coding_agent, category: web_request }
+detection:
+  domain_exact:
+    domain:
+      - 'pastebin.com'
+      - 'paste.ee'
+      - 'hastebin.com'
+      - 'ghostbin.com'
+      - 'rentry.co'
+      - 'dpaste.org'
+      - 'ix.io'
+      - 'termbin.com'
+      - 'transfer.sh'
+      - 'file.io'
+      - '0x0.st'
+      - 'temp.sh'
+      - 'bashupload.com'
+      - 'anonfiles.com'
+      - 'gofile.io'
+      - 'ngrok.io'
+      - 'ngrok-free.app'
+      - 'ngrok.app'
+      - 'trycloudflare.com'
+      - 'webhook.site'
+      - 'requestbin.com'
+      - 'pipedream.net'
+      - 'interact.sh'
+      - 'oast.fun'
+      - 'oast.live'
+      - 'oast.pro'
+      - 'oast.site'
+      - 'oast.me'
+      - 'burpcollaborator.net'
+  domain_sub:
+    domain|endswith:
+      - '.pastebin.com'
+      - '.paste.ee'
+      - '.hastebin.com'
+      - '.ghostbin.com'
+      - '.rentry.co'
+      - '.dpaste.org'
+      - '.ix.io'
+      - '.termbin.com'
+      - '.transfer.sh'
+      - '.file.io'
+      - '.0x0.st'
+      - '.temp.sh'
+      - '.bashupload.com'
+      - '.anonfiles.com'
+      - '.gofile.io'
+      - '.ngrok.io'
+      - '.ngrok-free.app'
+      - '.ngrok.app'
+      - '.trycloudflare.com'
+      - '.webhook.site'
+      - '.requestbin.com'
+      - '.pipedream.net'
+      - '.interact.sh'
+      - '.oast.fun'
+      - '.oast.live'
+      - '.oast.pro'
+      - '.oast.site'
+      - '.oast.me'
+      - '.burpcollaborator.net'
+  hook_url:
+    url|contains:
+      - 'discord.com/api/webhooks/'
+      - 'discordapp.com/api/webhooks/'
+      - 'hooks.slack.com/services/'
+  condition: 1 of domain_* or hook_url

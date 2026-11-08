@@ -1,0 +1,4 @@
+{"category":"file_event","tool_name":"Write","target_path":"C:/Users/x/Library/LaunchAgents/com.example.plist","content":"<plist/>"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/x/.bashrc","content":"export A=1"}
+{"category":"file_event","tool_name":"Write","target_path":"C:/Users/x/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/a.bat","content":"echo hi"}
+{"category":"file_event","tool_name":"Write","target_path":"/etc/cron.d/job","content":"* * * * * root true"}

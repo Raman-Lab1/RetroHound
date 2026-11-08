@@ -1,0 +1,122 @@
+import { describe, expect, test } from "bun:test";
+import { toSarif } from "../../src/outputs/sarif.ts";
+import { toNdjson } from "../../src/outputs/ndjson.ts";
+import type { ScanReport } from "../../src/outputs/report.ts";
+import type { AgentEvent, Finding, Level } from "../../src/normalize/types.ts";
+
+// Defanged: placeholder token built by concatenation so no secret-shaped literal lands in the repo.
+const TOKEN = "gh" + "p_" + "A1b2C3d4E5".repeat(4);
+const FILE = "/home/u/.claude/projects/-home-u-acme/aaaaaaaa-1111.jsonl";
+
+const ev = (o: Partial<AgentEvent> = {}): AgentEvent => ({
+  id: "e1", schema_version: "0.1", agent: "claude_code", session_id: "aaaaaaaa-1111", ts: "2026-09-14T10:00:00Z",
+  seq: 1, category: "process_creation", project_path: "/work/acme/api", raw_ref: { file: FILE, line: 7 }, ...o,
+});
+const finding = (o: Partial<Finding> = {}): Finding => ({
+  id: "9b1e0000000000000000aaaa", rule_id: "r1", level: "high", ts: "2026-09-14T10:00:30Z", session_id: "aaaaaaaa-1111",
+  message: "curl https://example.invalid", events: [ev()], ...o,
+});
+const report = (findings: Finding[] = [finding()]): ScanReport => ({
+  schema: "retrohound.scan/0.1", tool: { name: "retrohound", version: "0.1.0" },
+  scan: {
+    started_at: "2026-11-07T10:00:00Z", finished_at: "2026-11-07T10:00:03Z", sessions: 1, events: 2, blocked: 0,
+    subagent_events: 0, files: { indexed: 1, skipped: 0, gone: 0, failed: 0 }, archived_sessions: [], root: "/home/u/.claude/projects",
+  },
+  rules: [{
+    id: "r1", name: "secret_read_then_egress", title: "Secret read then egress", description: "Secret read, then network egress.",
+    level: "high", tags: ["attack.credential_access", "attack.t1552.001", "attack.t1041", "owasp_agentic.x"], lane: "hunt",
+    falsepositives: ["deploy scripts"],
+  }],
+  findings,
+});
+
+describe("toSarif", () => {
+  test("required fields, ruleIndex, locations, fingerprints", () => {
+    const related = ev({ id: "e0", raw_ref: { file: FILE, line: 3 }, target_path: "/work/acme/.env" });
+    const doc = JSON.parse(toSarif(report([finding({ events: [ev(), related] })])));
+    const run = doc.runs[0];
+    expect(doc.version).toBe("2.1.0");
+    expect(run.tool.driver.name).toBe("retrohound");
+    const rule = run.tool.driver.rules[0];
+    expect(rule).toMatchObject({ id: "r1", name: "secret_read_then_egress", defaultConfiguration: { level: "error" } });
+    expect(rule.properties["security-severity"]).toBe("8.0");
+    expect(rule.properties.tags).toContain("attack.t1552.001");
+    expect(rule.help.text).toContain("deploy scripts");
+    const r = run.results[0];
+    expect(run.tool.driver.rules[r.ruleIndex].id).toBe(r.ruleId);
+    expect(r.level).toBe("error");
+    expect(r.locations[0].physicalLocation).toEqual({
+      artifactLocation: { uri: "-home-u-acme/aaaaaaaa-1111.jsonl", uriBaseId: "CLAUDE_PROJECTS" },
+      region: { startLine: 7, startColumn: 1, endLine: 7 },
+    });
+    expect(r.relatedLocations[0].physicalLocation.region.startLine).toBe(3);
+    expect(r.partialFingerprints.primaryLocationLineHash).toBe("9b1e000000000000:1");
+    expect(r.properties).toMatchObject({ session_id: "aaaaaaaa-1111", agent: "claude_code", scope: "main", event_ids: ["e1", "e0"] });
+  });
+  test("level mapping, every finding present, unknown rule gets a stub", () => {
+    const levels: Level[] = ["informational", "low", "medium", "high", "critical"];
+    const fs = levels.map((level, i) => finding({ id: `f${i}`, level, rule_id: i === 0 ? "ghost" : "r1" }));
+    const run = JSON.parse(toSarif(report(fs))).runs[0];
+    expect(run.results.map((r: { level: string }) => r.level)).toEqual(["note", "note", "warning", "error", "error"]);
+    expect(run.results).toHaveLength(5);
+    expect(run.tool.driver.rules.map((r: { id: string }) => r.id)).toEqual(["r1", "ghost"]);
+    expect(run.results[0].ruleIndex).toBe(1);
+  });
+  test("sub-agent attribution", () => {
+    const r = JSON.parse(toSarif(report([finding({ events: [ev({ agent_id: "agentxyz99" })] })]))).runs[0].results[0];
+    expect(r.properties).toMatchObject({ agent_id: "agentxyz99", scope: "sub-agent" });
+  });
+  test("masks secrets and strips match-only fields", () => {
+    const e = { ...ev({ command_line: `echo ${TOKEN}` }), content: "C0NTENT", tool_input: "T1NPUT" } as AgentEvent;
+    const out = toSarif(report([finding({ message: `leak ${TOKEN}`, events: [e, e] })]));
+    for (const w of [TOKEN, "C0NTENT", "T1NPUT"]) expect(out).not.toContain(w);
+    expect(out).toContain("ghp_…[masked]");
+  });
+  test("empty report is a valid run with no results", () => {
+    const run = JSON.parse(toSarif(report([]))).runs[0];
+    expect(run.results).toEqual([]);
+  });
+});
+
+describe("toNdjson", () => {
+  const sub = finding({ events: [ev({ agent_id: "agentxyz99", target_path: "/work/acme/.env", url: "https://paste.example.invalid/u", domain: "paste.example.invalid" })] });
+  test("empty report is the empty string", () => {
+    expect(toNdjson(report([]), "ecs")).toBe("");
+    expect(toNdjson(report([]), "ocsf")).toBe("");
+  });
+  test("one valid JSON line per finding, trailing newline, no blank lines", () => {
+    for (const s of ["ecs", "ocsf"] as const) {
+      const out = toNdjson(report([finding(), sub]), s);
+      expect(out.endsWith("\n")).toBe(true);
+      const lines = out.slice(0, -1).split("\n");
+      expect(lines).toHaveLength(2);
+      for (const l of lines) expect(l.length).toBeGreaterThan(0), JSON.parse(l);
+    }
+  });
+  test("ECS alert mapping", () => {
+    const o = JSON.parse(toNdjson(report([sub]), "ecs").trim());
+    expect(o).toMatchObject({
+      ecs: { version: "9.1.0" }, event: { kind: "alert", id: sub.id, severity: 4, risk_score: 73, category: ["process"] },
+      rule: { uuid: "r1", name: "secret_read_then_egress", ruleset: "retrohound" },
+      threat: { framework: "MITRE ATT&CK", tactic: { name: ["Credential Access"] }, technique: { id: ["T1552", "T1041"], subtechnique: { id: ["T1552.001"] } } },
+      tags: ["owasp_agentic.x"], url: { domain: "paste.example.invalid" },
+      gen_ai: { agent: { name: "claude_code", id: "agentxyz99" } }, retrohound: { session_id: "aaaaaaaa-1111", agent_id: "agentxyz99", finding: { event_ids: ["e1"] } },
+    });
+    expect(o.file).toMatchObject({ name: ".env", directory: "/work/acme" });
+  });
+  test("OCSF detection finding mapping", () => {
+    const o = JSON.parse(toNdjson(report([sub]), "ocsf").trim());
+    expect(o).toMatchObject({ class_uid: 2004, type_uid: 200401, severity_id: 4, time: Date.parse(sub.ts), metadata: { version: "1.9.0", uid: sub.id } });
+    expect(o.finding_info.analytic.uid).toBe("r1");
+    expect(o.finding_info.attacks).toContainEqual({ technique: { uid: "T1552" }, sub_technique: { uid: "T1552.001" } });
+    expect(o.finding_info.related_events).toEqual([{ uid: "e1" }]);
+    expect(o.unmapped.retrohound).toMatchObject({ agent_id: "agentxyz99", ai_agent: { type_id: 99 } });
+  });
+  test("masks secrets and strips match-only fields in both schemas", () => {
+    const e = { ...ev({ command_line: `echo ${TOKEN}`, text_excerpt: TOKEN }), content: "C0NTENT", tool_response: "T2ESP" } as AgentEvent;
+    for (const s of ["ecs", "ocsf"] as const) {
+      const out = toNdjson(report([finding({ message: TOKEN, events: [e] })]), s);
+      for (const w of [TOKEN, "C0NTENT", "T2ESP"]) expect(out).not.toContain(w);
+    }
+  });
+});

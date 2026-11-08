@@ -1,0 +1,32 @@
+# Publishes to npm when a v* tag is pushed, through npm trusted publishing (OIDC): no token is stored, and npm shows
+# provenance linking the package to this workflow run. One-time setup on npmjs.com: package > Settings > Trusted
+# publisher > GitHub Actions, repository Raman-Lab1/RetroHound, workflow release.yml. Provenance needs a public
+# repository: `--provenance` makes a publish from a private one fail instead of shipping without it.
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish:
+    if: github.repository == 'Raman-Lab1/RetroHound'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@^11.5.1 # trusted publishing needs 11.5.1 or later
+      - run: bun install --frozen-lockfile
+      - run: bunx tsc --noEmit
+      - run: bun test
+      - name: tag matches package.json version
+        run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
+      - run: npm publish --provenance --access public

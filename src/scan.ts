@@ -1,0 +1,264 @@
+// The scan pipeline (ADR 0006, 0008): discover -> parse -> index -> evaluate -> findings. It evaluates per
+// session, never per file: a session is its main transcript plus its sub-agent files (and set-aside copies), and
+// event_count correlations must see all of them at once (ADR 0004). Zero network, nothing raw is persisted.
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { COLLECTORS, type Collector } from "./collectors/index.ts";
+import { evaluate, type Match } from "./engine/evaluate.ts";
+import { loadRules, type Rejection, type Rule } from "./engine/load.ts";
+import { mask } from "./normalize/mask.ts";
+import { toStored } from "./normalize/stored.ts";
+import { LEVELS, type Finding, type Level, type ParsedFile, type RawEvent } from "./normalize/types.ts";
+import type { ReportRule, ScanReport } from "./outputs/report.ts";
+import { findingId, openStore, type Store } from "./store/index.ts";
+import { indexFiles } from "./store/indexer.ts";
+import { applyIgnore, loadIgnore, type Ignore } from "./suppress.ts";
+
+/** Claude Code parser version; each collector carries its own (src/collectors/index.ts). Bump it there. */
+export const PARSER_VERSION = COLLECTORS.claude_code!.parserVersion;
+export const TOOL_VERSION = "0.1.0";
+// src/scan.ts and the bundle dist/cli.mjs both sit one level below the repo/package root.
+export const DEFAULT_RULES_DIR = fileURLToPath(new URL("../rules/ai_coding_agent", import.meta.url));
+
+export type ScanOptions = {
+  agent?: string; // a key of COLLECTORS, or "all" (every collector, each at its default root); default claude_code
+  root?: string; // the agent's data dir (Claude: config dir or its projects dir); default per collector; not with "all"
+  dbPath?: string;
+  rulesDir?: string;
+  since?: string; // ISO date or time: sessions that ended before it are left out
+  project?: string; // substring of the session's project path
+  level?: Level; // findings below it are left out
+  ignore?: string; // --ignore file; else ~/.retrohound/ignore.yml (suppress.ts: a repo's own file is never implicit)
+  noIndex?: boolean; // parse and evaluate everything, write nothing
+  onRejected?: (rejected: Rejection[]) => void; // called once with the rules the loader refused, so callers need not load them again
+};
+
+type Sess = { id: string; agent: string; project_path?: string; last_ts: string; events: number; archived: boolean };
+type Job = { c: Collector; paths: string[] };
+type View = {
+  sessions: Sess[];
+  findings: Finding[];
+  stats: (ids: string[]) => { blocked: number; subagent: number };
+  files: ScanReport["scan"]["files"];
+  lines: Lines;
+};
+
+type Lines = NonNullable<ScanReport["scan"]["lines"]>;
+const noLines = (): Lines => ({ malformed: 0, unknown_types: {} });
+function tally(acc: Lines, stats: ParsedFile["stats"]): void {
+  acc.malformed += stats.malformed;
+  for (const [type, k] of Object.entries(stats.unknown_types)) acc.unknown_types[type] = (acc.unknown_types[type] ?? 0) + k;
+}
+
+function groupPaths(c: Collector, paths: string[]): Map<string, string[]> {
+  const groups = new Map<string, string[]>();
+  for (const p of paths) groups.set(c.groupKey(p), [...(groups.get(c.groupKey(p)) ?? []), p]);
+  return groups;
+}
+
+function loadRuleSet(dir: string): { rules: Rule[]; hash: string; rejected: Rejection[] } {
+  let names: string[] = [];
+  try {
+    names = (readdirSync(dir, { recursive: true }) as string[]).map((n) => n.replaceAll("\\", "/")).filter((n) => /\.ya?ml$/.test(n));
+  } catch {
+    // no rules directory: nothing can fire
+  }
+  const sources = names.sort().map((n) => ({ path: join(dir, n), text: readFileSync(join(dir, n), "utf8"), name: n }));
+  const hash = createHash("sha256").update(sources.map((s) => `${s.name}\0${s.text}\0`).join("")).digest("hex");
+  const { rules, rejected } = loadRules(sources);
+  return { rules, hash, rejected };
+}
+
+function toFinding(m: Match<RawEvent>): Finding {
+  const events = m.events.map(toStored);
+  return {
+    id: findingId(m.rule.id, events.map((e) => e.id)),
+    rule_id: mask(m.rule.id),
+    level: m.rule.level,
+    ts: events[0]!.ts,
+    session_id: events[0]!.session_id,
+    message: mask(m.rule.title.replace(/\s+/g, " ").trim()),
+    events,
+  };
+}
+
+/** Parses every file of the given groups and evaluates each session's events together, copies deduped by id. */
+async function evaluateGroups(rules: Rule[], groups: string[][], parse: (p: string) => Promise<RawEvent[] | null>) {
+  const bySession = new Map<string, Map<string, RawEvent>>();
+  for (const paths of groups) {
+    for (const path of paths) {
+      for (const e of (await parse(path)) ?? []) {
+        const events = bySession.get(e.session_id) ?? new Map<string, RawEvent>();
+        if (!events.has(e.id)) events.set(e.id, e); // paths sort the original before its copies
+        bySession.set(e.session_id, events);
+      }
+    }
+  }
+  const findings = [...bySession.values()].flatMap((events) => evaluate(rules, [...events.values()]).map(toFinding));
+  return { sessions: [...bySession.keys()], findings, bySession };
+}
+
+const safeParse = (c: Collector, cache?: Map<string, RawEvent[]>, lines?: Lines) => async (path: string): Promise<RawEvent[] | null> => {
+  try {
+    const cached = cache?.get(path);
+    if (cached) return cached;
+    const { events, stats } = await c.parseFile(path);
+    if (lines) tally(lines, stats);
+    return events;
+  } catch {
+    return null; // an unreadable file is the indexer's `failed`; the rest of its session still evaluates
+  }
+};
+
+function summarize(events: RawEvent[]): Sess {
+  const first = events.find((e) => e.project_path);
+  return {
+    id: events[0]!.session_id,
+    agent: events[0]!.agent,
+    project_path: first?.project_path,
+    last_ts: events.reduce((m, e) => (e.ts > m ? e.ts : m), ""),
+    events: events.length,
+    archived: false,
+  };
+}
+
+async function scanMemory(jobs: Job[], rules: Rule[]): Promise<View> {
+  let failed = 0;
+  const lines = noLines();
+  const findings: Finding[] = [];
+  const all = new Map<string, RawEvent[]>();
+  for (const { c, paths } of jobs) {
+    const parse = safeParse(c, undefined, lines);
+    const counted = async (p: string) => (await parse(p)) ?? (failed++, null);
+    const r = await evaluateGroups(rules, [...groupPaths(c, paths).values()], counted);
+    findings.push(...r.findings);
+    for (const [id, events] of r.bySession) all.set(id, [...events.values()]);
+  }
+  const stats = (ids: string[]) => {
+    const events = ids.flatMap((id) => all.get(id) ?? []);
+    return { blocked: events.filter((e) => e.outcome === "blocked").length, subagent: events.filter((e) => e.agent_id).length };
+  };
+  const total = jobs.reduce((n, j) => n + j.paths.length, 0);
+  return { sessions: [...all.values()].map(summarize), findings, stats, files: { indexed: total - failed, skipped: 0, gone: 0, failed }, lines };
+}
+
+async function scanIndexed(jobs: Job[], store: Store, rules: Rule[], hash: string): Promise<View> {
+  const started = new Date().toISOString();
+  // Once, before any agent runs: each agent's untouched files need the same answer (the run is recorded at the end).
+  const full = store.lastRuleRun()?.rule_set_hash !== hash;
+  const lines = noLines(); // only files the indexer parses this run; re-reads for evaluation are not counted twice
+  const files = { indexed: 0, skipped: 0, gone: 0, failed: 0 };
+  for (const { c, paths } of jobs) {
+    const index = await indexAgent(c, store, rules, paths, full, lines);
+    files.indexed += index.indexed;
+    files.skipped += index.skipped;
+    files.gone += index.gone;
+    files.failed += index.failed.length;
+  }
+  const events = store.listSessions().reduce((n, s) => n + s.event_count, 0);
+  store.recordRuleRun({ rule_set_hash: hash, started_at: started, finished_at: new Date().toISOString(), events, findings: store.listFindings().length });
+  const agents = new Set(jobs.map((j) => j.c.agent as string)); // one DB holds every agent
+  return {
+    sessions: store.listSessions().filter((s) => agents.has(s.agent))
+      .map((s) => ({ id: s.session_id, agent: s.agent, project_path: s.project_path ?? undefined, last_ts: s.last_ts, events: s.event_count, archived: s.archived })),
+    findings: store.listFindings(),
+    stats: (ids) => store.eventStats(ids),
+    files,
+    lines,
+  };
+}
+
+async function indexAgent(c: Collector, store: Store, rules: Rule[], paths: string[], full: boolean, lines: Lines) {
+  const touched = new Set<string>();
+  const cache = new Map<string, RawEvent[]>();
+  const parse = async (path: string) => {
+    touched.add(path); // before parsing: a file that fails keeps its session dirty until it parses
+    const parsed = await c.parseFile(path);
+    tally(lines, parsed.stats);
+    cache.set(path, parsed.events);
+    return parsed;
+  };
+  const index = await indexFiles(store, paths, parse, c.parserVersion);
+  const dirty = [...groupPaths(c, paths).values()].filter((g) => full || g.some((p) => touched.has(p)));
+  const { sessions, findings } = await evaluateGroups(rules, dirty, safeParse(c, cache));
+  cache.clear();
+  store.replaceFindings(sessions, findings);
+  if (full) {
+    // Sessions whose transcripts are gone can only be re-read from masked rows (0006, 0008): keep their old evidence.
+    for (const s of store.listSessions().filter((s) => s.agent === c.agent && s.archived)) {
+      store.insertFindings(evaluate(rules, store.sessionEvents(s.session_id)).map((m) => toFinding(m as Match<RawEvent>)));
+    }
+  }
+  return index;
+}
+
+export const reportRule = (r: Rule): ReportRule => ({
+  id: r.id, name: r.name, title: r.title, author: r.author, description: r.description, level: r.level, tags: r.tags, lane: r.lane,
+  falsepositives: r.falsepositives.length ? r.falsepositives : undefined,
+});
+
+export async function runScan(opts: ScanOptions = {}): Promise<ScanReport> {
+  const started_at = new Date().toISOString();
+  const all = opts.agent === "all";
+  const one = COLLECTORS[opts.agent ?? "claude_code"];
+  if (!all && !one) throw new Error(`unknown agent '${opts.agent}'`);
+  if (all && opts.root) throw new Error("--root cannot be used with --agent all: each agent is read from its own default root");
+  const collectors = all ? Object.values(COLLECTORS) : [one!];
+  const roots = collectors.map((c) => opts.root ?? c.defaultRoot());
+  const { rules, hash, rejected } = loadRuleSet(opts.rulesDir ?? DEFAULT_RULES_DIR);
+  opts.onRejected?.(rejected);
+  const ignore = loadIgnore(rules, { file: opts.ignore }); // before any work: a bad file is a usage error
+  const jobs = collectors.map((c, i) => ({ c, paths: c.discover(roots[i]!) }));
+  const root = roots.join(", ");
+  const agents = all ? collectors.map((c) => c.agent as string) : undefined;
+  if (opts.noIndex) return buildReport(opts, await scanMemory(jobs, rules), rules, root, started_at, ignore, agents);
+  const store = openStore(opts.dbPath);
+  try {
+    return buildReport(opts, await scanIndexed(jobs, store, rules, hash), rules, root, started_at, ignore, agents); // view.stats needs the store open
+  } finally {
+    store.close(); // Windows keeps the file locked otherwise
+  }
+}
+
+/** Per-agent counts after the filters, so a multi-agent report says where findings came from. */
+function perAgent(agents: string[], kept: Sess[], findings: Finding[]): NonNullable<ScanReport["scan"]["agents"]> {
+  return Object.fromEntries(agents.map((a) => {
+    const mine = kept.filter((s) => s.agent === a);
+    const ids = new Set(mine.map((s) => s.id));
+    return [a, { sessions: mine.length, events: mine.reduce((n, s) => n + s.events, 0), findings: findings.filter((f) => ids.has(f.session_id)).length }];
+  }));
+}
+
+function buildReport(opts: ScanOptions, view: View, rules: Rule[], root: string, started_at: string, ignore: Ignore, agents?: string[]): ScanReport {
+  const project = opts.project?.toLowerCase();
+  const kept = view.sessions.filter(
+    (s) => (!opts.since || s.last_ts >= opts.since) && (!project || (s.project_path ?? "").toLowerCase().includes(project)),
+  );
+  const ids = new Set(kept.map((s) => s.id));
+  const min = opts.level ? LEVELS.indexOf(opts.level) : 0;
+  const { kept: findings, suppressed } = applyIgnore(view.findings.filter((f) => ids.has(f.session_id) && LEVELS.indexOf(f.level) >= min), ignore);
+  const fired = new Set(findings.map((f) => f.rule_id));
+  const { blocked, subagent } = view.stats([...ids]);
+  return {
+    schema: "retrohound.scan/0.1",
+    tool: { name: "retrohound", version: TOOL_VERSION },
+    scan: {
+      started_at,
+      finished_at: new Date().toISOString(),
+      sessions: kept.length,
+      events: kept.reduce((n, s) => n + s.events, 0),
+      blocked,
+      subagent_events: subagent,
+      files: view.files,
+      lines: view.lines,
+      archived_sessions: kept.filter((s) => s.archived).map((s) => mask(s.id)),
+      root: mask(root),
+      ...(suppressed ? { suppressed } : {}),
+      ...(agents ? { agents: perAgent(agents, kept, findings) } : {}), // only with --agent all: single-agent JSON is unchanged
+    },
+    rules: rules.filter((r) => fired.has(mask(r.id))).map(reportRule),
+    findings,
+  };
+}

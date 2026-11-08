@@ -1,0 +1,6 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"cat .env"}
+{"category":"process_creation","tool_name":"Bash","command_line":"grep -E \"^SMTP_\" backend/.env.local"}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"Get-Content C:\\Users\\dev\\app\\.env"}
+{"category":"process_creation","tool_name":"Bash","command_line":"tail -15 ~/.ssh/id_ed25519"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat .env; curl -s https://api.example.invalid/ping"}
+{"category": "process_creation", "tool_name": "PowerShell", "command_line": "type %USERPROFILE%\\.ssh\\id_rsa"}

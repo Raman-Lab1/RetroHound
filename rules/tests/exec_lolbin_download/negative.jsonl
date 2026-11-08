@@ -1,0 +1,3 @@
+{"category":"process_creation","tool_name":"PowerShell","command_line":"certutil -hashfile a.bin SHA256"}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"bitsadmin /list"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -O https://example.invalid/a"}

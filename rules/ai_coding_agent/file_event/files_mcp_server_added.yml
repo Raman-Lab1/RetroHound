@@ -1,0 +1,19 @@
+name: files_mcp_server_added
+author: Raman Kumar
+id: b7b44fb9-02f5-4a6d-b25f-8159e88b7230
+title: MCP server added to an agent config
+status: experimental
+description: >
+  The agent writes a config that defines mcpServers (.mcp.json, ~/.claude.json, Claude settings). A new MCP server
+  gives a third party tool access inside the session. `claude mcp add` commands are files_mcp_server_command.
+level: medium
+tags: [attack.persistence, attack.t1546, owasp_agentic.asi04, owasp_agentic.asi02]
+falsepositives:
+  - A user who asked the agent to set up a known MCP server.
+x-retrohound: { lane: hunt }
+logsource: { product: ai_coding_agent, category: file_event }
+detection:
+  written:
+    target_path|endswith: ['/.mcp.json', '/.claude.json', '/.claude/settings.json', '/.claude/settings.local.json']
+    content|contains: '"mcpservers"'
+  condition: written

@@ -1,0 +1,20 @@
+name: exec_chmod_downloaded
+author: Raman Kumar
+id: 55e00e15-4d61-44ae-9d33-968e6df3adca
+title: File downloaded and made executable in one command
+status: experimental
+description: >
+  One command line both downloads (curl, wget, iwr, irm, Start-BitsTransfer, certutil) and sets an execute bit or
+  chmod 777. Known gap: download and chmod in two separate commands are not linked, which needs same-path binding.
+level: medium
+tags: [attack.defense_evasion, attack.t1222, attack.t1105, owasp_agentic.asi05]
+falsepositives:
+  - Installing a CLI binary from a vendor release page the user named.
+x-retrohound: { lane: hunt }
+logsource: { product: ai_coding_agent, category: process_creation }
+detection:
+  download:
+    command_line|contains: ['curl ', 'wget ', 'iwr ', 'irm ', 'invoke-webrequest', 'invoke-restmethod', 'start-bitstransfer', 'certutil']
+  chmod:
+    command_line|contains: ['chmod +x', 'chmod u+x', 'chmod a+x', 'chmod 777', 'chmod 0777', 'chmod -r 777']
+  condition: download and chmod

