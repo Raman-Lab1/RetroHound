@@ -101,11 +101,15 @@ export const MIGRATIONS: readonly Migration[] = [
   createChain,
 ];
 
-/** Applies the entries `db` has not had yet, each in its own transaction. Refuses a DB newer than `migrations`. */
+/** Applies the entries `db` has not had yet, each in its own transaction. Refuses a DB newer than `migrations`, and
+ * another program's database (tables but no version): `--db` pointed at the wrong file must not get our schema. */
 export function migrate(db: Db, migrations: readonly Migration[] = MIGRATIONS): void {
   const version = Number(db.prepare("PRAGMA user_version").get()?.user_version ?? 0);
   if (version > migrations.length) {
     throw new Error(`index schema version ${version} is newer than this RetroHound supports (${migrations.length})`);
+  }
+  if (version === 0 && db.prepare("SELECT 1 FROM sqlite_master LIMIT 1").get()) {
+    throw new Error("this database is not a RetroHound index (it has tables but no index version); left unchanged");
   }
   for (const [i, sql] of migrations.entries()) {
     if (i < version) continue;

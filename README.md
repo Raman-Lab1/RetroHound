@@ -251,7 +251,7 @@ index keeps the masked record either way, as long as you scan before the deletio
 ## What it found on my machine
 
 One developer machine (the author's), mostly sessions working on RetroHound itself, so self-referential. 9 sessions,
-3,272 events, 41 findings from 8 of the 38 rules shipped at that time (46 ship now). Counts only; see [docs/perf.md](docs/perf.md) for the review.
+3,272 events, 41 findings from 8 of the 38 rules shipped at that time (48 ship now). Counts only; see [docs/perf.md](docs/perf.md) for the review.
 
 | Rule | Level | Hits | Sessions |
 |---|---|---|---|
