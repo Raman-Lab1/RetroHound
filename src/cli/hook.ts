@@ -6,10 +6,11 @@ import { loadIgnore } from "../suppress.ts";
 import { AGENTS, type Agent } from "../hooks/agents.ts";
 import { mask } from "../normalize/mask.ts";
 import { install, settingsPath, status, uninstall, UnsafePathError, type InstallOpts, type Scope } from "../hooks/install.ts";
-import { statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
+import { parseArgs } from "node:util";
 import { EXTRA_HELP, loadRuleDir, repeat } from "./rules.ts";
-import { oneOf, UsageError, type IO, type Registrar } from "./io.ts";
+import { oneOf, processIO, UsageError, type IO, type Registrar } from "./io.ts";
 
 type ManageFlags = { agent?: string; mode?: string; scope: string; settings?: string; failClosed?: boolean; dryRun?: boolean; allowUnsafePath?: boolean; extraRules?: string[] };
 
@@ -59,6 +60,11 @@ function showStatus(f: ManageFlags, io: IO): number {
 }
 
 async function readStdin(): Promise<string> {
+  try {
+    return readFileSync(0, "utf8"); // about 2 ms less than the stream on every tool call
+  } catch (e) {
+    if ((e as { code?: string }).code !== "EAGAIN") throw e; // non-blocking stdin: read it as a stream
+  }
   const chunks: Buffer[] = [];
   for await (const c of process.stdin) chunks.push(c as Buffer);
   return Buffer.concat(chunks).toString("utf8");
@@ -86,6 +92,19 @@ export async function hookRun(f: RunFlags, io: IO, stdin: () => Promise<string> 
     io.err(mask(`retrohound hook: ${(e as Error).message}; no decision (fail open)`).split("\n")[0] + "\n");
   }
   return 0;
+}
+
+const str = { type: "string" } as const;
+
+/**
+ * `hook run` straight from bin.ts/entry.ts, without commander or the other commands (it runs on every tool call). The
+ * same flags as the commander definition below; unknown flags are ignored as its allowUnknownOption does, and a flag
+ * with no value fails open here (commander would exit 2, which blocks the call).
+ */
+export function hookMain(argv: string[], io: IO = processIO()): Promise<number> {
+  const { values: v } = parseArgs({ args: argv, strict: false, allowPositionals: true,
+    options: { agent: str, mode: str, rules: str, "extra-rules": { type: "string", multiple: true }, log: str, cache: str, ignore: str } });
+  return hookRun({ ...v, extraRules: v["extra-rules"] } as RunFlags, io);
 }
 
 export const registerHook: Registrar = (program, run, io) => {
