@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { main } from "../../src/cli/main.ts";
 import type { IO } from "../../src/cli/io.ts";
+import { TOOL_VERSION } from "../../src/version.ts";
 
 const base = mkdtempSync(join(tmpdir(), "rh-cli-"));
 afterAll(() => rmSync(base, { recursive: true, force: true }));
@@ -138,7 +139,7 @@ describe("purge", () => {
 describe("meta", () => {
   test("--version and --help exit 0, an unknown command exits 2", async () => {
     expect(await run("--version")).toBe(0);
-    expect(out).toContain("0.1.0");
+    expect(out).toContain(TOOL_VERSION);
     expect(await run("scan", "--help")).toBe(0);
     expect(out).toContain("--fail-on");
     expect(await run("frobnicate")).toBe(2);

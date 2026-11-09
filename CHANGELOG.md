@@ -5,6 +5,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-09
+
 ### Added
 - `incident <session|finding>`: one folder to hand over (incident.json, an offline index.html and a sha256 manifest)
   with the timeline, the sub-agent tree, blocked versus succeeded calls, secrets to rotate and where the evidence came

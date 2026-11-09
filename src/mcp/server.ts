@@ -1,10 +1,11 @@
 // Minimal MCP server core: JSON-RPC 2.0 over newline-delimited stdio. `handleLine` is pure (line in, line out), so
 // tests drive it without a process. Spec: https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle
 // and .../server/tools (the 2026-07-28 revision is stateless; its clients fall back to `initialize`, handled here).
+import { TOOL_VERSION } from "../version.ts";
 import { TOOLS, ToolError, callTool, type Ctx } from "./tools.ts";
 
 export const PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"] as const;
-const INFO = { name: "retrohound", version: "0.1.0" };
+const INFO = { name: "retrohound", version: TOOL_VERSION };
 
 type Id = string | number | null;
 const E = { parse: -32700, request: -32600, method: -32601, params: -32602 } as const;
