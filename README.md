@@ -153,7 +153,7 @@ bun test
 | `show <session-id>` | Timeline of one session with findings highlighted. |
 | `wrapped` | Write a self-contained HTML report card. |
 | `purge` | Delete the index database. |
-| `preflight [dir]` | Before opening a cloned repo with an agent: check its agent surface (`.claude/`, `.mcp.json`, CLAUDE.md/AGENTS.md, skills, `.vscode/tasks.json`, npm lifecycle scripts) with the same rules. Reads files as text; runs nothing. |
+| `preflight [dir]` | Before opening a cloned repo with an agent: check its agent surface (`.claude/`, `.mcp.json`, CLAUDE.md/AGENTS.md, skills, `.vscode/tasks.json`, npm lifecycle scripts) with the same rules. Reads files as text; runs nothing. In a monorepo it also reads each workspace package's `package.json` (root `workspaces` or `pnpm-workspace.yaml`, up to 500). |
 | `hook install` / `hook uninstall` / `hook status` | Optional live guard (v0.2): a `PreToolUse` hook for Claude Code, Codex CLI or Antigravity CLI (`--agent`) that runs only `enforce`-lane rules. `--mode log` (record what it would do), `confirm` (ask you) or `block` (deny). Backs up the file, touches only its own entry, fails open. |
 | `mcp` | Serve the index to MCP clients over stdio, read-only: `scan_summary`, `list_findings`, `show_session`, `query`, `list_rules`. |
 

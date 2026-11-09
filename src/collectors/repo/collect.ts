@@ -1,12 +1,16 @@
 // Repo agent-surface collector (`preflight`): reads a few known files of a cloned repo as TEXT and maps
 // them to the RawEvents the existing rules match. Nothing is executed, imported or fetched, nothing is written, and
 // the walk is bounded: fixed locations only, node_modules/.git skipped, a size cap, no symlink out of the directory.
+// Workspace package.json files (npm/yarn/bun `workspaces`, pnpm-workspace.yaml `packages`) are read the same way.
 import { createHash } from "node:crypto";
 import { lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { parse } from "yaml";
 import type { Category, RawEvent } from "../../normalize/types.ts";
 
 export const MAX_FILE_BYTES = 1_048_576;
+export const MAX_PACKAGES = 500; // workspace package.json files per repo
+export const MAX_WORKSPACE_DIRS = 5000; // directories a workspace glob (`**`) may list; a deep tree is reported, not walked
 const MAX_FILES = 400; // per directory walk; a bomb of agent files is reported as skipped, not read
 export const SESSION_ID = "preflight";
 const SKIP_DIRS = new Set(["node_modules", ".git"]);
@@ -30,6 +34,22 @@ const inside = (root: string, p: string) => p === root || p.startsWith(root + "/
 function event(rel: string, abs: string, category: Category, n: number, ts: string): RawEvent {
   const id = createHash("sha256").update(`${SESSION_ID}\0${rel}\0${n}`).digest("hex").slice(0, 32);
   return { id, schema_version: "0.1", agent: "claude_code", session_id: SESSION_ID, ts, seq: n, category, target_path: abs, raw_ref: { file: rel, line: 1 } };
+}
+
+/** Declared workspace globs: package.json `workspaces` (array or `{packages}`) and pnpm-workspace.yaml `packages`. */
+function workspaceGlobs(root: string): string[] {
+  const read = (rel: string, parseText: (t: string) => unknown) => {
+    try {
+      const full = join(root, rel);
+      return statSync(full).size > MAX_FILE_BYTES ? undefined : parseText(readFileSync(full, "utf8"));
+    } catch {
+      return undefined; // absent or not parseable: no workspaces from this file
+    }
+  };
+  const ws = (read("package.json", JSON.parse) as { workspaces?: unknown } | undefined)?.workspaces;
+  const pnpm = (read("pnpm-workspace.yaml", parse) as { packages?: unknown } | undefined)?.packages;
+  const all = [ws, (ws as { packages?: unknown } | undefined)?.packages, pnpm].flatMap((v) => (Array.isArray(v) ? v : []));
+  return all.filter((g): g is string => typeof g === "string" && !g.startsWith("!"));
 }
 
 /** Hook commands of a settings.json become `hook:<Event>` process_creation events, as the live parser emits them. */
@@ -99,7 +119,39 @@ export function collectRepo(dir: string, now = new Date()): Collected {
     }
   };
 
+  // Each glob segment is matched against real directory entries: `*`, `**` and literal names only, no `..`, and a
+  // symlinked directory is not isDirectory(), so the expansion never leaves the root.
+  const packages = new Set<string>();
+  let listed = 0;
+  const expand = (rel: string, segs: string[]): void => {
+    if (packages.size > MAX_PACKAGES || listed > MAX_WORKSPACE_DIRS) return;
+    if (!segs.length) return void (rel && lstatSync(join(root, rel, "package.json"), { throwIfNoEntry: false }) && packages.add(`${rel}/package.json`));
+    const [seg, ...rest] = segs as [string, ...string[]];
+    if (seg === "**") expand(rel, rest);
+    const re = new RegExp(`^${seg.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replaceAll("*", ".*")}$`);
+    let entries;
+    if (++listed > MAX_WORKSPACE_DIRS) return;
+    try {
+      entries = readdirSync(join(root, rel), { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (!e.isDirectory() || SKIP_DIRS.has(e.name)) continue;
+      const child = rel ? `${rel}/${e.name}` : e.name;
+      if (seg === "**") expand(child, segs);
+      else if (re.test(e.name)) expand(child, rest);
+    }
+  };
+  for (const glob of workspaceGlobs(root)) {
+    const segs = fwd(glob).replace(/\/package\.json$/, "").split("/").filter((s) => s && s !== ".");
+    if (!segs.includes("..")) expand("", segs);
+  }
+
   for (const [rel, cat] of FILES) add(rel, cat);
+  for (const rel of [...packages].slice(0, MAX_PACKAGES)) add(rel, "file_event");
+  if (packages.size > MAX_PACKAGES) skip("workspaces", `more than ${MAX_PACKAGES} packages, only the first ${MAX_PACKAGES} read`);
+  else if (listed > MAX_WORKSPACE_DIRS) skip("workspaces", `glob lists more than ${MAX_WORKSPACE_DIRS} directories, stopped there`);
   for (const [rel, keep] of DIRS) walk(rel, keep);
   return out;
 }

