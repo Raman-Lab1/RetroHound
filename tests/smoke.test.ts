@@ -36,7 +36,7 @@ describe.each(runtimes)("dist/cli.mjs under %s", (name, exe) => {
   };
 
   test("--version and --help", () => {
-    expect(sh("--version")).toMatchObject({ code: 0, out: "0.1.0\n", err: "" });
+    expect(sh("--version")).toMatchObject({ code: 0, out: `${JSON.parse(readFileSync(join(root, "package.json"), "utf8")).version}\n`, err: "" });
     const help = sh("--help");
     expect(help.out).toContain("scan");
     expect(help.err).not.toContain("ExperimentalWarning");
