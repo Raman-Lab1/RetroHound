@@ -50,6 +50,7 @@ retrohound preflight ./some-cloned-repo
 # 6. Ask your own questions (read-only SQL over the index)
 retrohound query "SELECT level, count(*) AS n FROM findings GROUP BY level"
 retrohound query "SELECT category, count(*) AS n FROM events GROUP BY category ORDER BY n DESC"
+retrohound verify                 # check the index was not edited; keep the printed head somewhere safe
 
 # 7. Machine-readable output and CI gates
 retrohound scan --format json > report.json      # also sarif, ndjson-ecs, ndjson-ocsf

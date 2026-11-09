@@ -14,6 +14,7 @@ import { defaultDbPath } from "../store/index.ts";
 import { oneOf, parseSince, processIO, UsageError, useColor, type IO } from "./io.ts";
 import { registerHook } from "./hook.ts";
 import { registerIncident } from "./incident.ts";
+import { registerVerify } from "./verify.ts";
 import { registerMcp } from "./mcp.ts";
 import { registerPreflight } from "./preflight.ts";
 import { registerQuery } from "./query.ts";
@@ -116,6 +117,7 @@ export function buildProgram(io: IO, setCode: (n: number) => void): Command {
   registerQuery(program, run, io);
   registerShow(program, run, io);
   registerIncident(program, run, io);
+  registerVerify(program, run, io);
   registerWrapped(program, run, io);
   registerPreflight(program, run, io);
   registerMcp(program, run, io);

@@ -11,6 +11,9 @@ and versions follow [Semantic Versioning](https://semver.org/).
   from (source-file sha256, first and last seen). Works on sessions whose transcripts are gone; `--anonymize` hides paths.
 - `--extra-rules <dir>` (repeatable) for `scan`, `rules` and `hook`: your own rules on top of the shipped set.
 - `preflight` reads each workspace package's package.json in a monorepo (root `workspaces` or pnpm-workspace.yaml).
+- Tamper-evident index: every write to events, findings and indexed files is chained by sha256 (ADR 0015).
+  `verify` checks the chain and prints its head; `verify --head <hash>` fails if a head recorded elsewhere is gone,
+  and lists what was added since it. Existing indexes start their chain on the next scan.
 
 ### Changed
 - `hook run` is faster: the rule set is cached by file stat and the CLI skips loading other commands (p95 33 -> 21.5 ms).
