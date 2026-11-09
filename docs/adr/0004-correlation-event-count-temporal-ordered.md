@@ -30,8 +30,14 @@ stream, and the same event can satisfy two steps (`cat .env; curl ...` in one co
   `generate: true`. `rules list` marks rules that are silent because only a non-generating correlation uses them.
 - References resolve by `name` or `id` across the loaded set; an unresolved reference or a cycle is a load error.
 
+- Amendment 2026-11-09: `x-retrohound.differ_by: [fields]` on `temporal_ordered` makes every later step's event differ
+  from the first step's in those fields. Sigma cannot say "another tool than the blocked one", and two rules per tool
+  pair would repeat the secret-path patterns. Group-by on stored fields other than the ids joins identical calls
+  (`blocked_then_subagent_same_call` groups by tool, command line, path and URL).
+
 Examples in `rules/ai_coding_agent/correlation/`: `secrets_read_then_egress` (read, then a category-less egress base
-rule), `blocked_retry_secret_read` (a blocked read followed by a successful one) and `exec_mass_delete`.
+rule), `blocked_retry_secret_read` (a second blocked attempt), `blocked_then_other_tool_secret_read` (a blocked read
+followed by a successful one through another kind of tool) and `exec_mass_delete`.
 
 ## Consequences
 - "A key sent to its own API" is a normal pattern that Sigma cannot tell from exfiltration, because it would need the

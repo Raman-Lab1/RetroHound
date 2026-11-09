@@ -111,6 +111,24 @@ describe("temporal_ordered: the N7 shape", () => {
   });
 });
 
+describe("x-retrohound.differ_by", () => {
+  const ANY_BLOCKED = base("any_blocked", "{ outcome: blocked }");
+  const ANY_SUCCESS = base("any_success", "{ outcome: success }");
+  const docs = [ANY_BLOCKED, ANY_SUCCESS, correlation("other", "temporal_ordered", ["any_blocked", "any_success"], "", "x-retrohound: { differ_by: [category] }")];
+  const call = (seq: number, category: RawEvent["category"], outcome: "blocked" | "success") => event({ seq, ts: at(seq), category, outcome });
+  const only = (events: RawEvent[]) => run(docs, events).filter((m) => m.rule.name === "other");
+  test("a later step must differ from the first in the field; the earliest that does is taken", () => {
+    expect(only([call(1, "file_access", "blocked"), call(2, "file_access", "success")])).toEqual([]);
+    expect(only([call(1, "file_access", "blocked"), call(2, "file_access", "success"), call(3, "mcp", "success")]).map(seqs)).toEqual([[1, 3]]);
+  });
+  test("only on temporal_ordered, only a list of stored fields", () => {
+    expect(reason(correlation("c", "temporal", ["h"], "", "x-retrohound: { differ_by: [category] }"))).toBe("bad-x-retrohound");
+    expect(reason(correlation("c", "temporal_ordered", ["h"], "", "x-retrohound: { differ_by: 3 }"))).toBe("bad-x-retrohound");
+    expect(reason(correlation("c", "temporal_ordered", ["h"], "", "x-retrohound: { differ_by: [download_executed] }"))).toBe("bad-x-retrohound");
+    expect(reason(`x-retrohound: { differ_by: [category] }\n${base("d", "{ outcome: blocked }")}`)).toBe("bad-x-retrohound");
+  });
+});
+
 describe("streams", () => {
   test("a parent read and a child's egress do not correlate", () => {
     expect(star2Matches([read(1), send(2, { agent_id: "child" })])).toEqual([]);

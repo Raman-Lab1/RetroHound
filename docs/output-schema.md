@@ -11,6 +11,12 @@ type ScanReport = {
     started_at: string; finished_at: string;       // ISO-8601
     sessions: number; events: number;
     blocked: number;                               // events with outcome "blocked" (includes interrupted, see denial_kind)
+    blocked_breakdown?: {                          // only when blocked > 0 (added to 0.1, additive); counts, most first
+      kinds: Record<string, { main: number; sub_agent: number }>; // denial_kind; "unspecified" when the agent gave none
+      categories?: Record<string, number>;         // denial_category: Claude Code's classifier, Codex's risk level
+      attributions?: Record<string, number>;       // skill:<x> | mcp:<server> | plugin:<x> the blocked call ran under
+      top_projects: { project_path: string; blocked: number }[]; // the session's project, at most 5; "-" when none
+    };
     subagent_events: number;                       // events that carry agent_id
     files: { indexed: number; skipped: number; gone: number; failed: number };
     suppressed?: number;                           // findings hidden by an ignore file; omitted when 0; still in the index

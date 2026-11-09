@@ -84,7 +84,7 @@ see [Hook install safety](#hook-install-safety).
 
 ## What it catches
 
-46 Sigma rules on an `ai_coding_agent` logsource ([rules/ai_coding_agent](rules/ai_coding_agent)), for example:
+48 Sigma rules on an `ai_coding_agent` logsource ([rules/ai_coding_agent](rules/ai_coding_agent)), for example:
 
 | Family | Examples |
 |---|---|
@@ -113,12 +113,13 @@ no setup and no hook, and reports:
 
 - **What the agent tried.** Tool calls Claude Code blocked, kept apart from the ones you rejected or interrupted, and
   blocked-then-retried sequences (for example four attempts on one `.env`).
+- **Why it was blocked.** Blocked calls by Claude Code's own reason and classifier category, main vs sub-agent, skill or MCP server and project; plus a block followed by the same thing through another tool or a sub-agent.
 - **Who did it.** Each finding carries the sub-agent id, so you can see what happened outside the main conversation.
 - **Evidence that outlives the cleanup.** Claude Code deletes transcripts after `cleanupPeriodDays` (default 30).
   RetroHound keeps a masked, append-only index; deleted transcripts stay searchable there.
 - **Secrets, as rule #1.** Secret files read, secrets in tool input, with masked values and fingerprints, not raw text.
 
-Detections are Sigma v2.1 YAML with a proposed `ai_coding_agent` logsource. 46 rules ship today, plus 6 silent helper rules that only feed correlations (`rules/ai_coding_agent`).
+Detections are Sigma v2.1 YAML with a proposed `ai_coding_agent` logsource. 48 rules ship today, plus 9 silent helper rules that only feed correlations (`rules/ai_coding_agent`).
 
 ## What it does not do
 

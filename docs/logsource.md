@@ -141,6 +141,9 @@ only a non-generating correlation references emits nothing alone (`rules list` m
   - `[session_id, agent_id]`: one group per transcript stream, in `seq` order.
 - `x-retrohound.max_events_between: N` (seq distance) needs `agent_id` in `group-by`; otherwise the rule is rejected
   (`max-events-needs-agent-id`). `timespan` works either way. With both set, both must hold.
+- `x-retrohound.differ_by: [field, ...]` (`temporal_ordered` only, stored fields): each later step's event must differ
+  from the first step's in every listed field (null and missing are one value), so "blocked, then done with another
+  kind of tool" is `differ_by: [category]`. A Sigma backend without it matches the same tool too.
 - `event_count`: at most one finding per session per rule. `temporal_ordered`: order of `rules:`, non-strict, so one
   event can satisfy consecutive steps; one finding per first-step event.
 - A missing or bad `ts` sorts first and never fits a window, so clock skew between streams can hide a match.

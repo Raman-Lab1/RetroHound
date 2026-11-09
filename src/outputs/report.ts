@@ -16,6 +16,14 @@ export type ReportRule = {
   falsepositives?: string[];
 };
 
+/** The blocked events of the kept sessions, by the agent's own decision fields. Counts, most first. */
+export type BlockedBreakdown = {
+  kinds: Record<string, { main: number; sub_agent: number }>; // denial_kind; "unspecified" when the agent gave none
+  categories?: Record<string, number>; // denial_category (Claude Code's classifier; Codex's risk level)
+  attributions?: Record<string, number>; // skill:<x> | mcp:<server> | plugin:<x> the blocked call ran under
+  top_projects: { project_path: string; blocked: number }[]; // the session's project path, at most 5; "-" when none
+};
+
 export type ScanReport = {
   schema: "retrohound.scan/0.1";
   tool: { name: string; version: string };
@@ -25,6 +33,7 @@ export type ScanReport = {
     sessions: number;
     events: number;
     blocked: number; // events with outcome "blocked" (includes interrupted, see denial_kind)
+    blocked_breakdown?: BlockedBreakdown; // only when blocked > 0
     subagent_events: number; // events with an agent_id, for "% from sub-agents"
     files: { indexed: number; skipped: number; gone: number; failed: number };
     // Lines the parser skipped in the files parsed by this run (skipped files are not re-read).

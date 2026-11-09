@@ -21,6 +21,22 @@ function skippedLines(lines: ScanReport["scan"]["lines"]): string[] {
   return [`  skipped lines: ${lines.malformed} malformed · ${unknown} of unknown type${unknown ? ` (${top})` : ""}`];
 }
 
+/** What the agent's own guard blocked, under the blocked count. Silent when nothing was blocked. */
+function blockedLines(b: ScanReport["scan"]["blocked_breakdown"]): string[] {
+  if (!b) return [];
+  const top = (m: Record<string, number>) => {
+    const all = Object.entries(m);
+    return all.slice(0, 5).map(([k, v]) => `${k} ${v}`).join(" · ") + (all.length > 5 ? " · …" : "");
+  };
+  const kinds = Object.entries(b.kinds).map(([k, { main, sub_agent }]) => `${k} ${main + sub_agent}${sub_agent ? ` (${sub_agent} sub-agent)` : ""}`);
+  return [
+    `    by kind: ${kinds.join(" · ")}`,
+    ...(b.categories ? [`    by category: ${top(b.categories)}`] : []),
+    ...(b.attributions ? [`    by attribution: ${top(b.attributions)}`] : []),
+    `    top projects: ${b.top_projects.slice(0, 3).map((p) => `${p.project_path} ${p.blocked}`).join(" · ")}`,
+  ];
+}
+
 function findingLines(report: ScanReport, c: Colors): string[] {
   const rules = new Map(report.rules.map((r) => [r.id, r]));
   const byRule = new Map<string, Finding[]>();
@@ -71,6 +87,7 @@ export function toTable(report: ScanReport, opts: { color: boolean }): string {
     `  Indexed ${n(scan.sessions)} sessions · ${n(scan.events)} events in ${secs}s`,
     ...Object.entries(scan.agents ?? {}).map(([a, k]) => `    ${a.padEnd(12)} ${n(k.sessions)} sessions · ${n(k.events)} events · ${n(k.findings)} findings`),
     `  ${scan.blocked} blocked · ${pct}% of events from sub-agents · ${scan.archived_sessions.length} archived sessions`,
+    ...blockedLines(scan.blocked_breakdown),
     ...skippedLines(scan.lines),
     ...(scan.suppressed ? [`  ${scan.suppressed} findings suppressed by your ignore file`] : []),
     ...findingLines(report, c),

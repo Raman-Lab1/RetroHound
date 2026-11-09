@@ -12,6 +12,7 @@ export type CorrelationRule = RuleMeta & {
   groupBy: string[];
   timespanMs: number;
   maxEventsBetween?: number;
+  differBy?: string[]; // x-retrohound.differ_by: each later step's event differs from the first step's in these fields
   count?: (n: number) => boolean; // event_count's condition
   generate: boolean; // true = referenced rules also emit on their own
 };
@@ -96,8 +97,13 @@ export function parseCorrelation(doc: Record<string, unknown>, meta: RuleMeta): 
     if (gte !== refs.length || Object.keys(rest).length > 0) throw new RuleError("bad-correlation", `${type} supports only condition { gte: ${refs.length} }`);
   }
 
-  const max = (doc["x-retrohound"] as Record<string, unknown> | undefined)?.max_events_between;
+  const x = (doc["x-retrohound"] ?? {}) as Record<string, unknown>;
+  const max = x.max_events_between;
   if (max !== undefined && !(Number.isInteger(max) && (max as number) >= 0)) throw new RuleError("bad-x-retrohound", "max_events_between must be a non-negative integer");
+  const differBy = x.differ_by === undefined ? undefined : stringList(x.differ_by)?.map(resolveField);
+  if (x.differ_by !== undefined && (type !== "temporal_ordered" || !differBy || differBy.some(isDerived))) {
+    throw new RuleError("bad-x-retrohound", "differ_by is a list of stored fields, for temporal_ordered only");
+  }
   const groupBy = parseGroupBy(block["group-by"]);
   if (max !== undefined && !groupBy.includes("agent_id")) {
     throw new RuleError("max-events-needs-agent-id", "max_events_between needs agent_id in group-by: seq is not comparable across streams");
@@ -114,6 +120,7 @@ export function parseCorrelation(doc: Record<string, unknown>, meta: RuleMeta): 
     groupBy,
     timespanMs: Number(span[1]) * UNITS[span[2]!]!,
     maxEventsBetween: max as number | undefined,
+    differBy,
     count: type === "event_count" ? parseCount(block.condition) : undefined,
     generate,
   };
@@ -187,6 +194,10 @@ function pastWindow(rule: CorrelationRule, a: Occurrence, b: Occurrence): boolea
   return b.t - a.t > rule.timespanMs || (rule.maxEventsBetween !== undefined && b.seq - a.seq > rule.maxEventsBetween);
 }
 
+// null and missing are one value, as in group-by keys.
+const differs = (rule: CorrelationRule, a: Occurrence, b: Occurrence) =>
+  !rule.differBy?.some((f) => (a.at[f] ?? null) === (b.at[f] ?? null));
+
 function lowerBound(list: Occurrence[], seq: number): number {
   let lo = 0;
   let hi = list.length;
@@ -231,7 +242,7 @@ function temporalOrdered(rule: CorrelationRule, steps: Occurrence[][]): Occurren
       for (let i = lowerBound(step, prev.seq); i < step.length && !found; i++) {
         const o = step[i]!;
         if (pastWindow(rule, first, o)) break;
-        if (inWindow(rule, first, o)) found = o;
+        if (inWindow(rule, first, o) && differs(rule, first, o)) found = o;
       }
       if (!found) break;
       chain.push(found);

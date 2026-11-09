@@ -1,0 +1,80 @@
+title: Call blocked in the main conversation, then made by a sub-agent
+id: f4dc7b52-00e5-4915-b843-10ef36a5d564
+name: blocked_then_subagent_same_call
+author: Raman Kumar
+status: experimental
+description: >-
+  Claude Code's own guard (auto-mode classifier or a permission rule) blocked a call in the main conversation, and
+  within 2 hours a sub-agent of the same session made the same call (same tool, identical command line, file path and
+  URL) and it worked. The guard checks sub-agent calls with the same rules, so a success there means the verdict
+  changed with the delegated context, or a rule changed in between: the shape of guard evasion through delegation.
+  Exact match only, so a reworded command is missed; another tool on the same secret file is
+  blocked_then_other_tool_secret_read's case.
+tags:
+  - attack.defense_evasion
+  - attack.privilege_escalation
+  - attack.t1548
+  - attack.t1562
+  - owasp_agentic.asi03
+references:
+  - https://code.claude.com/docs/en/permission-modes
+  - https://code.claude.com/docs/en/sub-agents
+correlation:
+  type: temporal_ordered
+  rules:
+    - blocked_in_main_conversation
+    - subagent_call_succeeded
+  group-by:
+    - session_id
+    - tool_name
+    - command_line
+    - target_path
+    - url
+  timespan: 2h
+falsepositives:
+  - The user approved the call from the Recently blocked list, or loosened a rule, and the work then went to a sub-agent
+  - A sub-agent the user set up with tools or a permission mode that allow what the main conversation may not do
+level: high
+x-retrohound:
+  lane: hunt
+---
+title: Helper, a call Claude Code's guard blocked in the main conversation
+id: 80613977-67b7-4323-9d12-31d751195873
+name: blocked_in_main_conversation
+author: Raman Kumar
+description: >-
+  Silenced step one of blocked_then_subagent_same_call. Only calls with a command line, file path or URL, so the join
+  key is never empty. User rejections and interrupts are the user's decision, not the guard's.
+logsource:
+  product: ai_coding_agent
+detection:
+  selection:
+    outcome: blocked
+    denial_kind:
+      - automode-blocked
+      - permission-rule
+    agent_id|exists: false
+  selection_key:
+    - command_line|exists: true
+    - target_path|exists: true
+    - url|exists: true
+  condition: selection and selection_key
+level: informational
+---
+title: Helper, a sub-agent call that worked
+id: ccb4f992-320e-42f7-bda8-18ac364394cc
+name: subagent_call_succeeded
+author: Raman Kumar
+description: Silenced step two of blocked_then_subagent_same_call, with the same non-empty key as step one.
+logsource:
+  product: ai_coding_agent
+detection:
+  selection:
+    outcome: success
+    agent_id|exists: true
+  selection_key:
+    - command_line|exists: true
+    - target_path|exists: true
+    - url|exists: true
+  condition: selection and selection_key
+level: informational
