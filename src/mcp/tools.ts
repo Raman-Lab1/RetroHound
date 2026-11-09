@@ -8,7 +8,7 @@ import { openReadOnly } from "../store/index.ts";
 import type { Db, Row, SqlValue } from "../store/sqlite.ts";
 
 export class ToolError extends Error {}
-export type Ctx = { dbPath: string; rulesDir: string };
+export type Ctx = { dbPath: string; rulesDir: string; extraRules?: string[] };
 type Args = Record<string, unknown>;
 export type Tool = { name: string; description: string; inputSchema: object; run: (a: Args, c: Ctx) => unknown };
 
@@ -43,7 +43,7 @@ function limit(a: Args, dflt: number, max: number): number {
   return Math.min(v, max);
 }
 
-const ruleNames = (c: Ctx) => new Map(loadRuleDir(c.rulesDir).rules.map((r) => [r.id, r.name ?? r.title]));
+const ruleNames = (c: Ctx) => new Map(loadRuleDir(c.rulesDir, c.extraRules).rules.map((r) => [r.id, r.name ?? r.title]));
 
 function scanSummary(_a: Args, c: Ctx) {
   return withDb(c, (db) => {
@@ -125,7 +125,7 @@ function query(a: Args, c: Ctx) {
 }
 
 function listRules(_a: Args, c: Ctx) {
-  return loadRuleDir(c.rulesDir).rules.map((r) => ({ name: r.name ?? r.title, level: r.level, lane: r.lane, tags: r.tags }));
+  return loadRuleDir(c.rulesDir, c.extraRules).rules.map((r) => ({ name: r.name ?? r.title, level: r.level, lane: r.lane, tags: r.tags }));
 }
 
 const obj = (properties: object, required: string[] = []) => ({ type: "object", properties, required, additionalProperties: false });

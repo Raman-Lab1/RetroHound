@@ -6,10 +6,12 @@ import { loadIgnore } from "../suppress.ts";
 import { AGENTS, type Agent } from "../hooks/agents.ts";
 import { mask } from "../normalize/mask.ts";
 import { install, settingsPath, status, uninstall, UnsafePathError, type InstallOpts, type Scope } from "../hooks/install.ts";
+import { statSync } from "node:fs";
 import { resolve } from "node:path";
+import { EXTRA_HELP, loadRuleDir, repeat } from "./rules.ts";
 import { oneOf, UsageError, type IO, type Registrar } from "./io.ts";
 
-type ManageFlags = { agent?: string; mode?: string; scope: string; settings?: string; failClosed?: boolean; dryRun?: boolean; allowUnsafePath?: boolean };
+type ManageFlags = { agent?: string; mode?: string; scope: string; settings?: string; failClosed?: boolean; dryRun?: boolean; allowUnsafePath?: boolean; extraRules?: string[] };
 
 function target(f: ManageFlags): { agent: Agent; path: string } {
   const agent = oneOf("agent", f.agent ?? "claude_code", AGENTS);
@@ -25,7 +27,9 @@ const CHECK: Record<Agent, string> = {
 
 function manageOpts(f: ManageFlags): InstallOpts {
   const mode = oneOf("mode", f.mode ?? "log", MODES);
-  return { ...target(f), mode, command: process.execPath, entry: resolve(process.argv[1] ?? ""), failClosed: f.failClosed, dryRun: f.dryRun, allowUnsafePath: f.allowUnsafePath };
+  const extraRules = (f.extraRules ?? []).map((d) => resolve(d));
+  if (extraRules.length) loadRuleDir(DEFAULT_RULES_DIR, extraRules); // missing dir or reused id: usage error before anything is written
+  return { ...target(f), mode, command: process.execPath, entry: resolve(process.argv[1] ?? ""), failClosed: f.failClosed, dryRun: f.dryRun, allowUnsafePath: f.allowUnsafePath, extraRules };
 }
 
 function manage(fn: typeof install, f: ManageFlags, io: IO): number {
@@ -46,6 +50,7 @@ function showStatus(f: ManageFlags, io: IO): number {
   const { agent, path } = target(f);
   const s = status(path, undefined, undefined, agent);
   io.out(mask(`${s.installed ? `installed (mode ${s.mode ?? "?"}${s.failClosed ? ", fail-closed" : ""})` : "not installed"}: ${s.path}\n`));
+  if (s.extraRules?.length) io.out(mask(`extra rules: ${s.extraRules.join(", ")}\n`));
   if (s.allowUnsafePath) io.out("installed with --allow-unsafe-path: the path safety check was overridden.\n");
   if (s.unsafe?.length) io.out(mask(`WARNING: the installed hook runs files that no longer pass the path check:\n${s.unsafe.map((x) => `  ${x.path}: ${x.reason}`).join("\n")}\n  Fix the permissions, or run \`hook uninstall\`.\n`));
   else if (s.installed) io.out("installed paths pass the safety check.\n");
@@ -59,7 +64,7 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-type RunFlags = { agent?: string; mode?: string; rules?: string; log?: string; cache?: string; ignore?: string };
+type RunFlags = { agent?: string; mode?: string; rules?: string; extraRules?: string[]; log?: string; cache?: string; ignore?: string };
 
 export async function hookRun(f: RunFlags, io: IO, stdin: () => Promise<string> = readStdin): Promise<number> {
   try {
@@ -69,7 +74,10 @@ export async function hookRun(f: RunFlags, io: IO, stdin: () => Promise<string> 
     if (!AGENTS.includes(agent)) throw new Error(`unknown agent '${f.agent}'`);
     const text = await stdin();
     const dir = f.rules ?? DEFAULT_RULES_DIR;
-    const rules = f.cache ? loadEnforceRules(dir, f.cache) : loadEnforceRules(dir);
+    const extras = f.extraRules ?? [];
+    // A missing extra dir must not switch off the shipped rules: say so and decide with the rules that do load.
+    for (const d of extras) if (!statSync(d, { throwIfNoEntry: false })?.isDirectory()) io.err(mask(`retrohound hook: --extra-rules ${d} is not a directory; deciding without it`) + "\n");
+    const rules = loadEnforceRules(dir, f.cache, extras);
     // Only the home file (or --ignore): a repo's own file must not switch off enforcement for that repo.
     const ignore = loadIgnore(rules, { file: f.ignore, skipUnknownRules: true });
     const res = runHook(text, mode, rules, f.log ?? defaultLogPath(), ignore, agent);
@@ -86,6 +94,7 @@ export const registerHook: Registrar = (program, run, io) => {
     .option("--agent <agent>", AGENTS.join(" | "), "claude_code")
     .option("--mode <mode>", "log | confirm | block", "log")
     .option("--rules <dir>", "rules directory")
+    .option("--extra-rules <dir>", EXTRA_HELP, repeat)
     .option("--log <path>", "trial log file for --mode log")
     .option("--cache <path>", "parsed-rule cache file (default: next to the trial log)")
     .option("--ignore <file>", "ignore file (default ~/.retrohound/ignore.yml)")
@@ -98,7 +107,8 @@ export const registerHook: Registrar = (program, run, io) => {
     .option("--mode <mode>", "log | confirm | block (codex: no confirm)", "log")
     .option("--fail-closed", "block every tool call if the hook itself fails (Claude Code only)")
     .option("--dry-run", "show the change, write nothing")
-    .option("--allow-unsafe-path", "install even if the runtime or entry file (or a parent dir) is writable by others; warns and shows in status")
+    .option("--extra-rules <dir>", "more rules for the live hook, on top of the shipped ones (repeatable; stored as an absolute path)", repeat)
+    .option("--allow-unsafe-path", "install even if the runtime, entry file or an extra rules dir (or a parent dir) is writable by others; warns and shows in status")
     .action((f: ManageFlags) => run(() => manage(install, f, io)));
   scoped(hook.command("uninstall").description("Remove only RetroHound's hook from a settings file"))
     .option("--dry-run", "show the change, write nothing")

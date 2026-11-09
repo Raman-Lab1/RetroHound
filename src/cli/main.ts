@@ -17,14 +17,14 @@ import { registerPreflight } from "./preflight.ts";
 import { registerQuery } from "./query.ts";
 import { registerShow } from "./show.ts";
 import { registerWrapped } from "./wrapped.ts";
-import { listRules, showRule } from "./rules.ts";
+import { EXTRA_HELP, listRules, repeat, showRule } from "./rules.ts";
 import { testRules } from "./rules-test.ts";
 import { summaryLines } from "./summary.ts";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
 type ScanFlags = {
-  since?: string; agent: string; project?: string; rules: string; level?: string; format: string;
+  since?: string; agent: string; project?: string; rules: string; extraRules?: string[]; level?: string; format: string;
   index: boolean; failOn?: string; db?: string; root?: string; ignore?: string;
 };
 
@@ -38,7 +38,7 @@ async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
   const level = f.level ? oneOf<Level>("level", f.level, LEVELS) : undefined;
   const failOn = f.failOn ? oneOf<Level>("level", f.failOn, LEVELS) : undefined;
   const opts: ScanOptions = {
-    agent, root: f.root, dbPath: f.db, rulesDir: f.rules, project: f.project, level, noIndex: !f.index,
+    agent, root: f.root, dbPath: f.db, rulesDir: f.rules, extraRules: f.extraRules, project: f.project, level, noIndex: !f.index,
     since: f.since ? parseSince(f.since) : undefined, ignore: f.ignore,
   };
   let rejected = 0;
@@ -81,6 +81,7 @@ export function buildProgram(io: IO, setCode: (n: number) => void): Command {
     .option("--agent <agent>", `agent to scan (${AGENTS.join(" | ")} | all)`, "claude_code")
     .option("--project <path>", "only sessions whose project path contains this")
     .option("--rules <dir>", "rules directory", DEFAULT_RULES_DIR)
+    .option("--extra-rules <dir>", EXTRA_HELP, repeat)
     .option("--level <level>", `hide findings below this level (${LEVELS.join("|")})`)
     .option("--format <format>", "table, json, sarif, ndjson-ecs or ndjson-ocsf", "table")
     .option("--no-index", "evaluate in memory, write nothing")
@@ -93,14 +94,17 @@ export function buildProgram(io: IO, setCode: (n: number) => void): Command {
   const rules = program.command("rules").description("Inspect the loaded detection rules");
   rules.command("list").description("List rules and any that were rejected, with the reason")
     .option("--rules <dir>", "rules directory", DEFAULT_RULES_DIR)
-    .action((f: { rules: string }) => run(() => listRules(f.rules, io)));
+    .option("--extra-rules <dir>", EXTRA_HELP, repeat)
+    .action((f: { rules: string; extraRules?: string[] }) => run(() => listRules(f.rules, io, f.extraRules)));
   rules.command("show <rule>").description("Show one rule by name or id: metadata and its YAML")
     .option("--rules <dir>", "rules directory", DEFAULT_RULES_DIR)
-    .action((rule: string, f: { rules: string }) => run(() => showRule(f.rules, rule, io)));
+    .option("--extra-rules <dir>", EXTRA_HELP, repeat)
+    .action((rule: string, f: { rules: string; extraRules?: string[] }) => run(() => showRule(f.rules, rule, io, f.extraRules)));
 
   rules.command("test [dir]").description("Check every rule has positive/negative tests that pass (for CI and your own rules)")
-    .option("--tests <dir>", "tests directory (default: <dir>/../tests)")
-    .action((dir: string | undefined, f: { tests?: string }) => run(() => testRules(dir ?? DEFAULT_RULES_DIR, f.tests, io)));
+    .option("--tests <dir>", "tests directory (default: <rules dir>/../tests, per rules dir)")
+    .option("--extra-rules <dir>", EXTRA_HELP, repeat)
+    .action((dir: string | undefined, f: { tests?: string; extraRules?: string[] }) => run(() => testRules(dir ?? DEFAULT_RULES_DIR, f.tests, io, f.extraRules)));
 
   program.command("purge").description("Delete the local index database (it may be the only copy of deleted evidence)")
     .option("--db <path>", "index database", defaultDbPath())

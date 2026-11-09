@@ -66,8 +66,9 @@ export function runHook(stdin: string, mode: Mode, rules: Rule[], logPath = defa
 
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 
-/** Per-rules-dir cache file next to the trial log. */
-export const defaultCachePath = (dir: string) => join(dirname(defaultLogPath()), `rules-cache-${sha(resolve(dir)).slice(0, 12)}.json`);
+/** Per-rules-dirs cache file next to the trial log (the same name as before when there are no extra dirs). */
+export const defaultCachePath = (dir: string, extras: string[] = []) =>
+  join(dirname(defaultLogPath()), `rules-cache-${sha([dir, ...extras].map((d) => resolve(d)).join("\0")).slice(0, 12)}.json`);
 
 type CacheFile = { key: string; sum: string; paths: string[]; docs: ParsedDoc[][] };
 
@@ -109,18 +110,22 @@ function writeCache(path: string, key: string, paths: string[], docs: ParsedDoc[
  * the key. Nothing is cached while a file's ctime is under a second old: a second edit in the same timestamp tick could
  * leave size and times unchanged.
  */
-export function loadEnforceRules(dir: string, cachePath = defaultCachePath(dir)): Rule[] {
-  let names: string[] = [];
-  try {
-    names = (readdirSync(dir, { recursive: true }) as string[]).filter((n) => /\.ya?ml$/.test(n)).sort();
-  } catch {
-    // no rules directory: nothing can decide
-  }
-  const stats = names.map((n) => statSync(join(dir, n), { bigint: true }));
-  const key = sha(JSON.stringify([TOOL_VERSION, resolve(dir), names.map((n, i) => [n, ...[stats[i]!.size, stats[i]!.mtimeNs, stats[i]!.ctimeNs, stats[i]!.ino].map(String)])]));
+export function loadEnforceRules(dir: string, cachePath?: string, extras: string[] = []): Rule[] {
+  const dirs = [dir, ...extras]; // shipped first: on a reused id the extra rule is the one loadRules rejects
+  const names = dirs.map((d) => {
+    try {
+      return (readdirSync(d, { recursive: true }) as string[]).filter((n) => /\.ya?ml$/.test(n)).sort();
+    } catch {
+      return []; // no rules directory: nothing from it can decide
+    }
+  });
+  const files = dirs.flatMap((d, k) => names[k]!.map((n) => join(d, n)));
+  const stats = files.map((f) => statSync(f, { bigint: true }));
+  const key = sha(JSON.stringify([TOOL_VERSION, dirs.map((d) => resolve(d)), names, stats.map((s) => [s.size, s.mtimeNs, s.ctimeNs, s.ino].map(String))]));
+  cachePath ??= defaultCachePath(dir, extras);
   const hit = readCache(cachePath, key);
   if (hit) return loadRules(hit.paths.map((path, i) => ({ path, text: "", docs: hit.docs[i] }))).rules;
-  const sources = names.map((n) => ({ path: join(dir, n), text: readFileSync(join(dir, n), "utf8") })).filter((s) => /lane:\s*enforce/.test(s.text));
+  const sources = files.map((path) => ({ path, text: readFileSync(path, "utf8") })).filter((s) => /lane:\s*enforce/.test(s.text));
   let docs;
   try {
     docs = sources.map((s) => parseSource(s.text));

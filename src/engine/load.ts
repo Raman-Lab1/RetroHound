@@ -173,7 +173,7 @@ export function loadRules(sources: Source[]): LoadResult {
         const rule = compileDoc(data, { path, doc });
         const keys = [isMap(data) ? data.id : null, rule.name].filter((k) => k != null) as string[];
         const taken = keys.find((k) => claimed.has(k));
-        if (taken) throw new RuleError("duplicate-id", `'${taken}' is already used by another rule`);
+        if (taken) throw new RuleError("duplicate-id", `'${taken}' is already used by ${claimed.get(taken)!.path}`);
         for (const k of keys) claimed.set(k, rule);
         rules.push(rule);
       } catch (e) {
