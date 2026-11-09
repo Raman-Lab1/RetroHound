@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { mask } from "../normalize/mask.ts";
 import { LIST_FIELDS, OPTIONAL_STRINGS, toStored } from "../normalize/stored.ts";
 import type { AgentEvent, Finding, RawEvent } from "../normalize/types.ts";
+import { chainWriter } from "./chain.ts";
 import { migrate } from "./schema.ts";
 import { open, type Db, type Row, type SqlValue } from "./sqlite.ts";
 
@@ -35,11 +36,16 @@ const EVENT_COLUMNS = [
 const SET_ASIDE = `(excluded.source_file <> events.source_file
   AND (excluded.source_file LIKE '%.superseded-%' OR excluded.source_file LIKE '%.orphaned-%'))`;
 const KNOWN = "(events.outcome IS NOT NULL AND events.outcome <> 'unknown')";
-const keepOld = (c: string) => `${c} = CASE WHEN ${SET_ASIDE} THEN events.${c} ELSE excluded.${c} END`;
+const keepOld = (c: string) => `CASE WHEN ${SET_ASIDE} THEN events.${c} ELSE excluded.${c} END`;
+const SETS = [
+  ...EVENT_COLUMNS.filter((c) => c !== "id" && c !== "outcome").map((c) => [c, keepOld(c)]),
+  ["outcome", `CASE WHEN ${KNOWN} AND (${SET_ASIDE} OR excluded.outcome IS NULL OR excluded.outcome = 'unknown')
+    THEN events.outcome ELSE excluded.outcome END`],
+] as const;
+// The WHERE turns a re-upsert that changes nothing into a no-op that returns no row, so it adds no chain entry (0015).
 const UPSERT_EVENT = `INSERT INTO events (${EVENT_COLUMNS.join(", ")}) VALUES (${EVENT_COLUMNS.map(() => "?").join(", ")})
-  ON CONFLICT(id) DO UPDATE SET ${EVENT_COLUMNS.filter((c) => c !== "id" && c !== "outcome").map(keepOld).join(", ")},
-  outcome = CASE WHEN ${KNOWN} AND (${SET_ASIDE} OR excluded.outcome IS NULL OR excluded.outcome = 'unknown')
-    THEN events.outcome ELSE excluded.outcome END`;
+  ON CONFLICT(id) DO UPDATE SET ${SETS.map(([c, v]) => `${c} = ${v}`).join(", ")}
+  WHERE (${SETS.map(([c]) => `events.${c}`).join(", ")}) IS NOT (${SETS.map(([, v]) => v).join(", ")}) RETURNING *`;
 
 const SESSION_SELECT = `SELECT s.*, NOT EXISTS (
     SELECT 1 FROM events e JOIN files_indexed f ON f.path = e.source_file
@@ -130,18 +136,22 @@ export function openStore(path: string = defaultDbPath()) {
     throw err;
   }
 
+  // Every write to files_indexed, events and findings returns its rows to `chain` (ADR 0015).
+  const chain = chainWriter(db);
   const q = {
     getFile: db.prepare("SELECT * FROM files_indexed WHERE path = ?"),
     listFiles: db.prepare("SELECT * FROM files_indexed ORDER BY path"),
     upsertFile: db.prepare(`INSERT INTO files_indexed
         (path, size, mtime, parser_version, sha256, first_seen, last_seen, gone_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
       ON CONFLICT(path) DO UPDATE SET size = excluded.size, mtime = excluded.mtime,
-        parser_version = excluded.parser_version, sha256 = excluded.sha256, last_seen = excluded.last_seen, gone_at = NULL`),
-    touchFile: db.prepare("UPDATE files_indexed SET last_seen = ?, gone_at = NULL WHERE path = ?"),
-    markGone: db.prepare("UPDATE files_indexed SET gone_at = ? WHERE path = ? AND gone_at IS NULL"),
+        parser_version = excluded.parser_version, sha256 = excluded.sha256, last_seen = excluded.last_seen, gone_at = NULL
+      RETURNING *`),
+    // last_seen is not chained, so the touch and the (chained) return of a gone file are separate statements.
+    touchFile: db.prepare("UPDATE files_indexed SET last_seen = ? WHERE path = ?"),
+    unGone: db.prepare("UPDATE files_indexed SET gone_at = NULL WHERE path = ? AND gone_at IS NOT NULL RETURNING *"),
+    markGone: db.prepare("UPDATE files_indexed SET gone_at = ? WHERE path = ? AND gone_at IS NULL RETURNING *"),
     upsertEvent: db.prepare(UPSERT_EVENT),
-    fileSessions: db.prepare("SELECT DISTINCT session_id FROM events WHERE source_file = ?"),
-    deleteEvents: db.prepare("DELETE FROM events WHERE source_file = ?"),
+    deleteEvents: db.prepare("DELETE FROM events WHERE source_file = ? RETURNING *"),
     dropEmptySession: db.prepare(`DELETE FROM sessions
       WHERE session_id = ? AND NOT EXISTS (SELECT 1 FROM events WHERE session_id = ?)`),
     refreshSession: db.prepare(`INSERT INTO sessions (session_id, agent, project_path, first_ts, last_ts, event_count)
@@ -158,8 +168,9 @@ export function openStore(path: string = defaultDbPath()) {
     // A repeat refreshes the rule's wording but keeps the stored events: a re-evaluation from DB rows may no longer
     // have the excerpt that the first one, on raw text, recorded (0006).
     insertFinding: db.prepare(`INSERT INTO findings (id, rule_id, level, ts, session_id, message, events)
-      VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET level = excluded.level, message = excluded.message`),
-    deleteFindings: db.prepare("DELETE FROM findings WHERE session_id = ?"),
+      VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET level = excluded.level, message = excluded.message
+      WHERE (findings.level, findings.message) IS NOT (excluded.level, excluded.message) RETURNING *`),
+    deleteFindings: db.prepare("DELETE FROM findings WHERE session_id = ? RETURNING *"),
     eventStats: db.prepare(`SELECT coalesce(sum(outcome = 'blocked'), 0) AS blocked,
         coalesce(sum(agent_id IS NOT NULL), 0) AS subagent FROM events
       WHERE (? IS NULL OR session_id IN (SELECT value FROM json_each(?)))`), // plain ? twice: Node 22.13 can't bind ?NNN
@@ -185,12 +196,14 @@ export function openStore(path: string = defaultDbPath()) {
   /** Runs synchronous `fn` in one transaction. Not reentrant, and `fn` must not await. */
   function transaction<T>(fn: () => T): T {
     db.exec("BEGIN");
+    chain.reset();
     try {
       const result = fn();
       db.exec("COMMIT");
       return result;
     } catch (err) {
       db.exec("ROLLBACK");
+      chain.reset();
       throw err;
     }
   }
@@ -198,7 +211,8 @@ export function openStore(path: string = defaultDbPath()) {
   function writeFindings(findings: Finding[]): void {
     for (const f of findings) {
       const events = JSON.stringify(f.events.map(toStored));
-      q.insertFinding.run(mask(f.id), mask(f.rule_id), f.level, mask(f.ts), mask(f.session_id), mask(f.message), events);
+      const rows = q.insertFinding.all(mask(f.id), mask(f.rule_id), f.level, mask(f.ts), mask(f.session_id), mask(f.message), events);
+      chain.append("findings", "write", rows);
     }
   }
 
@@ -217,17 +231,20 @@ export function openStore(path: string = defaultDbPath()) {
     /** Records an indexed file, keeping first_seen and clearing gone_at. */
     upsertFile(file: FileRecord): void {
       const time = now();
-      q.upsertFile.run(mask(file.path), file.size, file.mtime, file.parser_version, file.sha256, time, time);
+      chain.append("files_indexed", "write", q.upsertFile.all(mask(file.path), file.size, file.mtime, file.parser_version, file.sha256, time, time));
     },
 
     /** Records that an unchanged file is still on disk. */
     touchFile(path: string): void {
       q.touchFile.run(now(), mask(path));
+      chain.append("files_indexed", "write", q.unGone.all(mask(path)));
     },
 
     /** Records that a file vanished, and returns false if it already had. Its events stay (0008). */
     markGone(path: string): boolean {
-      return Number(q.markGone.run(now(), mask(path)).changes) > 0;
+      const rows = q.markGone.all(now(), mask(path));
+      chain.append("files_indexed", "write", rows);
+      return rows.length > 0;
     },
 
     /** Masks and upserts by event id, so an event missing from a rewritten file survives. Call inside a transaction. */
@@ -236,7 +253,7 @@ export function openStore(path: string = defaultDbPath()) {
       const sessions = new Set<string>();
       for (const raw of events) {
         const event = toStored(raw);
-        q.upsertEvent.run(...eventParams(sourceFile, event));
+        chain.append("events", "write", q.upsertEvent.all(...eventParams(sourceFile, event)));
         sessions.add(event.session_id);
       }
       if (refresh) refreshSessions(sessions);
@@ -246,9 +263,9 @@ export function openStore(path: string = defaultDbPath()) {
     /** For a parser_version rebuild of a file still on disk, the one case events are deleted. Call inside a transaction.
      * With `refresh` false the caller owes a `refreshSessions` of the returned ids (the indexer batches it per run). */
     deleteEvents(sourcePath: string, refresh = true): string[] {
-      const sourceFile = mask(sourcePath);
-      const sessions = q.fileSessions.all(sourceFile).map((row) => row.session_id as string);
-      q.deleteEvents.run(sourceFile);
+      const rows = q.deleteEvents.all(mask(sourcePath));
+      chain.append("events", "delete", rows);
+      const sessions = [...new Set(rows.map((row) => row.session_id as string))];
       if (refresh) refreshSessions(sessions);
       return sessions;
     },
@@ -274,7 +291,7 @@ export function openStore(path: string = defaultDbPath()) {
      * authority for its sessions, so a rule that no longer fires must not linger. */
     replaceFindings(sessionIds: string[], findings: Finding[]): void {
       transaction(() => {
-        for (const id of sessionIds) q.deleteFindings.run(mask(id));
+        for (const id of sessionIds) chain.append("findings", "delete", q.deleteFindings.all(mask(id)));
         writeFindings(findings);
       });
     },

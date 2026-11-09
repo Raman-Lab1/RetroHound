@@ -31,7 +31,7 @@ function runQuery(sql: string, format: string, dbPath: string, io: IO): number {
 }
 
 export const registerQuery: Registrar = (program, run, io) => {
-  program.command("query <sql>").description("Run read-only SQL over the index (tables: events, sessions, findings, files_indexed)")
+  program.command("query <sql>").description("Run read-only SQL over the index (tables: events, sessions, findings, files_indexed, chain)")
     .option("--format <format>", "table or json", "table")
     .option("--db <path>", "index database", defaultDbPath())
     .action((sql: string, f: { format: string; db: string }) => run(() => runQuery(sql, f.format, f.db, io)));

@@ -17,6 +17,7 @@ describe the code as it is; amendments are dated inside the record.
 | [0010](0010-packaging-npm-bundle.md) | Packaging | One `dist/cli.mjs` on npm, no runtime dependencies, published with provenance. |
 | [0011](0011-no-tui-library.md) | Terminal UI | No TUI library; plain, colour-aware output. |
 | [0014](0014-output-schema-scan-json.md) | Output | One `retrohound.scan/0.1` JSON document; SARIF and ECS/OCSF NDJSON are transforms of it. |
+| [0015](0015-tamper-evident-index.md) | Integrity | A hash chain over every write to events, findings and indexed files; `verify --head` checks it against a recorded head. |
 
 Licensing is stated in [LICENSE](../../LICENSE) (code, Apache-2.0) and [rules/LICENSE](../../rules/LICENSE)
 (detection rules, DRL 1.1).
