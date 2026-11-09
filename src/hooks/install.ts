@@ -82,18 +82,25 @@ const under = (p: string, dir: string, plat: NodeJS.Platform) => { const a = nor
 export function checkPaths(command: string, entry: string, env: SafetyEnv = realSafetyEnv(), ruleDirs: string[] = []): Finding[] {
   const out: Finding[] = [];
   const win = env.platform === "win32";
+  const real = env.real ?? ((x: string) => x);
   for (const p of [command, entry, ...ruleDirs]) {
-    const r = (env.real ?? ((x) => x))(p);
+    const r = real(p);
     if (!env.stat(r)) out.push({ path: p, reason: "does not exist or cannot be inspected" });
     else if (under(r, env.tmp, env.platform)) out.push({ path: r, reason: `is inside the temp directory (${env.tmp}), which other users or processes can write` });
     else if (!win) out.push(...posixProblems(p, env));
     else if (![env.home, ...env.programDirs].some((d) => under(r, d, "win32"))) out.push({ path: r, reason: "is not under your user profile or a Program Files directory" });
   }
-  // An extra rules dir: a file or subdir others can write lets them add or change a blocking rule.
+  // An extra rules dir: a file or subdir others can write lets them add or change a blocking rule. An entry that
+  // resolves outside the dir (a symlink) gets the full parent walk on its target, so a writable target dir is caught.
   if (!win) for (const d of ruleDirs) for (const n of entries(d)) {
-    const s = env.stat(join(d, n));
-    const bad = s && why(s, env.uid);
-    if (bad) out.push({ path: join(d, n), reason: bad });
+    const p = join(d, n);
+    if (!under(real(p), real(d), env.platform)) {
+      out.push(...posixProblems(p, env));
+      continue;
+    }
+    const s = env.stat(p);
+    const bad = s ? why(s, env.uid) : "cannot be inspected";
+    if (bad) out.push({ path: p, reason: bad });
   }
   const cwd = env.stat(env.cwd);
   if (!win && cwd && (cwd.mode & 0o002) !== 0 && (cwd.mode & 0o1000) === 0) out.push({ path: env.cwd, reason: "current directory (the repo checkout) is world-writable" });
