@@ -3,7 +3,8 @@
 import { existsSync, rmSync, statSync } from "node:fs";
 import { Command, CommanderError } from "commander";
 import { COLLECTORS } from "../collectors/index.ts";
-import { DEFAULT_RULES_DIR, runScan, TOOL_VERSION, type ScanOptions } from "../scan.ts";
+import { runScan, type ScanOptions } from "../scan.ts";
+import { DEFAULT_RULES_DIR, TOOL_VERSION } from "../version.ts";
 import { LEVELS, type Level } from "../normalize/types.ts";
 import { toJson } from "../outputs/json.ts";
 import { toNdjson } from "../outputs/ndjson.ts";
