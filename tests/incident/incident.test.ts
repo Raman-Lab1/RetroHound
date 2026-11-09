@@ -10,6 +10,8 @@ import { registerIncident } from "../../src/cli/incident.ts";
 import { UsageError, type IO } from "../../src/cli/io.ts";
 import type { Pack } from "../../src/incident/pack.ts";
 import { runScan } from "../../src/scan.ts";
+import { verifyChain } from "../../src/store/chain.ts";
+import { openReadOnly } from "../../src/store/index.ts";
 
 const base = mkdtempSync(join(tmpdir(), "rh-incident-"));
 afterAll(() => rmSync(base, { recursive: true, force: true }));
@@ -100,6 +102,11 @@ describe("incident", () => {
     expect(p.rotate[0]!.fingerprint).toMatch(/^[0-9a-f]{16}$/);
     const sha = createHash("sha256").update(readFileSync(join(proj, `${A}.jsonl`))).digest("hex");
     expect(p.provenance.map((f) => [f.path.endsWith(`${A}.jsonl`), f.sha256, f.gone_at])).toEqual([[true, sha, null]]);
+    const index = openReadOnly(db);
+    const v = verifyChain(index);
+    index.close();
+    if (!v.ok) throw new Error(v.problem);
+    expect(p.index_head).toBe(v.head); // what `verify` prints, so `verify --head` can check the pack later
   });
 
   test("no secret value appears in any field, and the HTML shows the masked form", () => {

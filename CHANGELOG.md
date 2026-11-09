@@ -9,6 +9,7 @@ and versions follow [Semantic Versioning](https://semver.org/).
 - `incident <session|finding>`: one folder to hand over (incident.json, an offline index.html and a sha256 manifest)
   with the timeline, the sub-agent tree, blocked versus succeeded calls, secrets to rotate and where the evidence came
   from (source-file sha256, first and last seen). Works on sessions whose transcripts are gone; `--anonymize` hides paths.
+  `incident.json` records the index's chain head (`index_head`), so the pack can be checked against the index later.
 - `--extra-rules <dir>` (repeatable) for `scan`, `rules` and `hook`: your own rules on top of the shipped set.
 - `preflight` reads each workspace package's package.json in a monorepo (root `workspaces` or pnpm-workspace.yaml).
 - Tamper-evident index: every write to events, findings and indexed files is chained by sha256 (ADR 0015).
@@ -20,6 +21,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
   tool) and `blocked_then_subagent_same_call` (a call blocked in the main conversation, then made by a sub-agent).
 
 ### Changed
+- `scan`, `show` and `wrapped` refuse a `--db` that is another program's SQLite database instead of adding
+  RetroHound's tables to it.
 - `hook run` is faster: the rule set is cached by file stat and the CLI skips loading other commands (p95 33 -> 21.5 ms).
 
 ## [0.1.0]

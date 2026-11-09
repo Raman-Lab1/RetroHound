@@ -153,6 +153,19 @@ export const CASES: [name: string, run: (dir: string) => Promise<void>][] = [
     rmSync(path); // EBUSY on Windows if the failed open kept the handle
   }],
 
+  ["another program's database is refused and left unchanged", async (dir) => {
+    const path = join(dir, "other.db");
+    const db = open(path);
+    db.exec("CREATE TABLE notes (x)");
+    db.close();
+    assert.throws(() => openStore(path), /not a RetroHound index/);
+    const after = open(path);
+    assert.deepEqual(after.prepare("SELECT name FROM sqlite_master").all().map((r) => r.name), ["notes"]);
+    assert.equal(after.prepare("PRAGMA user_version").get()?.user_version, 0);
+    after.close();
+    rmSync(path);
+  }],
+
   ["creates missing directories, and restricts modes where the OS supports them", async (dir) => {
     const path = join(dir, "a", "b", "index.db");
     openStore(path).close();

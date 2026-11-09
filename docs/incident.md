@@ -13,7 +13,7 @@ to. A prefix matching more than one id is a usage error (exit 2) that lists the 
 
 | file | holds |
 |---|---|
-| `incident.json` | `schema: retrohound.incident/0.1`: tool version, the rules behind the findings (id, name, level, sha256 of the rule file) and the index's last `rule_set_hash`, the sessions (with `archived`), counts by outcome (blocked, success, error, unknown), the rotate list (secret kind and fingerprint, never a value), findings (rule, level, event ids, primary first), the sub-agent tree (main and each sub-agent with the tool call that spawned it), evidence provenance per transcript file (path, sha256, first seen, last seen, gone at) and the masked timeline. |
+| `incident.json` | `schema: retrohound.incident/0.1`: tool version, the rules behind the findings (id, name, level, sha256 of the rule file) the index's last `rule_set_hash` and `index_head` (the index's hash-chain head when the pack was written: `retrohound verify --head <index_head>` later shows the index still holds what the pack came from, and lists what was added since), the sessions (with `archived`), counts by outcome (blocked, success, error, unknown), the rotate list (secret kind and fingerprint, never a value), findings (rule, level, event ids, primary first), the sub-agent tree (main and each sub-agent with the tool call that spawned it), evidence provenance per transcript file (path, sha256, first seen, last seen, gone at) and the masked timeline. |
 | `index.html` | The same data, readable in a browser. One self-contained file: no scripts, links, fonts or images, and a Content-Security-Policy that blocks loading anything. |
 | `manifest.json` | The sha256 of `incident.json` and `index.html`. |
 

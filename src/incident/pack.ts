@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { anonymizer } from "../cli/wrapped.ts";
 import type { Rule } from "../engine/load.ts";
 import { mask } from "../normalize/mask.ts";
+import { GENESIS } from "../store/chain.ts";
 import type { Db, Row } from "../store/sqlite.ts";
 import { TOOL_VERSION } from "../version.ts";
 
@@ -79,11 +80,17 @@ export function buildPack(db: Db, sel: Selection, rules: Rule[], anonymize: bool
     secrets.set(fp, s);
   }
 
+  // The chain head the pack was built at (ADR 0015): `verify --head` later shows the index still holds it. null on an
+  // index from before the chain, opened read-only so never upgraded.
+  const chained = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'chain'").get();
+  const head = chained ? ((db.prepare("SELECT hash FROM chain ORDER BY seq DESC LIMIT 1").get()?.hash as string | undefined) ?? GENESIS) : null;
+
   return {
     schema: "retrohound.incident/0.1",
     tool: { name: "retrohound", version: TOOL_VERSION },
     selected: { kind: sel.kind, id: sel.id },
     anonymized: anonymize,
+    index_head: head,
     rule_set_hash: (db.prepare("SELECT rule_set_hash FROM rule_runs ORDER BY id DESC LIMIT 1").get()?.rule_set_hash as string | undefined) ?? null,
     rules: rulesUsed,
     sessions,
