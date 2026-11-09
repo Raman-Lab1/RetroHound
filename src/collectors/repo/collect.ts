@@ -10,6 +10,7 @@ import type { Category, RawEvent } from "../../normalize/types.ts";
 
 export const MAX_FILE_BYTES = 1_048_576;
 export const MAX_PACKAGES = 500; // workspace package.json files per repo
+export const MAX_WORKSPACE_DIRS = 5000; // directories a workspace glob (`**`) may list; a deep tree is reported, not walked
 const MAX_FILES = 400; // per directory walk; a bomb of agent files is reported as skipped, not read
 export const SESSION_ID = "preflight";
 const SKIP_DIRS = new Set(["node_modules", ".git"]);
@@ -121,13 +122,15 @@ export function collectRepo(dir: string, now = new Date()): Collected {
   // Each glob segment is matched against real directory entries: `*`, `**` and literal names only, no `..`, and a
   // symlinked directory is not isDirectory(), so the expansion never leaves the root.
   const packages = new Set<string>();
+  let listed = 0;
   const expand = (rel: string, segs: string[]): void => {
-    if (packages.size > MAX_PACKAGES) return;
+    if (packages.size > MAX_PACKAGES || listed > MAX_WORKSPACE_DIRS) return;
     if (!segs.length) return void (rel && lstatSync(join(root, rel, "package.json"), { throwIfNoEntry: false }) && packages.add(`${rel}/package.json`));
     const [seg, ...rest] = segs as [string, ...string[]];
     if (seg === "**") expand(rel, rest);
     const re = new RegExp(`^${seg.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replaceAll("*", ".*")}$`);
     let entries;
+    if (++listed > MAX_WORKSPACE_DIRS) return;
     try {
       entries = readdirSync(join(root, rel), { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
     } catch {
@@ -148,6 +151,7 @@ export function collectRepo(dir: string, now = new Date()): Collected {
   for (const [rel, cat] of FILES) add(rel, cat);
   for (const rel of [...packages].slice(0, MAX_PACKAGES)) add(rel, "file_event");
   if (packages.size > MAX_PACKAGES) skip("workspaces", `more than ${MAX_PACKAGES} packages, only the first ${MAX_PACKAGES} read`);
+  else if (listed > MAX_WORKSPACE_DIRS) skip("workspaces", `glob lists more than ${MAX_WORKSPACE_DIRS} directories, stopped there`);
   for (const [rel, keep] of DIRS) walk(rel, keep);
   return out;
 }

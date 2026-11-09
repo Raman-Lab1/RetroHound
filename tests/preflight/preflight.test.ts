@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Command } from "commander";
-import { MAX_FILE_BYTES, MAX_PACKAGES } from "../../src/collectors/repo/collect.ts";
+import { MAX_FILE_BYTES, MAX_PACKAGES, MAX_WORKSPACE_DIRS } from "../../src/collectors/repo/collect.ts";
 import { registerPreflight } from "../../src/cli/preflight.ts";
 import type { IO } from "../../src/cli/io.ts";
 import { preflightTable, runPreflight } from "../../src/preflight.ts";
@@ -186,5 +186,13 @@ describe("preflight workspaces", () => {
     const r = runPreflight(dir);
     expect(r.report.scan.files.indexed).toBe(MAX_PACKAGES + 1);
     expect(r.skipped.map((s) => s.path)).toEqual(["workspaces"]);
+  });
+
+  test("a ** glob over a huge tree stops at the directory cap and says so", () => {
+    const dir = tmp();
+    put(dir, { "package.json": JSON.stringify({ workspaces: ["**"] }) });
+    for (let i = 0; i <= MAX_WORKSPACE_DIRS; i++) mkdirSync(join(dir, "d", String(i)), { recursive: true });
+    const r = runPreflight(dir);
+    expect(r.skipped).toEqual([{ path: "workspaces", reason: `glob lists more than ${MAX_WORKSPACE_DIRS} directories, stopped there` }]);
   });
 });
