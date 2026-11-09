@@ -2,12 +2,11 @@
 // session, never per file: a session is its main transcript plus its sub-agent files (and set-aside copies), and
 // event_count correlations must see all of them at once (ADR 0004). Zero network, nothing raw is persisted.
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { COLLECTORS, type Collector } from "./collectors/index.ts";
 import { evaluate, type Match } from "./engine/evaluate.ts";
-import { loadRules, type Rejection, type Rule } from "./engine/load.ts";
+import { type Rejection, type Rule } from "./engine/load.ts";
+import { loadSources, ruleSources } from "./cli/rules.ts";
 import { mask } from "./normalize/mask.ts";
 import { toStored } from "./normalize/stored.ts";
 import { LEVELS, type Finding, type Level, type ParsedFile, type RawEvent } from "./normalize/types.ts";
@@ -27,6 +26,7 @@ export type ScanOptions = {
   root?: string; // the agent's data dir (Claude: config dir or its projects dir); default per collector; not with "all"
   dbPath?: string;
   rulesDir?: string;
+  extraRules?: string[]; // loaded on top of rulesDir; a missing dir or a reused id/name is a UsageError
   since?: string; // ISO date or time: sessions that ended before it are left out
   project?: string; // substring of the session's project path
   level?: Level; // findings below it are left out
@@ -58,17 +58,10 @@ function groupPaths(c: Collector, paths: string[]): Map<string, string[]> {
   return groups;
 }
 
-function loadRuleSet(dir: string): { rules: Rule[]; hash: string; rejected: Rejection[] } {
-  let names: string[] = [];
-  try {
-    names = (readdirSync(dir, { recursive: true }) as string[]).map((n) => n.replaceAll("\\", "/")).filter((n) => /\.ya?ml$/.test(n));
-  } catch {
-    // no rules directory: nothing can fire
-  }
-  const sources = names.sort().map((n) => ({ path: join(dir, n), text: readFileSync(join(dir, n), "utf8"), name: n }));
+function loadRuleSet(dir: string, extras: string[] = []): { rules: Rule[]; hash: string; rejected: Rejection[] } {
+  const sources = ruleSources(dir, extras);
   const hash = createHash("sha256").update(sources.map((s) => `${s.name}\0${s.text}\0`).join("")).digest("hex");
-  const { rules, rejected } = loadRules(sources);
-  return { rules, hash, rejected };
+  return { ...loadSources(sources), hash };
 }
 
 function toFinding(m: Match<RawEvent>): Finding {
@@ -207,7 +200,7 @@ export async function runScan(opts: ScanOptions = {}): Promise<ScanReport> {
   if (all && opts.root) throw new Error("--root cannot be used with --agent all: each agent is read from its own default root");
   const collectors = all ? Object.values(COLLECTORS) : [one!];
   const roots = collectors.map((c) => opts.root ?? c.defaultRoot());
-  const { rules, hash, rejected } = loadRuleSet(opts.rulesDir ?? DEFAULT_RULES_DIR);
+  const { rules, hash, rejected } = loadRuleSet(opts.rulesDir ?? DEFAULT_RULES_DIR, opts.extraRules);
   opts.onRejected?.(rejected);
   const ignore = loadIgnore(rules, { file: opts.ignore }); // before any work: a bad file is a usage error
   const jobs = collectors.map((c, i) => ({ c, paths: c.discover(roots[i]!) }));

@@ -177,6 +177,11 @@ Flags (from `--help`):
   anything.
 - `mcp`: `--db <path>`, `--rules <dir>`. Register it with `claude mcp add retrohound -- retrohound mcp`.
 - `scan`, `preflight`, `hook run` also take `--ignore <file>` (below).
+- Every command that takes `--rules` (and `hook run`, `hook install`) also takes `--extra-rules <dir>`, repeatable: your
+  own rules (an incident pack, say) loaded on top of the shipped set instead of replacing it. A missing extra dir, or an
+  id or name that is already taken, is a usage error naming both files; nothing is shadowed. `rules test` looks for each
+  extra rule's tests in `<extra dir>/../tests`. `hook install --extra-rules` stores the absolute path in the hook
+  command; at run time a missing extra dir is one stderr line and the hook still decides with the rules that do load.
 
 `scan --format json` prints one document, schema `retrohound.scan/0.1`; `sarif` is SARIF 2.1.0 and `ndjson-ecs` /
 `ndjson-ocsf` give one SIEM line per finding: [docs/output-schema.md](docs/output-schema.md).
@@ -216,7 +221,8 @@ directory up to the first root-owned system directory must be owned by you or ro
 (sticky directories such as `/tmp` are exempt); installing from the temp directory or from a world-writable current
 directory is refused. Windows permissions are ACLs, which RetroHound does not read: it only checks that both files
 exist, are not in the temp directory, and sit under your profile or a Program Files directory, so install from a folder
-only you control. For a safe setup that trips the check (for example Homebrew directories owned by an admin group),
+only you control. An `--extra-rules` dir gets the same check, and on macOS and Linux every file and folder in it must
+also be yours or root's and not writable by others: whoever can add a rule there can make the hook block tool calls. For a safe setup that trips the check (for example Homebrew directories owned by an admin group),
 `--allow-unsafe-path` installs anyway with a warning, and `hook status` reports it. `hook status` re-checks the
 installed paths every time and warns if they no longer pass.
 

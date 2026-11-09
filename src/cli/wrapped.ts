@@ -9,9 +9,9 @@ import { renderWrapped, renderWrappedSvg, type WrappedData } from "../outputs/wr
 import { DEFAULT_RULES_DIR } from "../scan.ts";
 import { defaultDbPath, openStore } from "../store/index.ts";
 import { parseSince, UsageError, type IO, type Registrar } from "./io.ts";
-import { loadRuleDir } from "./rules.ts";
+import { EXTRA_HELP, loadRuleDir, repeat } from "./rules.ts";
 
-type Flags = { since: string; anonymize?: boolean; out: string; db: string; rules: string };
+type Flags = { since: string; anonymize?: boolean; out: string; db: string; rules: string; extraRules?: string[] };
 
 const rank = (l: Level) => LEVELS.indexOf(l);
 const top = (m: Map<string, number>, n: number) => [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, n);
@@ -44,14 +44,14 @@ function riskiest(findings: Finding[]): { session: string; findings: number; lev
   return best && { session: best[0], findings: best[1].length, level: LEVELS[Math.max(...best[1].map((f) => rank(f.level)))]! };
 }
 
-export function collect(dbPath: string, rulesDir: string, since: string, anonymize: boolean): WrappedData {
+export function collect(dbPath: string, rulesDir: string, since: string, anonymize: boolean, extras: string[] = []): WrappedData {
   const store = openStore(dbPath);
   try {
     const sessions = store.listSessions().filter((s) => s.last_ts >= since);
     const ids = new Set(sessions.map((s) => s.session_id));
     const events = sessions.flatMap((s) => store.sessionEvents(s.session_id));
     const findings = store.listFindings().filter((f) => ids.has(f.session_id));
-    const names = new Map(loadRuleDir(rulesDir).rules.map((r) => [r.id, r.name ?? r.title]));
+    const names = new Map(loadRuleDir(rulesDir, extras).rules.map((r) => [r.id, r.name ?? r.title]));
     const fix = anonymize ? anonymizer(events, sessions.map((s) => s.project_path ?? "").filter(Boolean)) : (s: string) => s;
     const domains = new Map<string, number>();
     const rules = new Map<string, number>();
@@ -91,7 +91,7 @@ function wrapped(f: Flags, io: IO): number {
     return 2;
   }
   if (!existsSync(f.db)) throw new UsageError(`no index at ${f.db}, run \`retrohound scan\` first`); // openStore would create it
-  const data = collect(f.db, f.rules, parseSince(f.since), Boolean(f.anonymize));
+  const data = collect(f.db, f.rules, parseSince(f.since), Boolean(f.anonymize), f.extraRules);
   writeFileSync(f.out, f.out.toLowerCase().endsWith(".svg") ? renderWrappedSvg(data) : renderWrapped(data));
   io.out(`wrote ${f.out}\n`);
   return 0;
@@ -104,5 +104,6 @@ export const registerWrapped: Registrar = (program, run, io) => {
     .option("--out <file>", "output file (.html, or .svg for a 1200x630 share card)", "wrapped.html")
     .option("--db <path>", "index database", defaultDbPath())
     .option("--rules <dir>", "rules directory, for rule names", DEFAULT_RULES_DIR)
+    .option("--extra-rules <dir>", EXTRA_HELP, repeat)
     .action((f: Flags) => run(() => wrapped(f, io)));
 };

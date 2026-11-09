@@ -5,7 +5,7 @@
 // uninstall of a file that had no hooks gives back the same data (a file that did not exist ends up as `{}`).
 // Codex (~/.codex/hooks.json) and Antigravity CLI (~/.gemini/config/hooks.json) files are JSON too: same algorithm.
 import { createHash } from "node:crypto";
-import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeSync, chmodSync } from "node:fs";
+import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeSync, chmodSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { Agent } from "./agents.ts";
@@ -17,6 +17,7 @@ export type Handler = { type: "command"; command: string; args?: string[]; timeo
 type Json = Record<string, any>;
 export type InstallOpts = {
   path: string; mode: Mode; command: string; entry: string; failClosed?: boolean; dryRun?: boolean; agent?: Agent;
+  extraRules?: string[]; // absolute dirs, passed to `hook run --extra-rules`; path-checked like the entry
   allowUnsafePath?: boolean; safety?: SafetyEnv; // safety: test seam for the path check
   now?: Date; afterWrite?: (path: string) => void; // afterWrite: test seam, runs between write and verify
 };
@@ -31,6 +32,7 @@ export type SafetyEnv = {
 export type Finding = { path: string; reason: string };
 export class UnsafePathError extends Error {}
 const UNSAFE_FLAG = "--allow-unsafe-path";
+const EXTRA_FLAG = "--extra-rules";
 
 const realpath = (p: string) => {
   try {
@@ -77,20 +79,34 @@ const under = (p: string, dir: string, plat: NodeJS.Platform) => { const a = nor
  * Empty = safe. Windows: fs mode bits do not express ACLs, so only "exists, not under the temp dir, under the user profile
  * or a Program Files dir" is checked; NOT checked: owner, ACLs, whether Users/Everyone can write the file or its parents.
  */
-export function checkPaths(command: string, entry: string, env: SafetyEnv = realSafetyEnv()): Finding[] {
+export function checkPaths(command: string, entry: string, env: SafetyEnv = realSafetyEnv(), ruleDirs: string[] = []): Finding[] {
   const out: Finding[] = [];
   const win = env.platform === "win32";
-  for (const p of [command, entry]) {
+  for (const p of [command, entry, ...ruleDirs]) {
     const r = (env.real ?? ((x) => x))(p);
     if (!env.stat(r)) out.push({ path: p, reason: "does not exist or cannot be inspected" });
     else if (under(r, env.tmp, env.platform)) out.push({ path: r, reason: `is inside the temp directory (${env.tmp}), which other users or processes can write` });
     else if (!win) out.push(...posixProblems(p, env));
     else if (![env.home, ...env.programDirs].some((d) => under(r, d, "win32"))) out.push({ path: r, reason: "is not under your user profile or a Program Files directory" });
   }
+  // An extra rules dir: a file or subdir others can write lets them add or change a blocking rule.
+  if (!win) for (const d of ruleDirs) for (const n of entries(d)) {
+    const s = env.stat(join(d, n));
+    const bad = s && why(s, env.uid);
+    if (bad) out.push({ path: join(d, n), reason: bad });
+  }
   const cwd = env.stat(env.cwd);
   if (!win && cwd && (cwd.mode & 0o002) !== 0 && (cwd.mode & 0o1000) === 0) out.push({ path: env.cwd, reason: "current directory (the repo checkout) is world-writable" });
   return out;
 }
+
+const entries = (d: string): string[] => {
+  try {
+    return readdirSync(d, { recursive: true }) as string[];
+  } catch {
+    return []; // the dir itself is reported above
+  }
+};
 
 const describe = (f: Finding[]) => f.map((x) => `${x.path}: ${x.reason}`).join("; ");
 export type Outcome = { status: "installed" | "updated" | "unchanged" | "removed" | "absent"; path: string; backup?: string; warnings: string[]; diff: string };
@@ -131,12 +147,13 @@ export function isOurs(h: any): boolean {
 // documented. Paths made of these characters need no quoting in any of them.
 const PLAIN = /^[\w.:/\\@+-]+$/;
 
-export function handlerFor(o: Pick<InstallOpts, "mode" | "command" | "entry" | "failClosed" | "allowUnsafePath" | "agent">): Handler {
-  const args = [o.entry, "hook", "run", ...(o.agent && o.agent !== "claude_code" ? ["--agent", o.agent] : []), "--mode", o.mode, ...(o.allowUnsafePath ? [UNSAFE_FLAG] : [])]; // flag is inert at run time; `status` reads it
+export function handlerFor(o: Pick<InstallOpts, "mode" | "command" | "entry" | "failClosed" | "allowUnsafePath" | "agent" | "extraRules">): Handler {
+  const extra = (o.extraRules ?? []).flatMap((d) => [EXTRA_FLAG, d]);
+  const args = [o.entry, "hook", "run", ...(o.agent && o.agent !== "claude_code" ? ["--agent", o.agent] : []), "--mode", o.mode, ...extra, ...(o.allowUnsafePath ? [UNSAFE_FLAG] : [])]; // flag is inert at run time; `status` reads it
   if (!o.agent || o.agent === "claude_code") return { type: "command", command: o.command, args, timeout: 5, ...(o.failClosed ? { onFailure: "block" as const } : {}) };
   if (o.failClosed) throw new Error(`--fail-closed is not available for ${o.agent}: its hook docs define no fail-closed setting`);
   if (o.agent === "codex" && o.mode === "confirm") throw new Error("codex does not support ask (Codex runs the tool when a hook answers ask); use --mode log or block");
-  const bad = [o.command, o.entry].filter((p) => !PLAIN.test(p));
+  const bad = [o.command, o.entry, ...(o.extraRules ?? [])].filter((p) => !PLAIN.test(p));
   if (bad.length) throw new UnsafePathError(`refusing to install: ${bad.join(", ")} would need shell quoting in a ${o.agent} hook command. Nothing was written. Install from a path without spaces or special characters.`);
   return { type: "command", command: [o.command, ...args].join(" "), timeout: 5 };
 }
@@ -243,7 +260,7 @@ function change(o: InstallOpts, build: (orig: Json) => Json, countOurs: number):
 
 export function install(o: InstallOpts): Outcome {
   const h = handlerFor(o);
-  const bad = checkPaths(o.command, o.entry, o.safety);
+  const bad = checkPaths(o.command, o.entry, o.safety, o.extraRules);
   if (bad.length && !o.allowUnsafePath) throw new UnsafePathError(`refusing to install, the hook would run files others may be able to modify: ${describe(bad)}. Nothing was written. Fix the permissions or install from a user-owned path; ${UNSAFE_FLAG} overrides this check.`);
   const root = rootOf(o.agent);
   const out = change(o, (orig) => withInstalled(orig, h, root), oursIn(readSettings(o.path).obj, root).length);
@@ -262,7 +279,7 @@ export function uninstall(o: InstallOpts): Outcome {
 
 const MANAGED = ["C:\\Program Files\\ClaudeCode\\managed-settings.json", "/Library/Application Support/ClaudeCode/managed-settings.json", "/etc/claude-code/managed-settings.json"];
 
-export type Status = { installed: boolean; mode?: string; failClosed?: boolean; managedHooksOnly: boolean; path: string; allowUnsafePath?: boolean; unsafe?: Finding[] };
+export type Status = { installed: boolean; mode?: string; failClosed?: boolean; managedHooksOnly: boolean; path: string; allowUnsafePath?: boolean; unsafe?: Finding[]; extraRules?: string[] };
 
 /** `unsafe` re-runs the path check on the paths recorded in the handler, so a later chmod or file swap shows up. */
 export function status(path: string, managedPaths: string[] = MANAGED, safety?: SafetyEnv, agent: Agent = "claude_code"): Status {
@@ -277,6 +294,7 @@ export function status(path: string, managedPaths: string[] = MANAGED, safety?: 
       return false;
     }
   });
-  const unsafe = p ? checkPaths(p.command, (p.args[0] === "hook" ? undefined : p.args[0]) ?? p.command, safety) : undefined; // entry is the command itself when args start at `hook`
-  return { installed: !!h, mode: m >= 0 ? p!.args[m + 1] : undefined, failClosed: h?.onFailure === "block", managedHooksOnly, path, allowUnsafePath: p?.args.includes(UNSAFE_FLAG), unsafe };
+  const extraRules = p?.args.flatMap((a, i) => (a === EXTRA_FLAG && p.args[i + 1] ? [p.args[i + 1]!] : []));
+  const unsafe = p ? checkPaths(p.command, (p.args[0] === "hook" ? undefined : p.args[0]) ?? p.command, safety, extraRules) : undefined; // entry is the command itself when args start at `hook`
+  return { installed: !!h, mode: m >= 0 ? p!.args[m + 1] : undefined, failClosed: h?.onFailure === "block", managedHooksOnly, path, allowUnsafePath: p?.args.includes(UNSAFE_FLAG), unsafe, extraRules };
 }

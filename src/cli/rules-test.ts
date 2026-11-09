@@ -3,7 +3,7 @@
 // file is one session. Positive: every line fires a detection rule alone, a correlation fires on the whole file.
 // Negative: non-empty, never fires. Also bans `re` patterns with more than one unescaped .* / .+ (ReDoS).
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { parseAllDocuments } from "yaml";
 import { evaluate } from "../engine/evaluate.ts";
 import type { Rule } from "../engine/load.ts";
@@ -66,17 +66,19 @@ function checkOne(rule: Rule, testsDir: string): RuleCheck {
   return { name, files, positive, negative };
 }
 
-export function checkRules(dir: string, testsDir = join(dirname(dir), "tests")): RulesReport {
-  const { rules, rejected } = loadRuleDir(dir);
+/** Each rule's tests sit in `testsDir`, else next to the rules dir it came from: `<dir>/../tests`. */
+export function checkRules(dir: string, testsDir?: string, extras: string[] = []): RulesReport {
+  const { rules, rejected } = loadRuleDir(dir, extras);
+  const home = (r: Rule) => [...extras, dir].find((d) => !relative(d, r.path).startsWith("..")) ?? dir;
   return {
     rejected: rejected.map((x) => `${x.path} #${x.doc}: ${x.reason}: ${x.message}`),
     badRe: badRePatterns(rules),
-    rules: rules.filter((r) => !r.silenced).map((r) => checkOne(r, testsDir)),
+    rules: rules.filter((r) => !r.silenced).map((r) => checkOne(r, testsDir ?? join(dirname(home(r)), "tests"))),
   };
 }
 
-export function testRules(dir: string, testsDir: string | undefined, io: IO): number {
-  const rep = checkRules(dir, testsDir);
+export function testRules(dir: string, testsDir: string | undefined, io: IO, extras: string[] = []): number {
+  const rep = checkRules(dir, testsDir, extras);
   const lines = rep.rules.map((r) => {
     const probs = [...r.files, ...r.positive, ...r.negative];
     return probs.length ? `  FAIL ${r.name}\n${probs.map((p) => `       ${p}`).join("\n")}` : `  ok   ${r.name}`;

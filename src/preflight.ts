@@ -26,9 +26,9 @@ function toFinding(m: Match<RawEvent>): Finding {
   };
 }
 
-export function runPreflight(dir: string, opts: { rulesDir?: string; ignore?: string } = {}): PreflightResult {
+export function runPreflight(dir: string, opts: { rulesDir?: string; extraRules?: string[]; ignore?: string } = {}): PreflightResult {
   const started_at = new Date().toISOString();
-  const { rules, rejected } = loadRuleDir(opts.rulesDir ?? DEFAULT_RULES_DIR);
+  const { rules, rejected } = loadRuleDir(opts.rulesDir ?? DEFAULT_RULES_DIR, opts.extraRules);
   const { events, scanned, skipped } = collectRepo(dir);
   const { kept: findings, suppressed } = applyIgnore(evaluate(rules, events).map((m) => toFinding(m as Match<RawEvent>)), loadIgnore(rules, { file: opts.ignore }));
   const fired = new Set(findings.map((f) => f.rule_id));
