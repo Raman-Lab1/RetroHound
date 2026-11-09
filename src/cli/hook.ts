@@ -62,8 +62,8 @@ function showStatus(f: ManageFlags, io: IO): number {
 async function readStdin(): Promise<string> {
   try {
     return readFileSync(0, "utf8"); // about 2 ms less than the stream on every tool call
-  } catch (e) {
-    if ((e as { code?: string }).code !== "EAGAIN") throw e; // non-blocking stdin: read it as a stream
+  } catch {
+    // non-blocking stdin (EAGAIN) or a pipe the sync read can't handle (Windows EOF): read it as a stream
   }
   const chunks: Buffer[] = [];
   for await (const c of process.stdin) chunks.push(c as Buffer);
