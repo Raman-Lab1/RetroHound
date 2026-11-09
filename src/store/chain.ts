@@ -64,7 +64,7 @@ function check(db: Db, head?: string): Verdict {
   let seen = head === GENESIS;
   const latest = new Map<string, Row>();
   const since: Record<string, number> = {}; // entries after `head`: appending is the one change a head can't refuse
-  // ponytail: whole chain and tables in memory (about 200 B per row); stream them if indexes reach millions of rows
+  // Limit: whole chain and tables in memory (about 200 B per row); stream them if indexes reach millions of rows
   const entries = db.prepare("SELECT * FROM chain ORDER BY seq").all();
   for (const e of entries) {
     if (e.prev !== prev) return fail(`chain entry ${e.seq}: prev is not the hash of the entry before it (an entry was removed or reordered)`);
