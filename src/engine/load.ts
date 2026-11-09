@@ -60,15 +60,17 @@ function optString(doc: Doc, key: string): string | undefined {
   return v;
 }
 
+const CORRELATION_X = new Set(["max_events_between", "differ_by"]); // checked in correlate.ts
+
 /** The metadata shared by detections and correlations, including the strict `x-retrohound` block. */
-function parseMeta(doc: Doc, where: Where, maxEventsAllowed: boolean): RuleMeta {
+function parseMeta(doc: Doc, where: Where, correlation: boolean): RuleMeta {
   const title = doc.title;
   if (typeof title !== "string" || title === "") throw new RuleError("missing-title", "title is required");
   const level = doc.level ?? "medium";
   if (!LEVELS.includes(level as Level)) throw new RuleError("bad-metadata", `unknown level '${String(level)}'`);
   const x = doc["x-retrohound"] ?? {};
   if (!isMap(x)) throw new RuleError("bad-x-retrohound", "x-retrohound must be a map");
-  const unknown = Object.keys(x).find((k) => k !== "lane" && !(k === "max_events_between" && maxEventsAllowed));
+  const unknown = Object.keys(x).find((k) => k !== "lane" && !(correlation && CORRELATION_X.has(k)));
   if (unknown) throw new RuleError("bad-x-retrohound", `x-retrohound.${unknown} is not valid here`);
   const lane = x.lane ?? "hunt";
   if (lane !== "hunt" && lane !== "enforce") throw new RuleError("bad-x-retrohound", `unknown lane '${String(lane)}'`);

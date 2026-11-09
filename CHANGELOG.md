@@ -14,6 +14,10 @@ and versions follow [Semantic Versioning](https://semver.org/).
 - Tamper-evident index: every write to events, findings and indexed files is chained by sha256 (ADR 0015).
   `verify` checks the chain and prints its head; `verify --head <hash>` fails if a head recorded elsewhere is gone,
   and lists what was added since it. Existing indexes start their chain on the next scan.
+- Blocked-call breakdown in `scan` (table and `scan.blocked_breakdown` in JSON): calls the agent's own guard blocked,
+  by denial kind (main conversation vs sub-agent), category, skill/MCP/plugin attribution and project.
+- Rules `blocked_then_other_tool_secret_read` (a blocked secret-file read, then the same done with another kind of
+  tool) and `blocked_then_subagent_same_call` (a call blocked in the main conversation, then made by a sub-agent).
 
 ### Changed
 - `hook run` is faster: the rule set is cached by file stat and the CLI skips loading other commands (p95 33 -> 21.5 ms).

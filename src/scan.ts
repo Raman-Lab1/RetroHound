@@ -9,8 +9,8 @@ import { loadSources, ruleSources } from "./cli/rules.ts";
 import { mask } from "./normalize/mask.ts";
 import { toStored } from "./normalize/stored.ts";
 import { LEVELS, type Finding, type Level, type ParsedFile, type RawEvent } from "./normalize/types.ts";
-import type { ReportRule, ScanReport } from "./outputs/report.ts";
-import { findingId, openStore, type Store } from "./store/index.ts";
+import type { BlockedBreakdown, ReportRule, ScanReport } from "./outputs/report.ts";
+import { findingId, openReadOnly, openStore, type Store } from "./store/index.ts";
 import { indexFiles } from "./store/indexer.ts";
 import { applyIgnore, loadIgnore, type Ignore } from "./suppress.ts";
 
@@ -35,10 +35,13 @@ export type ScanOptions = {
 
 type Sess = { id: string; agent: string; project_path?: string; last_ts: string; events: number; archived: boolean };
 type Job = { c: Collector; paths: string[] };
+const BLOCKED_FIELDS = ["session_id", "agent_id", "attribution", "denial_kind", "denial_category"] as const;
+type BlockedRow = Partial<Record<(typeof BLOCKED_FIELDS)[number] | "project_path", string | null>>; // DB rows carry null
 type View = {
   sessions: Sess[];
   findings: Finding[];
   stats: (ids: string[]) => { blocked: number; subagent: number };
+  blocked: () => BlockedRow[]; // every blocked event; buildReport keeps the kept sessions'
   files: ScanReport["scan"]["files"];
   lines: Lines;
 };
@@ -132,10 +135,22 @@ async function scanMemory(jobs: Job[], rules: Rule[]): Promise<View> {
     return { blocked: events.filter((e) => e.outcome === "blocked").length, subagent: events.filter((e) => e.agent_id).length };
   };
   const total = jobs.reduce((n, j) => n + j.paths.length, 0);
-  return { sessions: [...all.values()].map(summarize), findings, stats, files: { indexed: total - failed, skipped: 0, gone: 0, failed }, lines };
+  const blocked = () => [...all.values()].flat().filter((e) => e.outcome === "blocked");
+  return { sessions: [...all.values()].map(summarize), findings, stats, blocked, files: { indexed: total - failed, skipped: 0, gone: 0, failed }, lines };
 }
 
-async function scanIndexed(jobs: Job[], store: Store, rules: Rule[], hash: string): Promise<View> {
+/** Blocked rows from the index. The store has no query for them (it is not ours to change): a read-only handle on the
+ * same file, as `query` uses; blocked events are few. */
+function indexedBlocked(dbPath?: string): BlockedRow[] {
+  const db = openReadOnly(dbPath);
+  try {
+    return db.prepare(`SELECT ${BLOCKED_FIELDS.join(", ")} FROM events WHERE outcome = 'blocked'`).all() as BlockedRow[];
+  } finally {
+    db.close();
+  }
+}
+
+async function scanIndexed(jobs: Job[], store: Store, rules: Rule[], hash: string, dbPath?: string): Promise<View> {
   const started = new Date().toISOString();
   // Once, before any agent runs: each agent's untouched files need the same answer (the run is recorded at the end).
   const full = store.lastRuleRun()?.rule_set_hash !== hash;
@@ -156,6 +171,7 @@ async function scanIndexed(jobs: Job[], store: Store, rules: Rule[], hash: strin
       .map((s) => ({ id: s.session_id, agent: s.agent, project_path: s.project_path ?? undefined, last_ts: s.last_ts, events: s.event_count, archived: s.archived })),
     findings: store.listFindings(),
     stats: (ids) => store.eventStats(ids),
+    blocked: () => indexedBlocked(dbPath),
     files,
     lines,
   };
@@ -207,7 +223,7 @@ export async function runScan(opts: ScanOptions = {}): Promise<ScanReport> {
   if (opts.noIndex) return buildReport(opts, await scanMemory(jobs, rules), rules, root, started_at, ignore, agents);
   const store = openStore(opts.dbPath);
   try {
-    return buildReport(opts, await scanIndexed(jobs, store, rules, hash), rules, root, started_at, ignore, agents); // view.stats needs the store open
+    return buildReport(opts, await scanIndexed(jobs, store, rules, hash, opts.dbPath), rules, root, started_at, ignore, agents); // view.stats needs the store open
   } finally {
     store.close(); // Windows keeps the file locked otherwise
   }
@@ -222,6 +238,34 @@ function perAgent(agents: string[], kept: Sess[], findings: Finding[]): NonNulla
   }));
 }
 
+const byCount = (a: [string, number], b: [string, number]) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+
+/** Blocked events by the agent's own decision: kind (main vs sub-agent), category, attribution, top projects. */
+function blockedBreakdown(rows: BlockedRow[]): BlockedBreakdown | undefined {
+  if (!rows.length) return undefined;
+  const kind = (r: BlockedRow) => r.denial_kind ?? "unspecified";
+  const tally = (key: (r: BlockedRow) => string | null | undefined) => {
+    const counts = new Map<string, number>();
+    for (const r of rows) {
+      const k = key(r);
+      if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    return [...counts].sort(byCount);
+  };
+  const kinds = tally(kind).map(([k, n]) => {
+    const sub = rows.filter((r) => kind(r) === k && r.agent_id).length;
+    return [k, { main: n - sub, sub_agent: sub }] as const;
+  });
+  const categories = tally((r) => r.denial_category);
+  const attributions = tally((r) => r.attribution);
+  return {
+    kinds: Object.fromEntries(kinds),
+    ...(categories.length ? { categories: Object.fromEntries(categories) } : {}),
+    ...(attributions.length ? { attributions: Object.fromEntries(attributions) } : {}),
+    top_projects: tally((r) => r.project_path ?? "-").slice(0, 5).map(([project_path, blocked]) => ({ project_path, blocked })),
+  };
+}
+
 function buildReport(opts: ScanOptions, view: View, rules: Rule[], root: string, started_at: string, ignore: Ignore, agents?: string[]): ScanReport {
   const project = opts.project?.toLowerCase();
   const kept = view.sessions.filter(
@@ -232,6 +276,9 @@ function buildReport(opts: ScanOptions, view: View, rules: Rule[], root: string,
   const { kept: findings, suppressed } = applyIgnore(view.findings.filter((f) => ids.has(f.session_id) && LEVELS.indexOf(f.level) >= min), ignore);
   const fired = new Set(findings.map((f) => f.rule_id));
   const { blocked, subagent } = view.stats([...ids]);
+  const projectOf = new Map(kept.map((s) => [s.id, s.project_path])); // the session's project, not a sub-folder cwd
+  const rows = blocked ? view.blocked().filter((r) => ids.has(r.session_id ?? "")) : [];
+  const breakdown = blockedBreakdown(rows.map((r) => ({ ...r, project_path: projectOf.get(r.session_id ?? "") })));
   return {
     schema: "retrohound.scan/0.1",
     tool: { name: "retrohound", version: TOOL_VERSION },
@@ -241,6 +288,7 @@ function buildReport(opts: ScanOptions, view: View, rules: Rule[], root: string,
       sessions: kept.length,
       events: kept.reduce((n, s) => n + s.events, 0),
       blocked,
+      ...(breakdown ? { blocked_breakdown: breakdown } : {}), // only when something was blocked: other JSON is unchanged
       subagent_events: subagent,
       files: view.files,
       lines: view.lines,

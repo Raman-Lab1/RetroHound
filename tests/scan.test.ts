@@ -5,6 +5,7 @@ import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSyn
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { COLLECTORS } from "../src/collectors/index.ts";
+import { toJson } from "../src/outputs/json.ts";
 import { toSarif } from "../src/outputs/sarif.ts";
 import { toTable } from "../src/outputs/table.ts";
 import { runScan, type ScanOptions } from "../src/scan.ts";
@@ -66,9 +67,44 @@ describe("runScan", () => {
     expect(r.findings.map((f) => f.rule_id)).toEqual(["many"]);
     expect(r.rules.map((x) => x.id)).toEqual(["many"]);
     expect(r.scan).toMatchObject({ sessions: 1, events: 6, subagent_events: 2, blocked: 0, archived_sessions: [] });
+    expect("blocked_breakdown" in r.scan).toBe(false); // additive: absent when nothing was blocked
     expect(r.scan.files).toEqual({ indexed: 3, skipped: 0, gone: 0, failed: 0 });
     expect(r.findings[0]!.events.length).toBeGreaterThanOrEqual(3);
     expect(JSON.stringify(r)).not.toContain("tool_input"); // match-only fields never leave the parser
+  });
+
+  test("blocked events are broken down by kind, scope, category, attribution and project, the same from the index", async () => {
+    const denied = (second: number, kind: string, extra: object = {}, result: object = {}) => {
+      const use = cmd("s2", second, extra);
+      const id = use.message.content[0]!.id;
+      const tool_result = { type: "tool_result", tool_use_id: id, content: "no", is_error: true };
+      return [use, { ...use, type: "user", uuid: `u-${++n}`, toolDenialKind: kind, ...result, message: { content: [tool_result] } }];
+    };
+    const proj = join(root, "projects", "-home-x-acme");
+    put(join(proj, "s2.jsonl"), [
+      ...denied(10, "permission-rule", { attributionSkill: "deploy" }),
+      ...denied(11, "automode-blocked", {}, { permissionDecision: { decision: "reject", classifierCategory: "credential_materialization" } }),
+      ...denied(12, "user-rejected"),
+    ]);
+    put(join(proj, "s2", "subagents", "agent-b1.jsonl"), denied(13, "permission-rule", { agentId: "b1" }));
+    const want = {
+      kinds: { "permission-rule": { main: 1, sub_agent: 1 }, "automode-blocked": { main: 1, sub_agent: 0 }, "user-rejected": { main: 1, sub_agent: 0 } },
+      categories: { credential_materialization: 1 },
+      attributions: { "skill:deploy": 1 },
+      top_projects: [{ project_path: "/home/x/acme", blocked: 4 }],
+    };
+    const indexed = await runScan(opts);
+    expect(indexed.scan.blocked).toBe(4);
+    expect(indexed.scan.blocked_breakdown).toEqual(want);
+    expect(JSON.parse(toJson(indexed)).scan.blocked_breakdown).toEqual(want);
+    expect((await runScan({ ...opts, noIndex: true })).scan.blocked_breakdown).toEqual(want);
+    expect(toTable(indexed, { color: false })).toContain([
+      "    by kind: permission-rule 2 (1 sub-agent) · automode-blocked 1 · user-rejected 1",
+      "    by category: credential_materialization 1",
+      "    by attribution: skill:deploy 1",
+      "    top projects: /home/x/acme 4\n",
+    ].join("\n"));
+    expect("blocked_breakdown" in (await runScan({ ...opts, project: "elsewhere" })).scan).toBe(false);
   });
 
   test("a warm re-scan skips every file and returns the same findings from the DB", async () => {
