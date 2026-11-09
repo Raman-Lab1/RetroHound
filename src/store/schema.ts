@@ -1,8 +1,11 @@
 // The index schema (ADR 0002). Versioning is PRAGMA user_version plus this ordered list: a released entry
-// never changes, so a schema change is a new entry at the end.
+// never changes, so a schema change is a new entry at the end. An entry is SQL, or a function when SQL can't do it.
+import { createChain } from "./chain.ts";
 import type { Db } from "./sqlite.ts";
 
-export const MIGRATIONS: readonly string[] = [
+export type Migration = string | ((db: Db) => void);
+
+export const MIGRATIONS: readonly Migration[] = [
   `
   CREATE TABLE events (
     id TEXT PRIMARY KEY, -- hash(file, line uuid ?? line_no, sub_index), stable across rewrites (0008)
@@ -94,10 +97,12 @@ export const MIGRATIONS: readonly string[] = [
   DROP INDEX IF EXISTS events_target_path;
   DROP INDEX IF EXISTS events_domain;
   `,
+  // 3: the hash chain (ADR 0015), seeded from the rows already present; sha256 needs JS, hence a function.
+  createChain,
 ];
 
 /** Applies the entries `db` has not had yet, each in its own transaction. Refuses a DB newer than `migrations`. */
-export function migrate(db: Db, migrations: readonly string[] = MIGRATIONS): void {
+export function migrate(db: Db, migrations: readonly Migration[] = MIGRATIONS): void {
   const version = Number(db.prepare("PRAGMA user_version").get()?.user_version ?? 0);
   if (version > migrations.length) {
     throw new Error(`index schema version ${version} is newer than this RetroHound supports (${migrations.length})`);
@@ -106,7 +111,8 @@ export function migrate(db: Db, migrations: readonly string[] = MIGRATIONS): voi
     if (i < version) continue;
     db.exec("BEGIN");
     try {
-      db.exec(sql);
+      if (typeof sql === "string") db.exec(sql);
+      else sql(db);
       db.exec(`PRAGMA user_version = ${i + 1}`);
       db.exec("COMMIT");
     } catch (err) {

@@ -6,7 +6,11 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { CASES } from "./store-check.ts";
+import { CASES as CHAIN } from "./chain-check.ts";
+import { CASES as STORE } from "./store-check.ts";
+
+const SUITES = { "store-check.ts": STORE, "chain-check.ts": CHAIN };
+const CASES = Object.entries(SUITES).flatMap(([file, cases]) => cases.map(([name, run], i) => [name, run, `${file}-${i}`] as const));
 
 let dir: string;
 beforeAll(() => {
@@ -20,8 +24,8 @@ const scratch = (name: string) => {
   return path;
 };
 
-test.each(CASES.map(([name, run], i) => [name, run, i] as const))("Bun: %s", async (_name, run, i) => {
-  await run(scratch(`bun-${i}`));
+test.each(CASES)("Bun: %s", async (_name, run, key) => {
+  await run(scratch(`bun-${key}`));
 });
 
 // Running a .ts file under node needs type stripping on by default: Node >= 22.18. The 22.13 floor is covered by the
@@ -30,18 +34,21 @@ const [nodeMajor = 0, nodeMinor = 0] = (spawnSync("node", ["--version"]).stdout?
 const stripsTypes = nodeMajor > 22 || (nodeMajor === 22 && nodeMinor >= 18);
 test.skipIf(!stripsTypes)("Node: every case, in a real node process", () => {
   // Node strips the types itself, so this runs the real store, not a copy. Requires `node` >= 22.18 on PATH.
-  const url = pathToFileURL(join(import.meta.dir, "store-check.ts")).href;
+  const urls = Object.keys(SUITES).map((file) => pathToFileURL(join(import.meta.dir, file)).href);
   const script = `
     import { mkdirSync } from "node:fs";
     import { join } from "node:path";
     if (process.versions.bun) throw new Error("not node");
-    const { CASES } = await import(${JSON.stringify(url)});
-    for (const [i, [name, run]] of CASES.entries()) {
-      const dir = join(${JSON.stringify(dir)}, "node-" + i);
-      mkdirSync(dir, { recursive: true });
-      try { await run(dir); } catch (err) { console.error("FAILED: " + name); throw err; }
+    let n = 0;
+    for (const url of ${JSON.stringify(urls)}) {
+      const { CASES } = await import(url);
+      for (const [name, run] of CASES) {
+        const dir = join(${JSON.stringify(dir)}, "node-" + n++);
+        mkdirSync(dir, { recursive: true });
+        try { await run(dir); } catch (err) { console.error("FAILED: " + name); throw err; }
+      }
     }
-    console.log("ok " + CASES.length + " on node " + process.versions.node);`;
+    console.log("ok " + n + " on node " + process.versions.node);`;
   const r = spawnSync("node", ["--no-warnings", "--input-type=module", "-e", script], { encoding: "utf8" });
   expect(r.error).toBeUndefined();
   expect(r.stderr).toBe("");

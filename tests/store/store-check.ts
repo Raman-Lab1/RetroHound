@@ -28,11 +28,11 @@ function event(line: Partial<RawEvent>, i: number, file: string): RawEvent {
 }
 
 /** A fake transcript: one JSON object per line, each the fields of one event. */
-function write(path: string, lines: Partial<RawEvent>[]): void {
+export function write(path: string, lines: Partial<RawEvent>[]): void {
   writeFileSync(path, lines.map((l) => JSON.stringify(l)).join("\n"));
 }
 
-function parser() {
+export function parser() {
   const calls: string[] = [];
   const parse = async (path: string): Promise<ParsedFile> => {
     calls.push(path);
@@ -56,7 +56,7 @@ async function withStore(dir: string, body: (store: Store, db: string) => Promis
 const ids = (store: Store, session = "s1") => store.sessionEvents(session).map((e) => e.id);
 const sha = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 
-function finding(rule_id: string, events: RawEvent[]): Finding {
+export function finding(rule_id: string, events: RawEvent[]): Finding {
   return {
     id: findingId(rule_id, events.map((e) => e.id)),
     rule_id,
@@ -93,7 +93,7 @@ export const CASES: [name: string, run: (dir: string) => Promise<void>][] = [
     const before = first.sessionEvents("s1").map((e) => e.id);
     first.close();
     const old = open(path);
-    old.exec("CREATE INDEX events_category ON events (category); CREATE INDEX events_ts ON events (ts); CREATE INDEX events_target_path ON events (target_path); CREATE INDEX events_domain ON events (domain); PRAGMA user_version = 1");
+    old.exec("CREATE INDEX events_category ON events (category); CREATE INDEX events_ts ON events (ts); CREATE INDEX events_target_path ON events (target_path); CREATE INDEX events_domain ON events (domain); DROP TABLE chain; PRAGMA user_version = 1");
     old.close();
     const store = openStore(path);
     assert.deepEqual(store.sessionEvents("s1").map((e) => e.id), before);
