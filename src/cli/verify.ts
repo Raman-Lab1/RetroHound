@@ -18,7 +18,10 @@ function verify(dbPath: string, head: string | undefined, io: IO): number {
       throw new UsageError(`index schema version ${version}, this RetroHound verifies ${MIGRATIONS.length}${fix}`);
     }
     const v = verifyChain(db, head?.toLowerCase());
-    io.out(mask(v.ok ? `ok: ${v.entries} entries, head ${v.head}\n` : `broken: ${v.problem}\n`));
+    // A head can't refuse entries appended after it, so show them: an events delete outside a parser upgrade stands out.
+    const since = v.ok && v.since
+      ? `added since the recorded head: ${Object.entries(v.since).sort().map(([k, n]) => `${k} ×${n}`).join(", ") || "nothing"}\n` : "";
+    io.out(mask(v.ok ? `ok: ${v.entries} entries, head ${v.head}\n${since}` : `broken: ${v.problem}\n`));
     return v.ok ? 0 : 1;
   } finally {
     db.close();

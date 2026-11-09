@@ -49,7 +49,7 @@ async function verify(...argv: string[]): Promise<number> {
   return code;
 }
 const parsed = () => {
-  const m = /^ok: (\d+) entries, head ([0-9a-f]{64})\n$/.exec(out);
+  const m = /^ok: (\d+) entries, head ([0-9a-f]{64})\n/.exec(out);
   if (!m) throw new Error(`not an ok line: ${out}`);
   return { entries: Number(m[1]), head: m[2]! };
 };
@@ -87,6 +87,12 @@ test("a scanned index verifies; a rescan where an outcome becomes known still do
   expect(changed.map((row) => row.outcome)).toEqual(["success"]);
   expect(await verify("--head", first.head.toUpperCase())).toBe(0);
   expect(parsed().head).toBe(second.head);
+  const added = sql("SELECT tbl || ' ' || op AS k, count(*) AS n FROM chain WHERE seq > ? GROUP BY k ORDER BY k", first.entries);
+  expect(out.split("\n")[1]).toBe(`added since the recorded head: ${added.map((r) => `${r.k} ×${r.n}`).join(", ")}`);
+  expect(await verify("--head", second.head)).toBe(0);
+  expect(out.split("\n")[1]).toBe("added since the recorded head: nothing");
+  expect(await verify()).toBe(0);
+  expect(out.split("\n")[1]).toBe(""); // no head, no second line
 });
 
 test("an event edited by SQL fails with exit 1 and is named; so does a head the chain does not have", async () => {

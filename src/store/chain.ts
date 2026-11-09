@@ -44,7 +44,8 @@ export function createChain(db: Db): void {
   for (const [table, key] of Object.entries(KEYS)) chain.append(table as Table, "seed", db.prepare(`SELECT * FROM ${table} ORDER BY ${key}`).all());
 }
 
-export type Verdict = { ok: true; entries: number; head: string } | { ok: false; problem: string };
+/** `since`, with a `head`: entries appended after it, counted by "table op". */
+export type Verdict = { ok: true; entries: number; head: string; since?: Record<string, number> } | { ok: false; problem: string };
 
 /** Walks the chain, then checks every row against its latest entry. Reports the first problem. `head`, when given,
  * must be one of the chain's hashes: a head recorded elsewhere catches a chain that was cut back or rebuilt. */
@@ -62,6 +63,7 @@ function check(db: Db, head?: string): Verdict {
   let prev = GENESIS;
   let seen = head === GENESIS;
   const latest = new Map<string, Row>();
+  const since: Record<string, number> = {}; // entries after `head`: appending is the one change a head can't refuse
   // ponytail: whole chain and tables in memory (about 200 B per row); stream them if indexes reach millions of rows
   const entries = db.prepare("SELECT * FROM chain ORDER BY seq").all();
   for (const e of entries) {
@@ -69,6 +71,7 @@ function check(db: Db, head?: string): Verdict {
     if (link(prev, e.tbl as string, e.row_id as string, e.op as string, e.row_hash as string) !== e.hash) {
       return fail(`chain entry ${e.seq}: hash does not match its contents (the entry was edited)`);
     }
+    if (seen) since[`${e.tbl} ${e.op}`] = (since[`${e.tbl} ${e.op}`] ?? 0) + 1;
     prev = e.hash as string;
     if (prev === head) seen = true;
     latest.set(`${e.tbl} ${e.row_id}`, e);
@@ -85,5 +88,5 @@ function check(db: Db, head?: string): Verdict {
     if (e.op !== "delete") return fail(`chain entry ${e.seq}: ${e.tbl} row ${e.row_id} is missing (deleted outside RetroHound)`);
   }
   if (head !== undefined && !seen) return fail(`head ${head} is not in the chain (it was cut back or rebuilt)`);
-  return { ok: true, entries: entries.length, head: prev };
+  return { ok: true, entries: entries.length, head: prev, ...(head !== undefined && { since }) };
 }

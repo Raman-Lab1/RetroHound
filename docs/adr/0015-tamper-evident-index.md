@@ -47,6 +47,10 @@ user can open it with `sqlite3`; `query` being read-only (0002) only keeps Retro
   `--head`: keep the head printed by `verify` somewhere the attacker cannot write (a ticket, a SIEM, a signed commit,
   the SOC). A later `verify --head <recorded>` fails if the chain was rebuilt, cut back, or rolled back to a copy
   taken before that head was recorded. It cannot detect changes made before the head was recorded.
+- **Appending is not refused either:** a writer can add well-formed entries after a recorded head (for example a
+  `delete` of an event, and then remove the row). So `verify --head` lists what was added since that head, by table
+  and operation. RetroHound deletes events only in a parser-version rebuild, so an `events delete` with no upgrade in
+  between is a lead, not noise.
 - **Out of scope:** what happened before RetroHound read a transcript (an edit to the transcript itself is indexed
   as what the file said); `last_seen`; the whole file being deleted. `purge` deletes everything by design, and a
   recorded head with no database proves only that a database existed.
