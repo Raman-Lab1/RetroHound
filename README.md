@@ -38,6 +38,7 @@ retrohound scan --since 7d --level high
 
 # 3. Open one session as a timeline: paste the first few characters of the session id from the scan
 retrohound show 7f3c
+retrohound incident 7f3c          # one folder to hand over: incident.json, offline index.html, sha256 manifest
 
 # 4. Other agents
 retrohound scan --agent codex          # ~/.codex

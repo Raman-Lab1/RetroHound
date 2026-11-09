@@ -13,6 +13,7 @@ import { toTable } from "../outputs/table.ts";
 import { defaultDbPath } from "../store/index.ts";
 import { oneOf, parseSince, processIO, UsageError, useColor, type IO } from "./io.ts";
 import { registerHook } from "./hook.ts";
+import { registerIncident } from "./incident.ts";
 import { registerMcp } from "./mcp.ts";
 import { registerPreflight } from "./preflight.ts";
 import { registerQuery } from "./query.ts";
@@ -77,7 +78,7 @@ export function buildProgram(io: IO, setCode: (n: number) => void): Command {
   program.exitOverride().configureOutput({ writeOut: io.out, writeErr: io.err });
   const run = async (fn: () => number | Promise<number>) => setCode(await fn());
 
-  program.command("scan").description("Scan Claude Code transcripts, index them, and report findings")
+  program.command("scan").description("Scan Claude Code, Codex CLI and Antigravity CLI transcripts, index them, and report findings")
     .option("--since <when>", "only sessions active since: 30d, 12h or a date")
     .option("--agent <agent>", `agent to scan (${AGENTS.join(" | ")} | all)`, "claude_code")
     .option("--project <path>", "only sessions whose project path contains this")
@@ -114,6 +115,7 @@ export function buildProgram(io: IO, setCode: (n: number) => void): Command {
 
   registerQuery(program, run, io);
   registerShow(program, run, io);
+  registerIncident(program, run, io);
   registerWrapped(program, run, io);
   registerPreflight(program, run, io);
   registerMcp(program, run, io);
