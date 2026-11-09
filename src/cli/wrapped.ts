@@ -19,7 +19,7 @@ const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1
 const hash = (s: string) => `anon-${createHash("sha256").update(s).digest("hex").slice(0, 6)}`;
 
 /** Project names, the user name and the encoded project dir (ADR 0014) replaced by stable hashes, longest first. */
-function anonymizer(events: AgentEvent[], projects: string[]): (s: string) => string {
+export function anonymizer(events: Pick<AgentEvent, "raw_ref">[], projects: string[]): (s: string) => string {
   const tokens = new Set<string>([basename(homedir()), userInfo().username]);
   for (const p of projects) {
     tokens.add(p);
