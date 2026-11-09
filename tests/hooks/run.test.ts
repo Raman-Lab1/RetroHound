@@ -162,7 +162,8 @@ describe("rule parse cache", () => {
     expect(decision(loadEnforceRules(d, dp), "ccc")).toBe("r_b");
     rmSync(join(d, "b.yml"));
     expect(decision(loadEnforceRules(d, dp), "ccc")).toBeUndefined();
-    expect(readFileSync(dp, "utf8")).not.toContain("bbb"); // files changed under a second ago were not cached
+    // files changed under a second ago were not cached (check the docs, not the raw text: the hex sum can hold "bbb")
+    expect(JSON.stringify(JSON.parse(readFileSync(dp, "utf8")).docs)).not.toContain("bbb");
   });
   test("an unusable cache path (a directory) still decides through the CLI", async () => {
     const o: string[] = [];
