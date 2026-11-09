@@ -55,6 +55,31 @@ real transcripts is lower because their long heredoc command lines make the boun
 
 The engine itself runs simple rules at about 200k events/s, so the cost is in the rules' regexes, not the evaluator.
 
+## Live hook (`hook run`)
+
+Target (ADR 0009): under 50 ms p95 in-process per call. `bun scripts/build.mjs`, then
+`PERF=1 bun test tests/perf.test.ts -t "hook run"`: 200 fresh processes per runtime, each timed from a preload to exit
+(the runtime's own start-up excluded), warm rule cache, the shipped rules, a payload that is denied. Apple M5, macOS,
+Node 26.5, Bun 1.4.4, one run each, other work running. In-process ms, p50 / p95 / p99:
+
+| Runtime and entry | Before | After |
+|---|---|---|
+| `node dist/cli.mjs` (shipped) | 20.7 / 24.7 / 26.2 | 18.8 / 19.5 / 23.9 |
+| `bun dist/cli.mjs` | 28.0 / 30.1 / 31.1 | 26.2 / 27.8 / 29.3 |
+| `bun src/cli/bin.ts` (dev) | 97.6 / 107.5 / 109.9 | 67.9 / 74.3 / 76.7 |
+
+What changed: `hook run` goes from `bin.ts`/`entry.ts` straight to `hookMain` (node:util `parseArgs`) through a
+dynamic import, so commander, `scan.ts`, the store and the other commands are not loaded (from source) or not
+initialised (in the bundle, where Bun wraps dynamically imported modules in lazy initialisers). Stdin is read with one
+synchronous read instead of a stream (about 2 ms under Node in isolation).
+
+Where the shipped hook's ~19 ms goes now (one warm call, timestamps patched into a copy of the bundle): about 9 ms
+before the bundle's first line runs (compiling the 290 KB file and loading every `node:` builtin it imports, which Bun
+hoists to the top of the file, including ones only other commands use: zlib, readline, child_process), 1.5 ms
+initialising the hook's modules, 4.3 ms loading the enforce rules from the cache (directory listing, stats, compile),
+4 ms deciding (event mapping, masking and the rules' regexes, all cold). An experimental split build (Bun
+`splitting: true`, not the single file ADR 0010 ships) saved about 2 ms p50 more.
+
 ## Known limits and next steps
 
 - `re` cost on long strings. A literal prefilter (a substring every match must contain) would cut it; extracting one
