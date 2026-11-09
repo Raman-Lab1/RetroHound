@@ -1,12 +1,12 @@
 // --extra-rules: a user's own rule pack on top of the shipped rules. Temp dirs only; defanged data (example.invalid).
 import { afterAll, beforeEach, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { hookRun } from "../../src/cli/hook.ts";
 import type { IO } from "../../src/cli/io.ts";
 import { main } from "../../src/cli/main.ts";
-import { checkPaths, install, status, type SafetyEnv } from "../../src/hooks/install.ts";
+import { checkPaths, install, realSafetyEnv, status, type SafetyEnv } from "../../src/hooks/install.ts";
 import { loadEnforceRules, runHook } from "../../src/hooks/run.ts";
 
 setDefaultTimeout(60_000);
@@ -147,5 +147,32 @@ describe("hook", () => {
     put(join(d, "a.yml"), rule("x", "y"));
     const env = { ...world({ [d]: [ME, 0o755, true], [join(d, "a.yml")]: [ME, 0o666] }), real: (x: string) => x };
     expect(checkPaths("/opt/node", "/opt/cli.mjs", env, [d]).find((f) => f.path === join(d, "a.yml"))?.reason).toContain("world-writable");
+  });
+  // A real dir holding a real symlink x.yml; `real` maps the dir to /opt/pack and the link to `target` in the fake world.
+  const linked = (target: string, over: Record<string, [number, number, boolean?]>) => {
+    const d = join(dir, "linked");
+    mkdirSync(d);
+    symlinkSync(join(dir, "nowhere.yml"), join(d, "x.yml"));
+    const env: SafetyEnv = { ...world(over), tmp: "/nonexistent-tmp", real: (x) => (x === d ? "/opt/pack" : x === join(d, "x.yml") ? target : x) };
+    return { path: join(dir, "s.json"), mode: "block" as const, command: "/opt/node", entry: "/opt/cli.mjs", extraRules: [d], safety: env };
+  };
+  test("a symlinked rule file whose target sits in a world-writable dir is refused unless --allow-unsafe-path", () => {
+    const o = linked("/shared/x.yml", { "/shared": [0, 0o777, true], "/shared/x.yml": [ME, 0o644] });
+    expect(() => install(o)).toThrow(/\/shared: group- or world-writable/);
+    expect(existsSync(o.path)).toBe(false);
+    expect(install({ ...o, allowUnsafePath: true }).warnings.join()).toContain("/shared");
+    expect(status(o.path, [], o.safety).unsafe?.map((f) => f.path)).toEqual(["/shared"]);
+  });
+  test("a symlinked rule file whose target sits in a safe user-owned dir is allowed", () => {
+    const o = linked("/home/me/rules/x.yml", { "/home": [0, 0o755, true], "/home/me": [ME, 0o755, true], "/home/me/rules": [ME, 0o755, true], "/home/me/rules/x.yml": [ME, 0o644] });
+    expect(install(o).status).toBe("installed");
+    expect(status(o.path, [], o.safety).unsafe).toEqual([]);
+  });
+  test("a dangling symlink in an extra dir is refused", () => {
+    const o = linked(join(dir, "linked", "x.yml"), {}); // unresolvable: real() hands the path back, stat finds nothing
+    expect(() => install(o)).toThrow(/x\.yml: cannot be inspected/);
+    expect(existsSync(o.path)).toBe(false);
+    const findings = checkPaths("/opt/node", "/opt/cli.mjs", realSafetyEnv(), [join(dir, "linked")]); // real fs, too
+    expect(findings.find((f) => f.path.endsWith("x.yml"))?.reason).toBe("cannot be inspected");
   });
 });
