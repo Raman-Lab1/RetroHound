@@ -7,7 +7,8 @@ import { mask } from "./normalize/mask.ts";
 import { toStored } from "./normalize/stored.ts";
 import { LEVELS, type Finding, type Level, type RawEvent } from "./normalize/types.ts";
 import type { ScanReport } from "./outputs/report.ts";
-import { DEFAULT_RULES_DIR, reportRule, TOOL_VERSION } from "./scan.ts";
+import { reportRule } from "./scan.ts";
+import { DEFAULT_RULES_DIR, TOOL_VERSION } from "./version.ts";
 import { findingId } from "./store/index.ts";
 import { applyIgnore, loadIgnore } from "./suppress.ts";
 

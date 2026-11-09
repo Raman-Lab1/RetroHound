@@ -13,7 +13,7 @@ import { mask } from "../normalize/mask.ts";
 import { toStored } from "../normalize/stored.ts";
 import type { Finding, RawEvent } from "../normalize/types.ts";
 import { isSuppressed, NO_IGNORE, type Ignore } from "../suppress.ts";
-import { TOOL_VERSION } from "../scan.ts";
+import { TOOL_VERSION } from "../version.ts";
 
 export const MODES = ["log", "confirm", "block"] as const;
 export type Mode = (typeof MODES)[number];

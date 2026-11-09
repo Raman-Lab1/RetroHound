@@ -1,6 +1,6 @@
 // `retrohound hook run|install|uninstall|status` (ADR 0009). `run` must never fail the tool call: exit 0 always
 // (exit 2 would BLOCK it), any error becomes one stderr line and no decision.
-import { DEFAULT_RULES_DIR } from "../scan.ts";
+import { DEFAULT_RULES_DIR } from "../version.ts";
 import { defaultLogPath, loadEnforceRules, MODES, runHook, type Mode } from "../hooks/run.ts";
 import { loadIgnore } from "../suppress.ts";
 import { AGENTS, type Agent } from "../hooks/agents.ts";

@@ -2,7 +2,6 @@
 // session, never per file: a session is its main transcript plus its sub-agent files (and set-aside copies), and
 // event_count correlations must see all of them at once (ADR 0004). Zero network, nothing raw is persisted.
 import { createHash } from "node:crypto";
-import { fileURLToPath } from "node:url";
 import { COLLECTORS, type Collector } from "./collectors/index.ts";
 import { evaluate, type Match } from "./engine/evaluate.ts";
 import { type Rejection, type Rule } from "./engine/load.ts";
@@ -17,9 +16,8 @@ import { applyIgnore, loadIgnore, type Ignore } from "./suppress.ts";
 
 /** Claude Code parser version; each collector carries its own (src/collectors/index.ts). Bump it there. */
 export const PARSER_VERSION = COLLECTORS.claude_code!.parserVersion;
-export const TOOL_VERSION = "0.1.0";
-// src/scan.ts and the bundle dist/cli.mjs both sit one level below the repo/package root.
-export const DEFAULT_RULES_DIR = fileURLToPath(new URL("../rules/ai_coding_agent", import.meta.url));
+import { DEFAULT_RULES_DIR, TOOL_VERSION } from "./version.ts";
+export { DEFAULT_RULES_DIR, TOOL_VERSION } from "./version.ts";
 
 export type ScanOptions = {
   agent?: string; // a key of COLLECTORS, or "all" (every collector, each at its default root); default claude_code
