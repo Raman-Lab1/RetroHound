@@ -21,7 +21,7 @@ function preflightCommand(dir: string, f: Flags, io: IO): number {
 }
 
 export const registerPreflight: Registrar = (program, run, io) => {
-  program.command("preflight [dir]").description("Scan a cloned repo's agent surface (.claude, .mcp.json, CLAUDE.md, tasks, npm scripts) before opening it with a coding agent")
+  program.command("preflight [dir]").description("Scan a cloned repo's agent surface (.claude, .mcp.json, CLAUDE.md, tasks, npm scripts) before opening it with a coding agent; in a monorepo it also reads each workspace package's package.json (root `workspaces` or pnpm-workspace.yaml, up to 500)")
     .option("--rules <dir>", "rules directory", DEFAULT_RULES_DIR)
     .option("--extra-rules <dir>", EXTRA_HELP, repeat)
     .option("--format <format>", "table or json", "table")
