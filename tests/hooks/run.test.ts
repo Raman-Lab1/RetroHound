@@ -1,5 +1,5 @@
 // hook run: payload fixtures are defanged (example.invalid, placeholder keys); rules are the test's own temp files.
-import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -135,6 +135,10 @@ describe("rule parse cache", () => {
   const cp = join(cdir, "c.json");
   const decision = (rs: typeof rules, cmd: string) => runHook(bash(cmd), "block", rs, logPath).rule;
   const names = (rs: typeof rules) => rs.map((r) => r.id).sort();
+  const d = join(cdir, "rules");
+  mkdirSync(d);
+  writeFileSync(join(d, "a.yml"), rule("r_a", "enforce", "command_line|contains: aaa"));
+  beforeAll(() => Bun.sleep(1100)); // a rule file under a second old is never cached
 
   test("same decisions and rules with the cache written, with it read, and without it", () => {
     const cold = loadEnforceRules(rulesDir, cp);
@@ -147,17 +151,24 @@ describe("rule parse cache", () => {
     expect(decision(warm, "echo enforce-me")).toBe("enf_bash");
   });
   test("an edited rule, an added rule and a removed rule are seen on the next run", () => {
-    const d = join(cdir, "rules");
-    mkdirSync(d);
-    writeFileSync(join(d, "a.yml"), rule("r_a", "enforce", "command_line|contains: aaa"));
-    expect(decision(loadEnforceRules(d, cp), "aaa")).toBe("r_a");
-    writeFileSync(join(d, "a.yml"), rule("r_a", "enforce", "command_line|contains: bbb"));
-    expect(decision(loadEnforceRules(d, cp), "aaa")).toBeUndefined();
-    expect(decision(loadEnforceRules(d, cp), "bbb")).toBe("r_a");
+    const dp = join(cdir, "d.json");
+    expect(decision(loadEnforceRules(d, dp), "aaa")).toBe("r_a");
+    expect(existsSync(dp)).toBe(true);
+    expect(decision(loadEnforceRules(d, dp), "aaa")).toBe("r_a"); // from the cache
+    writeFileSync(join(d, "a.yml"), rule("r_a", "enforce", "command_line|contains: bbb")); // same size
+    expect(decision(loadEnforceRules(d, dp), "aaa")).toBeUndefined();
+    expect(decision(loadEnforceRules(d, dp), "bbb")).toBe("r_a");
     writeFileSync(join(d, "b.yml"), rule("r_b", "enforce", "command_line|contains: ccc"));
-    expect(decision(loadEnforceRules(d, cp), "ccc")).toBe("r_b");
+    expect(decision(loadEnforceRules(d, dp), "ccc")).toBe("r_b");
     rmSync(join(d, "b.yml"));
-    expect(decision(loadEnforceRules(d, cp), "ccc")).toBeUndefined();
+    expect(decision(loadEnforceRules(d, dp), "ccc")).toBeUndefined();
+    expect(readFileSync(dp, "utf8")).not.toContain("bbb"); // files changed under a second ago were not cached
+  });
+  test("an unusable cache path (a directory) still decides through the CLI", async () => {
+    const o: string[] = [];
+    const io = { out: (s: string) => o.push(s), err: () => {}, isTTY: false, env: {} } as IO;
+    expect(await hookRun({ mode: "block", rules: rulesDir, cache: cdir }, io, async () => bash("echo enforce-me"))).toBe(0);
+    expect(out(o.join("")).permissionDecision).toBe("deny");
   });
   test("a corrupt, truncated or tampered cache is ignored and rebuilt", () => {
     loadEnforceRules(rulesDir, cp);

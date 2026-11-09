@@ -2,7 +2,7 @@
 // any exception into "no decision, exit 0". Only enforce-lane single-event detections decide; it never emits `allow`
 // or `updatedInput`, and the log never holds raw tool input (0007).
 import { createHash } from "node:crypto";
-import { appendFileSync, chmodSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { render, supportsAsk, toEvent, type Agent } from "./agents.ts";
@@ -13,6 +13,7 @@ import { mask } from "../normalize/mask.ts";
 import { toStored } from "../normalize/stored.ts";
 import type { Finding, RawEvent } from "../normalize/types.ts";
 import { isSuppressed, NO_IGNORE, type Ignore } from "../suppress.ts";
+import { TOOL_VERSION } from "../scan.ts";
 
 export const MODES = ["log", "confirm", "block"] as const;
 export type Mode = (typeof MODES)[number];
@@ -68,14 +69,14 @@ const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 /** Per-rules-dir cache file next to the trial log. */
 export const defaultCachePath = (dir: string) => join(dirname(defaultLogPath()), `rules-cache-${sha(resolve(dir)).slice(0, 12)}.json`);
 
-type CacheFile = { key: string; sum: string; docs: ParsedDoc[][] };
+type CacheFile = { key: string; sum: string; paths: string[]; docs: ParsedDoc[][] };
 
-/** The cached parse of the sources, only if it is intact and was made from exactly these file contents. */
-function readCache(path: string, key: string, count: number): ParsedDoc[][] | undefined {
+/** The cached parse of the enforce sources, only if it is intact and was made from exactly these files. */
+function readCache(path: string, key: string): CacheFile | undefined {
   try {
     const c: CacheFile = JSON.parse(readFileSync(path, "utf8"));
-    const ok = c.key === key && Array.isArray(c.docs) && c.docs.length === count && c.docs.every(Array.isArray) && c.sum === sha(JSON.stringify(c.docs));
-    return ok ? c.docs : undefined;
+    const ok = c.key === key && Array.isArray(c.paths) && Array.isArray(c.docs) && c.docs.length === c.paths.length && c.docs.every(Array.isArray) && c.sum === sha(JSON.stringify([c.paths, c.docs]));
+    return ok ? c : undefined;
   } catch {
     return undefined; // missing or corrupt: parse the YAML
   }
@@ -87,13 +88,14 @@ const jsonSafe = (_k: string, v: unknown) => {
   return v;
 };
 
-function writeCache(path: string, key: string, docs: ParsedDoc[][]): void {
+function writeCache(path: string, key: string, paths: string[], docs: ParsedDoc[][]): void {
   try {
     if (docs.some((f) => f.some((d) => d.error !== undefined))) return; // a rejection is reported from the YAML every time
-    const json = JSON.stringify(docs, jsonSafe);
+    const json = JSON.stringify([paths, docs], jsonSafe);
+    const [p, d] = JSON.parse(json) as [string[], ParsedDoc[][]];
     mkdirSync(dirname(path), { recursive: true });
     const tmp = `${path}.${process.pid}.tmp`;
-    writeFileSync(tmp, JSON.stringify({ key, sum: sha(json), docs: JSON.parse(json) } satisfies CacheFile), { mode: 0o600 });
+    writeFileSync(tmp, JSON.stringify({ key, sum: sha(json), paths: p, docs: d } satisfies CacheFile), { mode: 0o600 });
     renameSync(tmp, path);
   } catch {
     // a cache that cannot be written only costs the next run a parse
@@ -102,8 +104,10 @@ function writeCache(path: string, key: string, docs: ParsedDoc[][]): void {
 
 /**
  * Like cli/rules.ts loadRuleDir, but parses only files that mention `lane: enforce`: the hook pays for every tool call.
- * The YAML parse is the dominant cost, so its result (plain data, never compiled rules) is cached under a hash of the
- * selected files' paths and contents: any edit, add or remove changes the key and the YAML is parsed again.
+ * The parse (plain data, never compiled rules) is cached under the stat of every rule file (size, mtime, ctime, inode),
+ * so a warm call opens no rule file: reading them all was most of the hook's own time. Any edit, add or remove changes
+ * the key. Nothing is cached while a file's ctime is under a second old: a second edit in the same timestamp tick could
+ * leave size and times unchanged.
  */
 export function loadEnforceRules(dir: string, cachePath = defaultCachePath(dir)): Rule[] {
   let names: string[] = [];
@@ -112,16 +116,18 @@ export function loadEnforceRules(dir: string, cachePath = defaultCachePath(dir))
   } catch {
     // no rules directory: nothing can decide
   }
+  const stats = names.map((n) => statSync(join(dir, n), { bigint: true }));
+  const key = sha(JSON.stringify([TOOL_VERSION, resolve(dir), names.map((n, i) => [n, ...[stats[i]!.size, stats[i]!.mtimeNs, stats[i]!.ctimeNs, stats[i]!.ino].map(String)])]));
+  const hit = readCache(cachePath, key);
+  if (hit) return loadRules(hit.paths.map((path, i) => ({ path, text: "", docs: hit.docs[i] }))).rules;
   const sources = names.map((n) => ({ path: join(dir, n), text: readFileSync(join(dir, n), "utf8") })).filter((s) => /lane:\s*enforce/.test(s.text));
-  const key = sha(JSON.stringify(sources.map((s) => [s.path, s.text])));
-  let docs = readCache(cachePath, key, sources.length);
-  if (!docs) {
-    try {
-      docs = sources.map((s) => parseSource(s.text));
-      writeCache(cachePath, key, docs);
-    } catch {
-      docs = undefined; // a file that is not YAML at all: loadRules reports it
-    }
+  let docs;
+  try {
+    docs = sources.map((s) => parseSource(s.text));
+    const settled = BigInt(Date.now() - 1000) * 1_000_000n;
+    if (stats.every((s) => s.ctimeNs < settled)) writeCache(cachePath, key, sources.map((s) => s.path), docs);
+  } catch {
+    docs = undefined; // a file that is not YAML at all: loadRules reports it
   }
   return loadRules(sources.map((s, i) => ({ ...s, docs: docs?.[i] }))).rules;
 }
