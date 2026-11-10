@@ -105,7 +105,7 @@ describe("scan", () => {
 
   test("writes the footprint report next to the index by default, owner-only, and prints its file URL", async () => {
     expect(await run("scan", ...common())).toBe(0);
-    const page = join(dir, "report.html");
+    const page = join(dir, "index.footprint.html");
     expect(readFileSync(page, "utf8")).toContain("RetroHound footprint");
     expect(statSync(page).mode & 0o777).toBe(0o600);
     expect(out).toContain(`Footprint report (everything in the index): file://`);
@@ -118,12 +118,20 @@ describe("scan", () => {
     expect(existsSync(page)).toBe(true);
     for (const flags of [["--no-report"], ["--format", "json"], ["--format", "sarif"], ["--no-index"]]) {
       expect(await run("scan", ...common(), ...flags)).toBe(0);
-      expect(existsSync(join(dir, "report.html"))).toBe(false);
+      expect(existsSync(join(dir, "index.footprint.html"))).toBe(false);
     }
   });
 
   test.each([[["--no-index"]], [["--format", "json"]]])("--report with %j exits 2", async (flags) => {
     expect(await run("scan", ...common(), "--report", join(dir, "r.html"), ...flags)).toBe(2);
+  });
+
+  test("--report onto the index or its WAL is refused and the index is untouched", async () => {
+    await run("scan", ...common());
+    for (const target of ["index.db", "index.db-wal"]) {
+      expect(await run("scan", ...common(), "--report", join(dir, target))).toBe(2);
+    }
+    expect(await run("query", "select count(*) as n from sessions", "--db", join(dir, "index.db"))).toBe(0);
   });
 
   test("history.jsonl sessions without a transcript are counted from sessionId only", async () => {
@@ -154,9 +162,10 @@ describe("purge", () => {
     expect(await run("purge", "--db", db)).toBe(1);
     expect(existsSync(db)).toBe(true);
     expect(out).toContain("Would delete");
+    expect(out).toContain("index.footprint.html");
     expect(await run("purge", "--db", db, "--yes")).toBe(0);
     expect(existsSync(db)).toBe(false);
-    expect(existsSync(join(dir, "report.html"))).toBe(false);
+    expect(existsSync(join(dir, "index.footprint.html"))).toBe(false);
   });
 });
 

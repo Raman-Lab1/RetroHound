@@ -17,7 +17,7 @@ const days = (n: number) => Array.from({ length: n }, (_, i) =>
 export function sample(): Footprint {
   return {
     generated_at: T1, tool_version: "0.2.0",
-    trust: { chain: { ok: true, entries: 1234, head: "9f2c4e6a8b0d1f3e5a7c9e1b3d5f7a9c" }, files: { indexed: 48, gone: 6 },
+    trust: { chain: { entries: 1234, head: "9f2c4e6a8b0d1f3e5a7c9e1b3d5f7a9c" }, files: { indexed: 48, gone: 6 },
       archived_sessions: 3, retention_days: 30, first_ts: T0, last_ts: T1 },
     totals: { agents: 2, projects: 3, sessions: 9, events: 4321, sub_agent_events: 1100, blocked: 17, secrets: 2,
       findings: { informational: 4, low: 3, medium: 2, high: 1, critical: 1 } },
@@ -76,7 +76,7 @@ describe("renderFootprint", () => {
   });
 
   test("the sections an analyst reads", () => {
-    expect(html).toContain("hash chain intact: 1234 entries, head 9f2c4e6a8b0d<");
+    expect(html).toContain("hash chain: 1234 entries, head 9f2c4e6a8b0d;");
     expect(html).toContain(`<li class="warn">Claude Code deletes transcripts after 30 days`);
     expect(html).toContain(`<div class="t hot"><b>1</b>critical findings</div>`);
     expect(html).toContain("<code>retrohound show 0123abcd</code>");
@@ -84,7 +84,21 @@ describe("renderFootprint", () => {
     expect(html).toContain(`<span class="bad">bypassPermissions</span>`);
     expect(html).toContain(`<span class="bad">auto</span>`);
     expect(html).toContain("4 more findings not shown; use <code>retrohound query</code>");
-    expect(html).not.toContain("more sessions not shown");
+    expect(html).not.toContain("more sessions not shown; use"); // footer: omitted.sessions is 0
+  });
+
+  test("a short token= value does not swallow the markup after it", () => {
+    const d = sample();
+    d.findings[0]!.message = "login with token=abc";
+    const page = renderFootprint(d);
+    expect(page).toContain("token=abc</td></tr>");
+    expect(page).toContain(`<span class="b low">low</span>`); // the next row's badge is still markup
+  });
+
+  test("a project whose sessions fell outside the cap says so", () => {
+    const d = sample();
+    d.agents[0]!.projects[0]!.sessions += 7;
+    expect(renderFootprint(d)).toContain("7 more sessions not shown");
   });
 
   test("an empty index still renders a whole page", () => {

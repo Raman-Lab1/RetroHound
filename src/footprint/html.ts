@@ -1,8 +1,8 @@
 // The footprint page (`retrohound scan` writes it to ~/.retrohound/report.html): a Footprint as one offline page.
 // Same guarantees as src/incident/html.ts: no scripts, links, fonts or images, a CSP that loads nothing, every value
-// masked then escaped by the same h() (attributes too), and a last mask pass. Interactivity is <details> and CSS only.
+// masked then escaped by the same h() (attributes too). No whole-page mask pass: a secret pattern run over markup can
+// swallow tags (`token=abc</td></tr>...`), and every value is already masked. Interactivity is <details> and CSS only.
 import { h } from "../incident/html.ts";
-import { mask } from "../normalize/mask.ts";
 import { LEVELS, type Level } from "../normalize/types.ts";
 import type { Footprint, Seen, SessionNode } from "./types.ts";
 
@@ -43,8 +43,7 @@ svg.a{display:block;width:100%;height:64px;background:var(--sf)}svg.a rect{fill:
 function trust(t: Footprint["trust"]): string {
   const c = t.chain;
   const chain = c === null ? `<span class="warn">index predates the hash chain: earlier writes are not tamper-evident</span>`
-    : c.ok ? `<span class="ok">hash chain intact: ${h(c.entries)} entries, head ${h(c.head.slice(0, 12))}</span>`
-    : `<span class="bad">hash chain problem: ${h(c.problem)}</span>`;
+    : `hash chain: ${h(c.entries)} entries, head ${h(c.head.slice(0, 12))}; check it with <code>retrohound verify</code>`;
   const r = t.retention_days;
   const ret = r === undefined ? ""
     : r <= 30 ? `<li class="warn">Claude Code deletes transcripts after ${h(r)} days: older history survives only in this index</li>`
@@ -80,7 +79,8 @@ function tree(agents: Footprint["agents"]): string {
     const ps = a.projects;
     const worst = ps.map((p) => p.worst).reduce<Level | undefined>((w, l) => (rank(l) > rank(w) ? l : w), undefined);
     const projects = ps.map((p) => `<details><summary><b>${h(p.project)}</b> · ${h(p.sessions)} sessions · `
-      + `${counts(p.events, p.blocked, p.findings, p.worst)}</summary>${p.list.map(session).join("") || NONE}</details>`).join("");
+      + `${counts(p.events, p.blocked, p.findings, p.worst)}</summary>${p.list.map(session).join("")}${p.sessions > p.list.length
+        ? `<p class="mu">${h(p.sessions - p.list.length)} more sessions not shown: the page lists the riskiest across the index</p>` : ""}</details>`).join("");
     return `<details open><summary><b>${h(a.agent)}</b> · ${h(ps.length)} projects · ${h(a.sessions)} sessions · `
       + `${counts(a.events, sum(ps.map((p) => p.blocked)), sum(ps.map((p) => p.findings)), worst)}</summary>${projects || NONE}</details>`;
   }).join("") || NONE;
@@ -122,6 +122,6 @@ export function renderFootprint(d: Footprint): string {
     `<footer>${more ? `<ul>${more}</ul>` : ""}<p>Built offline from the local index. Nothing on this page was fetched or sent.</p></footer>`,
   ].join("\n");
   const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">`;
-  return mask(`<!doctype html><html lang="en"><head><meta charset="utf-8">${csp}<meta name="viewport" content="width=device-width,initial-scale=1">`
-    + `<meta name="color-scheme" content="light dark"><title>RetroHound footprint</title><style>${CSS}</style></head><body>\n${body}\n</body></html>\n`);
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">${csp}<meta name="viewport" content="width=device-width,initial-scale=1">`
+    + `<meta name="color-scheme" content="light dark"><title>RetroHound footprint</title><style>${CSS}</style></head><body>\n${body}\n</body></html>\n`;
 }

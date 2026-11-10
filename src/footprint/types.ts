@@ -68,7 +68,9 @@ export type Footprint = {
   generated_at: string;
   tool_version: string;
   trust: {
-    chain: { ok: true; entries: number; head: string } | { ok: false; problem: string } | null; // null: index predates the chain
+    // Size and head only, not a verdict: walking the chain loads every row (GBs at 500k events), so that stays with
+    // `retrohound verify`. null: the index predates the chain (ADR 0015).
+    chain: { entries: number; head: string } | null;
     files: { indexed: number; gone: number };
     archived_sessions: number;
     retention_days?: number; // Claude Code's cleanupPeriodDays, when the caller knows it

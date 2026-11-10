@@ -4,7 +4,7 @@
 import type { Rule } from "../engine/load.ts";
 import { mask } from "../normalize/mask.ts";
 import { LEVELS, type Level } from "../normalize/types.ts";
-import { verifyChain } from "../store/chain.ts";
+import { GENESIS } from "../store/chain.ts";
 import type { Db, SqlValue } from "../store/sqlite.ts";
 import { TOOL_VERSION } from "../version.ts";
 import type { AgentNode, FindingRow, Footprint, ProjectNode, SecretReach, Seen, SessionNode, SubAgentNode } from "./types.ts";
@@ -146,14 +146,15 @@ export function collectFootprint(db: Db, opts: { rules: Rule[]; retentionDays?: 
   const files = one<{ indexed: number; gone: number }>("SELECT COUNT(*) AS indexed, COUNT(gone_at) AS gone FROM files_indexed");
   // null on an index from before the chain, opened read-only so never upgraded (as the incident pack does)
   const chained = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'chain'").get();
-  const v = chained ? verifyChain(db) : null;
+  const chain = chained ? one<{ entries: number; head: string | null }>(`SELECT COUNT(*) AS entries,
+    (SELECT hash FROM chain ORDER BY seq DESC LIMIT 1) AS head FROM chain`) : null;
   const count = (sql: string) => all<{ name: string; count: number }>(sql);
 
   const out: Footprint = {
     generated_at: (opts.now ?? new Date()).toISOString(),
     tool_version: TOOL_VERSION,
     trust: {
-      chain: v && (v.ok ? { ok: true, entries: v.entries, head: v.head } : v),
+      chain: chain && { entries: chain.entries, head: chain.head ?? GENESIS },
       files,
       archived_sessions: sessions.filter((s) => s.archived).length,
       retention_days: opts.retentionDays,

@@ -77,7 +77,7 @@ describe("collectFootprint", () => {
     const fp = collect();
     expect(fp.generated_at).toBe(now.toISOString());
     expect(fp.tool_version).toBe(TOOL_VERSION);
-    expect(fp.trust).toMatchObject({ chain: { ok: true }, files: { indexed: 2, gone: 0 }, archived_sessions: 0, retention_days: 30 });
+    expect(fp.trust).toMatchObject({ chain: { entries: expect.any(Number), head: expect.stringMatching(/^[0-9a-f]{64}$/) }, files: { indexed: 2, gone: 0 }, archived_sessions: 0, retention_days: 30 });
     expect([fp.trust.first_ts, fp.trust.last_ts]).toEqual([ts(1), ts(1, 8)]);
     expect(fp.totals).toMatchObject({ agents: 1, projects: 2, sessions: 2, sub_agent_events: 1, blocked: 1, secrets: 1 });
     expect(fp.totals.findings).toEqual({ informational: 0, low: 0, medium: 0, high: 2, critical: 0 });

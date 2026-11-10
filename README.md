@@ -25,7 +25,7 @@ npx retrohound scan
 ```
 
 That reads `~/.claude`, keeps a masked index in `~/.retrohound/index.db`, prints what it found, and writes
-`~/.retrohound/report.html`: one offline page with everything the index holds about the AI agents on this machine
+`~/.retrohound/index.footprint.html`: one offline page with everything the index holds about the AI agents on this machine
 (see [Footprint report](#footprint-report)). To keep the command around, `npm install -g retrohound`; below, `retrohound` means either form.
 
 ### Try it: ten things to do in your first five minutes
@@ -165,7 +165,7 @@ Flags (from `--help`):
 
 - `scan`: `--since <30d|12h|date>`, `--agent <claude_code|codex|antigravity>`, `--project <path-substring>`, `--rules <dir>`,
   `--level <informational|low|medium|high|critical>` (hide lower), `--format <table|json|sarif|ndjson-ecs|ndjson-ocsf>`, `--no-index` (evaluate in
-  memory, write nothing), `--report <file>` (footprint report path; default `report.html` next to the index),
+  memory, write nothing), `--report <file>` (footprint report path; default `<index name>.footprint.html` next to the index),
   `--no-report`, `--fail-on <level>` (exit 1 at or above it, for CI), `--db <path>`,
   `--root <dir>` (Claude config dir or its `projects` dir; default `~/.claude`).
 - `rules list`, `rules show`: `--rules <dir>`. `rules test [dir]`: `--tests <dir>` (default `<dir>/../tests`).
@@ -176,7 +176,7 @@ Flags (from `--help`):
   self-contained 1200x630 share card (system fonts, no scripts or external references, secrets masked) that any
   browser shows and any tool can convert to PNG.
 - `purge`: `--db <path>`, `--yes`. Without `--yes` it only says what it would delete. It also deletes the
-  `report.html` next to the index.
+  index's footprint report (`index.footprint.html`).
 - `preflight [dir]`: `--rules <dir>`, `--format <table|json>`, `--fail-on <level>`, `--ignore <file>`.
 - `hook install`: `--agent <claude_code|codex|antigravity>`, `--mode <log|confirm|block>`, `--scope <user|project|local>`, `--settings <path>`, `--fail-closed`,
   `--dry-run`, `--allow-unsafe-path`. Start with `--mode log` and read `~/.retrohound/hook-log.jsonl` before blocking
@@ -243,22 +243,22 @@ installed paths every time and warns if they no longer pass.
 - **The index** is `~/.retrohound/index.db` (override with `--db`), directory 0700, file 0600 on macOS and Linux.
   On Windows those modes protect nothing; rely on your user profile permissions. It is long-lived evidence, so it
   may be the only copy of sessions Claude Code deleted. `retrohound purge --yes` deletes it, and the
-  `report.html` built from it.
+  footprint report built from it.
 
 ## Footprint report
 
-A table `scan` that writes the index also writes `report.html` next to it and prints its `file://` link. The page
+A table `scan` that writes the index also writes `index.footprint.html` next to it (named after the index) and prints its `file://` link. The page
 covers the whole index (every agent, project and session RetroHound has kept, not only this scan's `--since` or
 `--project`), and answers, in order:
 
-- **Can I trust this data?** Hash-chain check (ADR 0015), files gone, sessions kept after deletion, retention window.
+- **Can I trust this data?** Hash-chain size and head (check them with `retrohound verify`, ADR 0015), files gone, sessions kept after deletion, retention window.
 - **What is on this machine?** Agents, projects, sessions, events, share from sub-agents, blocked calls, findings.
 - **When?** Activity per day, with blocked calls and findings marked.
 - **Where did agents work?** Agent, then project, then session, then sub-agent, as a tree you expand.
 - **What could they reach?** MCP servers, hook commands, skills and plugins, and the domains they contacted.
 - **What must I rotate?** Each secret by fingerprint, with the sessions, sub-agents and projects it appeared in.
 - **How long were guard rails off?** Events and sessions per permission mode.
-- **What did they try?** Blocked calls by kind and category, and every finding.
+- **What did they try?** Blocked calls by kind and category, and findings (the 500 most severe, newest first).
 
 It is one HTML file with no scripts and a Content-Security-Policy that blocks loading anything, so it works offline
 and fetches nothing. Strings are masked as everywhere else. The file is 0600 like the index. `--no-report` skips it;

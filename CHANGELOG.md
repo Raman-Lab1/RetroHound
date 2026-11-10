@@ -6,11 +6,15 @@ and versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- `scan` writes a footprint report by default: `report.html` next to the index, one offline page (no scripts,
+- `scan` writes a footprint report by default: `index.footprint.html` next to the index (named after it), one offline page (no scripts,
   nothing fetched) with everything the index holds about the agents on this machine: trust in the data, activity,
   agent/project/session/sub-agent tree, MCP servers, hooks, skills and plugins, domains, secrets to rotate,
   permission modes, blocked calls and findings. `--report <file>` moves it, `--no-report` skips it; `--no-index` and
-  machine formats never write it. `purge` deletes it with the index.
+  machine formats never write it, and it may not overwrite the index. `purge` deletes it with the index.
+
+### Fixed
+- `incident` and `wrapped` pages: no whole-page mask pass after escaping, which could swallow markup after a short
+  `token=` value. Every value was already masked.
 
 ## [0.2.0] - 2026-11-09
 

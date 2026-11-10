@@ -25,7 +25,7 @@ import { testRules } from "./rules-test.ts";
 import { retentionDays, summaryLines } from "./summary.ts";
 import { defaultReportPath, writeFootprint } from "./footprint.ts";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 type ScanFlags = {
   since?: string; agent: string; project?: string; rules: string; extraRules?: string[]; level?: string; format: string;
@@ -34,6 +34,7 @@ type ScanFlags = {
 };
 
 const AGENTS = Object.keys(COLLECTORS);
+const DB_FILES = ["", "-wal", "-shm", "-journal"]; // the index and SQLite's side files
 const FORMATS = ["table", "json", "sarif", "ndjson-ecs", "ndjson-ocsf"] as const;
 
 async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
@@ -42,8 +43,10 @@ async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
   const format = oneOf("format", f.format, FORMATS);
   const level = f.level ? oneOf<Level>("level", f.level, LEVELS) : undefined;
   const failOn = f.failOn ? oneOf<Level>("level", f.failOn, LEVELS) : undefined;
-  if (typeof f.report === "string" && (!f.index || format !== "table")) {
-    throw new UsageError("--report needs the index and the table format: it is built from the index after the scan");
+  if (typeof f.report === "string") {
+    if (!f.index || format !== "table") throw new UsageError("--report needs the index and the table format: it is built from the index after the scan");
+    const db = resolve(f.db ?? defaultDbPath());
+    if (DB_FILES.some((s) => resolve(f.report as string) === db + s)) throw new UsageError("--report would overwrite the index");
   }
   const opts: ScanOptions = {
     agent, root: f.root, dbPath: f.db, rulesDir: f.rules, extraRules: f.extraRules, project: f.project, level, noIndex: !f.index,
@@ -82,14 +85,14 @@ async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
 function purgeCommand(f: { db?: string; yes?: boolean }, io: IO): number {
   const path = f.db ?? defaultDbPath();
   if (!existsSync(path)) return io.out(`Nothing to delete: ${path} does not exist.\n`), 0;
+  const page = defaultReportPath(path); // built from the index, so it goes with it; a --report elsewhere is the user's
   if (!f.yes) {
-    io.out(`Would delete the index ${path} (${statSync(path).size} bytes).\n`);
+    io.out(`Would delete the index ${path} (${statSync(path).size} bytes)${existsSync(page) ? ` and its footprint report ${page}` : ""}.\n`);
     io.out("It may hold the only copy of evidence Claude Code has since deleted. Re-run with --yes to delete it.\n");
     return 1;
   }
-  for (const suffix of ["", "-wal", "-shm", "-journal"]) rmSync(path + suffix, { force: true });
+  for (const suffix of DB_FILES) rmSync(path + suffix, { force: true });
   io.out(`Deleted ${path}\n`);
-  const page = defaultReportPath(path); // built from the index, so it goes with it; a --report elsewhere is the user's
   if (existsSync(page)) rmSync(page), io.out(`Deleted ${page}\n`);
   return 0;
 }

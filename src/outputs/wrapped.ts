@@ -1,5 +1,6 @@
 // `wrapped` card: pure data -> one self-contained HTML string. No assets, no scripts, works offline.
-// Every string is masked, then HTML-escaped; the finished document gets a last mask pass.
+// Every string is masked, then HTML-escaped. No whole-document mask pass: run over markup, a secret pattern can
+// swallow tags, and every value is already masked.
 import { mask } from "../normalize/mask.ts";
 
 export type WrappedData = {
@@ -49,7 +50,7 @@ export function renderWrappedSvg(d: WrappedData): string {
     + t(60, 70, 44, "#e8e8ea", "RetroHound Wrapped", 700) + t(60, 104, 22, "#8b93a7", `${d.period}${d.anonymized ? " (anonymized)" : ""}`, 700)
     + cells.join("") + t(60, 400, 20, "#8b93a7", "TOP RULES FIRED", 400)
     + (rules.length ? rules.join("") : t(60, 430, 22, "#e8e8ea", "none", 400)) + `</svg>\n`;
-  return mask(svg);
+  return svg;
 }
 
 export function renderWrapped(d: WrappedData): string {
@@ -68,5 +69,5 @@ export function renderWrapped(d: WrappedData): string {
     `<section><h2>Spiciest command</h2>${sp ? `<code>${h(sp.command)}</code><p>${h(sp.rule)} [${h(sp.level)}]</p>` : "<p>none</p>"}</section>`,
   ].join("");
   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>RetroHound Wrapped</title><style>${CSS}</style></head><body><div class="card">${body}</div></body></html>\n`;
-  return mask(html);
+  return html;
 }

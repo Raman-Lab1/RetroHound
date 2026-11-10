@@ -1,14 +1,16 @@
 // The footprint report `scan` writes by default: the whole index (every agent, project and session RetroHound has
 // kept, not only this scan's filters) as one offline page, next to the index. Read-only on the index.
 import { chmodSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, extname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { collectFootprint } from "../footprint/data.ts";
 import { renderFootprint } from "../footprint/html.ts";
 import { openReadOnly } from "../store/index.ts";
 import { loadRuleDir } from "./rules.ts";
 
-export const defaultReportPath = (dbPath: string) => join(dirname(dbPath), "report.html");
+/** Named after its index (index.db -> index.footprint.html), so it never lands on a file the user made, and purge
+ * of one index never takes another index's page. */
+export const defaultReportPath = (dbPath: string) => join(dirname(dbPath), `${basename(dbPath, extname(dbPath))}.footprint.html`);
 
 type Options = { dbPath: string; out: string; rulesDir: string; extraRules?: string[]; retentionDays?: number };
 
