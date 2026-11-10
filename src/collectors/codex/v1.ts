@@ -143,7 +143,7 @@ export async function parseFileWith(path: string, zstd: Zstd | null): Promise<Pa
     if (st.guardian) return o.type === "event_msg" ? guardian(o, lineNo, p) : undefined;
     if (o.type === "event_msg" && p.type === "item_completed" && p.item) {
       const fields = mapItem(p.item, st.sub);
-      if (fields) emit(o, lineNo, 0, fields);
+      for (const [n, f] of (Array.isArray(fields) ? fields : fields ? [fields] : []).entries()) emit(o, lineNo, n, f);
     } else if (o.type === "event_msg" && p.type === "turn_aborted") {
       abort(str(p.turn_id), str(p.reason) ?? "interrupted");
     } else if (o.type === "response_item" && st.legacy && p.type === "function_call" && LEGACY_SHELL.has(p.name)) {

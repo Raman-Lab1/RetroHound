@@ -79,13 +79,34 @@ function webFields(item: Line): Fields {
   return { ...ev, outcome: "success", ...(hits.length ? { tool_response: hits.join("\n") } : {}) };
 }
 
-/** Fields for one item, or undefined when the item is not an event (reasoning, a finished sub-agent, unknown kinds). */
-export function mapItem(item: Line, fromSubagent: boolean): Fields | undefined {
+/** apply_patch: one file_event per changed file, shaped like Claude Code's Write so the file rules apply. `tool_input` is
+ * the raw change (content, or the diff with its removed lines); `content` is what the file now holds: the whole file for
+ * an add, the diff's added lines for an update.
+ * ponytail: a moved file (`move_path`, never seen set) keeps its old path as target_path; the new one is in tool_input. */
+function fileFields(item: Line): Fields[] {
+  const changes = item.changes && typeof item.changes === "object" && !Array.isArray(item.changes) ? Object.entries(item.changes) : [];
+  const outcome = item.status === "completed" ? "success" : item.status === "failed" ? "error" : "unknown";
+  return changes.map(([path, c]) => {
+    const change: Line = c && typeof c === "object" ? c : {};
+    const ev: Fields = { ...mapToolUse("Write", { file_path: path, ...change }), tool_name: "apply_patch", outcome };
+    if (change.type === "update") {
+      const added = String(change.unified_diff ?? "").split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++ "));
+      ev.content = str(added.map((l) => l.slice(1)).join("\n"));
+    }
+    return ev;
+  });
+}
+
+/** Fields for one item (several for a multi-file patch), or undefined when the item is not an event (reasoning, a
+ * finished sub-agent, unknown kinds). */
+export function mapItem(item: Line, fromSubagent: boolean): Fields | Fields[] | undefined {
   switch (item.type) {
     case "CommandExecution":
       return commandFields(item);
     case "McpToolCall":
       return mcpFields(item);
+    case "FileChange":
+      return fileFields(item);
     case "Extension":
       return item.kind === "web.search" ? webFields(item) : undefined;
     case "UserMessage": {

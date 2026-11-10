@@ -57,6 +57,7 @@ text is not a stable structure. The structured record of what ran is `event_msg.
 | `item.type` | Count (main thread) | Fields seen | RetroHound event |
 |---|---|---|---|
 | `CommandExecution` | 11 | `command` (argv: on Windows `[pwsh.exe, -Command, <script>]`), `cwd` (**`file:///C:/...` URI**), `parsed_cmd[]` (`{type: unknown|read|listFiles|search, cmd}`), `exit_code` (int; `-1` when the process could not start), `status` (`completed`, `failed`), `aggregated_output` (truncated, R2), `duration {secs, nanos}`, `source` (`unified_exec_startup`), `process_id` (absent on spawn failure) | `process_creation`; `command_line` from `parsed_cmd[].cmd` (else the last argv element); `outcome` success/error |
+| `FileChange` | 15 (later look, 48 rollouts; macOS) | `changes` (object: absolute native path -> `{type: add, content}` or `{type: update, unified_diff, move_path}`; `move_path` always null so far), `status` (`completed`), `stdout`, `stderr` | `file_event`, one per changed path |
 | `McpToolCall` | 11 (later look, 48 rollouts) | `server`, `tool`, `arguments` (object), `status` (`completed`, `failed`), `result {content[] {type: text, text}, isError}`, `duration {secs, nanos}` | `mcp` (or `web_request` with a URL argument) |
 | `Extension` (`kind: web.search`) | 1 | `query`, `action {type: openPage, url}` (or a search), `results[] {domain, title, ref_id, snippet}` | `web_request` (`url`, `domain`) |
 | `SubAgentActivity` | 2 | `kind` (`started`, `completed`), `agent_thread_id`, `agent_path`, `model`, `reasoning_effort` | links parent and child thread |
@@ -74,9 +75,13 @@ sub-agent's instructions cannot be read from the parent; the child's own `UserMe
   approval mode chosen per command are not persisted. The model's request for escalation is visible
   only inside the `exec` script text (`sandbox_permissions: "require_escalated"`). A denied command that never ran
   leaves no trace. `outcome: blocked` for Codex needs the hook (R2), not the transcript.
-- **File writes as structured items.** In this run the agent wrote files through shell commands (`Set-Content`,
-  `New-Item`); no file-change item appeared. File events must come from parsing shell commands for now, or from an
-  `apply_patch`/file-change item if another run shows one.
+- **File writes as structured items (first run).** That run wrote files through shell commands (`Set-Content`,
+  `New-Item`) and had no file-change item. The later look found 15 `FileChange` items (the `apply_patch` tool): 26
+  paths, 10 `add` and 16 `update`. Shell writes stay shell commands.
+- **Skill and hook runs.** Not recorded. The only skill markers are `response_item` messages with
+  `content_item_metadata.provenance.type` `skills` / `content_item_kinds` `host_skills.instructions`: the list of skills
+  offered to the model at session start, not a skill being used. Hook markers are `provenance {type: harness, hook}`,
+  `hook: false` on all 21 seen; no hook event type exists in 48 rollouts.
 - **Interrupts:** `event_msg` `turn_aborted {type, turn_id, root_turn_id, reason: "interrupted", started_at}` marks a
   turn that was stopped. No `item_started` is persisted (0 in 522 lines): a command that never finished has no item at
   all. What links a call to its turn is position: calls follow the turn's `task_started`/`turn_context` (`turn_id`).
@@ -109,11 +114,11 @@ Code (ADR 0006, 0007).
 
 ## Open questions (need more runs)
 
-- Shape of `apply_patch` / file-change items in 0.167, and `.jsonl.zst` files (after 7 days).
+- `FileChange` `status` other than `completed`, a `delete` change and a set `move_path`; `.jsonl.zst` files (after 7 days).
 - Whether a denied escalation writes anything when the user picks "No" in the approval prompt (this run had none).
 - The Codex Desktop "legacy" imports of Claude Code sessions must be skipped to avoid double counting.
 
-## Collector mapping (`codex/v4`, src/collectors/codex)
+## Collector mapping (`codex/v5`, src/collectors/codex)
 
 Checked on the 4 local rollouts: 522 lines, 0 malformed, 0 crashes, 2 root sessions (sub-agent and guardian threads
 grouped under their root). Counts only; no real text is reproduced here or in the tests. v2 on the same files: the same
@@ -134,6 +139,12 @@ grouped under their root). Counts only; no real text is reproduced here or in th
   `mcp_tool` taken as given (not split from the name), `tool_input` = `arguments`, `tool_response` = the result text;
   `mcp`, or `web_request` when an argument is a URL (as for Claude Code); outcome `error` when `status` is `failed` or
   `result.isError`, `success` when `completed`. Seen: 7 completed / not error, 4 failed / `isError`; no `error` key.
+  `FileChange` (v5) -> one `file_event` per changed path, `tool_name` `apply_patch`, `target_path` the path (slashes
+  normalised), `tool_input` = the raw change, `content` = the whole file for `add`, the diff's added lines (`+` lines
+  without the `+++ ` header) for `update`, so the file rules see what was written; a secret on a removed line is still
+  flagged through `tool_input`. Outcome `success` for `completed`, `error` for `failed`. A moved file keeps its old path
+  as target (no sample). Checked: a synthetic add of `.mcp.json` with `mcpServers` fires `files_mcp_server_added` and
+  `control_plane_agent_config_write`; the 26 real paths fire nothing.
   `UserMessage` -> `user_prompt` (`prompt_source` typed, or system in a sub-agent).
   `AgentMessage` -> `assistant_message`. `SubAgentActivity` `started` -> `tool_call` `Agent`. Reasoning, `completed`
   sub-agent items and other `response_item` lines produce nothing.
@@ -179,5 +190,5 @@ inline tables, dotted keys outside a header and multi-line hook commands are not
 
 **Join with the index.** MCP servers: checked. Since `codex/v4` the rollout's `McpToolCall.server` fills `mcp_server`,
 and locally it matched 1 of 4 configured servers by name; one more server in use is a built-in no config file sets up.
-Hooks, skills and plugins: unverified. The collector fills no `attribution` or `hook:` event for Codex, so the page
-says their use is not recorded.
+Hooks, skills and plugins: checked, not recorded in rollouts (see "What is not in the rollout"), so the collector fills
+no `attribution` or `hook:` event for Codex and the page says their use is not recorded.

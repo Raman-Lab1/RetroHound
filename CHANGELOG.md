@@ -17,6 +17,9 @@ and versions follow [Semantic Versioning](https://semver.org/).
 - Codex collector (`codex/v4`): MCP tool calls are indexed as `mcp` events (`mcp__<server>__<tool>`, `mcp_server`,
   `mcp_tool`, arguments, result, outcome), so MCP rules fire on Codex and the footprint shows which Codex MCP servers
   were used. Codex rollouts are re-read once.
+- Codex collector (`codex/v5`): file edits made with `apply_patch` are indexed as `file_event`s, one per changed file,
+  with the content written, so the file rules (agent config writes, MCP servers added, secrets written) fire on
+  Codex edits, not only on its shell commands.
 - `scan --format attack-layer`: a MITRE ATT&CK Navigator layer (format 4.5) of the techniques this scan's findings map
   to, scored by finding count, with the rules behind each technique in its comment.
 

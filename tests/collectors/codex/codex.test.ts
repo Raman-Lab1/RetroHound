@@ -115,6 +115,29 @@ describe("MCP tool call", () => {
   });
 });
 
+describe("FileChange (apply_patch)", () => {
+  const patch = (changes: unknown, status = "completed") => item({ type: "FileChange", id: "p1", changes, status, stdout: "ok", stderr: "" });
+  const parse = async (...items: object[]) => (ord = 0, (await parseFile(write("patch.jsonl", [meta(ROOT), ...items]))).events);
+
+  test("one file_event per changed file, shaped like Write; an add carries the whole file", async () => {
+    const evs = await parse(patch({ "/w/a.txt": { type: "add", content: "one" }, "C:\\w\\b.txt": { type: "add", content: "two" } }));
+    expect(evs.map((e) => [e.category, e.tool_name, e.target_path, e.content, e.outcome])).toEqual([
+      ["file_event", "apply_patch", "/w/a.txt", "one", "success"], ["file_event", "apply_patch", "C:/w/b.txt", "two", "success"]]);
+    expect(new Set(evs.map((e) => e.id)).size).toBe(2);
+  });
+
+  test("an update's content is the added lines; a secret on a removed line is still flagged", async () => {
+    const diff = `--- a/.env\n+++ b/.env\n@@ -1,2 +1,2 @@\n-KEY=${KEY}\n+KEY=placeholder\n keep\n+added`;
+    const [ev] = await parse(patch({ "/w/.env": { type: "update", unified_diff: diff, move_path: null } }));
+    expect(ev).toMatchObject({ category: "file_event", target_path: "/w/.env", content: "KEY=placeholder\nadded", secret_kinds: ["aws_access_key"] });
+  });
+
+  test("a failed patch is an error; no changes, no event", async () => {
+    expect((await parse(patch({ "/w/a": { type: "add", content: "x" } }, "failed"))).map((e) => e.outcome)).toEqual(["error"]);
+    expect(await parse(patch({}), patch("nope"), patch(undefined))).toEqual([]);
+  });
+});
+
 describe("sub-agent thread", () => {
   const sub = () => {
     ord = 0;
@@ -284,6 +307,6 @@ describe("discover", () => {
   });
 
   test("collector shape", () => {
-    expect([codex.agent, codex.parserVersion]).toEqual(["codex", "codex/v4"]);
+    expect([codex.agent, codex.parserVersion]).toEqual(["codex", "codex/v5"]);
   });
 });
