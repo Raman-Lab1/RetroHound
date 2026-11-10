@@ -200,3 +200,44 @@ types only; values not read, not copied to fixtures). The envelope and line type
   `'`, or an odd number of `"` before it, not counting `"$(`).
 - There is no `legacy.ts`: inline sidechains and flat `agent-*.jsonl` parse with the same code, and no real legacy sample
   has shown a difference.
+
+## Configuration surface (read by `src/footprint/config-claude.ts`)
+
+Checked 2026-11-10 against this machine (key names and structure only, no values) and the docs at code.claude.com:
+`settings`, `mcp`, `managed-mcp`, `managed-settings`, `hooks`, `skills`, `plugins-reference`, `claude-directory`.
+`<cfg>` is `CLAUDE_CONFIG_DIR`, else `~/.claude`; `<managed>` is `/Library/Application Support/ClaudeCode` (macOS),
+`/etc/claude-code` (Linux, WSL), `C:\Program Files\ClaudeCode` (Windows).
+
+| Where | Scope | Key path | Kind |
+|---|---|---|---|
+| `~/.claude.json` (`<cfg>/.claude.json` when `CLAUDE_CONFIG_DIR` is set) | user | `mcpServers.<name>` | mcp_server |
+| same file | local | `projects["<abs project path>"].mcpServers.<name>` | mcp_server |
+| `<project>/.mcp.json` | project | `mcpServers.<name>` | mcp_server |
+| `<cfg>/settings.json`, `<project>/.claude/settings.json`, `<project>/.claude/settings.local.json` | user, project, local | `hooks.<Event>[].hooks[].command`; `enabledPlugins["<plugin>@<marketplace>"]: true` | hook, plugin |
+| `<managed>/managed-settings.json`, then `<managed>/managed-settings.d/*.json` (alphabetical) | managed | as settings, plus `managedMcpServers.<name>` | hook, plugin, mcp_server |
+| `<managed>/managed-mcp.json` | managed | `mcpServers.<name>` | mcp_server |
+| `<cfg>/skills/<dir>/SKILL.md`, `<project>/.claude/skills/<dir>/SKILL.md`, `<managed>/.claude/skills/<dir>/SKILL.md` | user, project, managed | frontmatter `name`, else `<dir>` | skill |
+| `<cfg>/plugins/installed_plugins.json` | - | `plugins["<plugin>@<marketplace>"][] {scope, projectPath?, installPath, lastUpdated, version}` | where an enabled plugin lives |
+| `<installPath>/.claude-plugin/plugin.json` (`name`, `hooks`, `mcpServers`), `hooks/hooks.json`, `.mcp.json`, `skills/<dir>/SKILL.md` | plugin | `hooks`/`mcpServers`: a `./file.json`, an inline object, or an array of either | hook, mcp_server, skill |
+
+MCP entries carry `type` (`stdio`, `http`, `sse`, `ws`; seen here: `stdio`), `command`, `args`, `env`, `url`, `headers`,
+`oauth`. Only the name and `type` are read. `~/.claude.json` also holds `oauthAccount` and other account state: never read out.
+
+Name mapping to the index (verified against the index unless marked):
+
+- `mcp_server` = the configured name with every character outside `A-Za-z0-9_-` made `_` (`Claude Browser` ->
+  `Claude_Browser`, `claude.ai Claude Docs` -> `claude_ai_Claude_Docs`: the attribution keeps the raw name). Plugin
+  servers are `plugin_<plugin>_<server>`, normalised the same way (docs; none called here).
+- Hooks: `command_line` is the `command` string as written, masked: `$CLAUDE_PROJECT_DIR` stays unexpanded (72 of 113
+  project hooks matched). Plugin hook commands keep `${CLAUDE_PLUGIN_ROOT}` as written: unverified, no plugin hook
+  event is in the index. Exec-form `args`, `http` and `mcp_tool` hooks are not read.
+- Skills: `skill:<name>` for user and project skills; `skill:<plugin>:<name>` for plugin skills (seen). A frontmatter
+  `name` that is not a valid skill name (spaces, capitals) falls back to the directory name (seen in the skill listing).
+- Plugins: `plugin:<plugin>`, the part of the `enabledPlugins` key before `@` (seen). Components are namespaced under
+  `plugin.json`'s `name` (docs).
+
+Not read: claude.ai connectors, built-in servers (`claude-in-chrome`) and desktop-app servers (`ccd_*`), which no file
+configures; bundled skills (`skill:claude-api`); synced skills (`<cfg>/skills/synced/`, named `anthropic-skills:<name>`)
+and synced plugins; nested `<subdir>/.claude/skills`; the plugin.json `skills` key and `.mcpb` bundles; MDM plists,
+the registry and server-managed settings; MCP approval state (`enabledMcpjsonServers`, `disabledMcpServers`).
+Installs at other versions than the most recently updated one, and plugins outside `<cfg>/plugins/`, are not read.
