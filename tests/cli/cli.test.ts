@@ -1,6 +1,6 @@
 // CLI in-process over temp dirs and hand-written defanged transcripts (example.invalid, placeholder values).
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { main } from "../../src/cli/main.ts";
@@ -103,6 +103,37 @@ describe("scan", () => {
     expect(out).toContain("No Claude Code sessions found");
   });
 
+  test("writes the footprint report next to the index by default, owner-only, and prints its file URL", async () => {
+    expect(await run("scan", ...common())).toBe(0);
+    const page = join(dir, "index.footprint.html");
+    expect(readFileSync(page, "utf8")).toContain("RetroHound footprint");
+    expect(statSync(page).mode & 0o777).toBe(0o600);
+    expect(out).toContain(`Footprint report (everything in the index): file://`);
+    expect(err).toBe("");
+  });
+
+  test("--report moves it; --no-report, --no-index and machine formats write none", async () => {
+    const page = join(dir, "elsewhere.html");
+    expect(await run("scan", ...common(), "--report", page)).toBe(0);
+    expect(existsSync(page)).toBe(true);
+    for (const flags of [["--no-report"], ["--format", "json"], ["--format", "sarif"], ["--no-index"]]) {
+      expect(await run("scan", ...common(), ...flags)).toBe(0);
+      expect(existsSync(join(dir, "index.footprint.html"))).toBe(false);
+    }
+  });
+
+  test.each([[["--no-index"]], [["--format", "json"]]])("--report with %j exits 2", async (flags) => {
+    expect(await run("scan", ...common(), "--report", join(dir, "r.html"), ...flags)).toBe(2);
+  });
+
+  test("--report onto the index or its WAL is refused and the index is untouched", async () => {
+    await run("scan", ...common());
+    for (const target of ["index.db", "index.db-wal"]) {
+      expect(await run("scan", ...common(), "--report", join(dir, target))).toBe(2);
+    }
+    expect(await run("query", "select count(*) as n from sessions", "--db", join(dir, "index.db"))).toBe(0);
+  });
+
   test("history.jsonl sessions without a transcript are counted from sessionId only", async () => {
     writeFileSync(join(dir, "claude", "history.jsonl"), `{"sessionId":"gone1","display":"prompt text"}\n{"sessionId":"abcdef123456"}\n`);
     await run("scan", ...common());
@@ -131,8 +162,10 @@ describe("purge", () => {
     expect(await run("purge", "--db", db)).toBe(1);
     expect(existsSync(db)).toBe(true);
     expect(out).toContain("Would delete");
+    expect(out).toContain("index.footprint.html");
     expect(await run("purge", "--db", db, "--yes")).toBe(0);
     expect(existsSync(db)).toBe(false);
+    expect(existsSync(join(dir, "index.footprint.html"))).toBe(false);
   });
 });
 

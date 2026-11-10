@@ -22,3 +22,10 @@ stub for its optional `react-devtools-core` import before Bun can bundle it.
 ## Consequences
 - The bundle stays small, with no React in the dependency tree.
 - Output stays scriptable and readable in CI logs and pipes.
+
+## Addendum 2026-11-10: the visual view is an offline HTML page, still no TUI
+`scan` now writes a footprint report (`src/footprint/`) after a table scan that writes the index. It is one static
+HTML file: inline SVG and CSS, `<details>` for the tree, no scripts and a CSP of `default-src 'none'`, so no library
+and no bundle growth beyond the page template. A localhost viewer was rejected: `src/` may not import network
+modules (tests/guards.test.ts). A JS chart or graph library inlined at build time was rejected for now: the views
+need bars, a strip and a tree, which SVG and CSS draw. Table, JSON, SARIF and NDJSON output are unchanged.

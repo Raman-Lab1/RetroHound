@@ -1,11 +1,12 @@
 // index.html of an incident pack: incident.json made readable, offline. No scripts, links, fonts or images, and a CSP
 // that forbids loading anything, since the text comes from transcripts an attacker may have shaped. Every cell is
-// masked, then escaped (as src/outputs/wrapped.ts does); the finished page gets a last mask pass.
+// masked, then escaped (as src/outputs/wrapped.ts does). No whole-page mask pass: run over markup, a secret pattern
+// can swallow tags (`token=abc</td></tr>...`), and every value is already masked.
 import { mask } from "../normalize/mask.ts";
 import type { Pack } from "./pack.ts";
 
 const ESC: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
-const h = (s: unknown) => mask(String(s ?? "")).replace(/[&<>"']/g, (c) => ESC[c]!);
+export const h = (s: unknown) => mask(String(s ?? "")).replace(/[&<>"']/g, (c) => ESC[c]!);
 const table = (head: string[], rows: unknown[][]) => rows.length
   ? `<table><tr>${head.map((c) => `<th>${h(c)}</th>`).join("")}</tr>${rows.map((r) => `<tr>${r.map((c) => `<td>${h(c)}</td>`).join("")}</tr>`).join("")}</table>`
   : "<p>none</p>";
@@ -42,5 +43,5 @@ export function renderIncidentHtml(p: Pack): string {
       [f.path, f.sha256, f.first_seen, f.last_seen, f.gone_at ?? "-"]))),
   ].join("\n");
   const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">`;
-  return mask(`<!doctype html><html lang="en"><head><meta charset="utf-8">${csp}<title>RetroHound incident ${h(p.selected.id.slice(0, 8))}</title><style>${CSS}</style></head><body>\n${body}\n</body></html>\n`);
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">${csp}<title>RetroHound incident ${h(p.selected.id.slice(0, 8))}</title><style>${CSS}</style></head><body>\n${body}\n</body></html>\n`;
 }
