@@ -1,2 +1,3 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"claude mcp add example -- node srv.js"}
 {"category":"process_creation","tool_name":"Bash","command_line":"claude mcp add-json example '{}'"}
+{"category": "process_creation", "agent": "codex_cli", "tool_name": "shell", "command_line": "codex mcp add example -- node srv.js"}

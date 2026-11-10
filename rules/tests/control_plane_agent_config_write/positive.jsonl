@@ -3,3 +3,5 @@
 {"category":"file_event","tool_name":"Write","target_path":"/home/dev/.gemini/settings.json","content":"{}","tool_input":"{\"file_path\":\"/home/dev/.gemini/settings.json\",\"content\":\"{}\"}"}
 {"category":"file_event","tool_name":"Write","target_path":"/home/dev/.claude.json","content":"{}","tool_input":"{\"file_path\":\"/home/dev/.claude.json\",\"content\":\"{}\"}"}
 {"category":"file_event","tool_name":"Write","target_path":"/home/dev/.cursor/mcp.json","content":"{}","tool_input":"{\"file_path\":\"/home/dev/.cursor/mcp.json\",\"content\":\"{}\"}"}
+{"category": "file_event", "agent": "codex_cli", "tool_name": "apply_patch", "target_path": "/home/x/proj/.codex/config.toml", "content": "model = \"example-model\""}
+{"category": "file_event", "agent": "claude_code", "tool_name": "Write", "target_path": "/home/x/.gemini/config/mcp_config.json", "content": "{\"mcpServers\":{}}"}

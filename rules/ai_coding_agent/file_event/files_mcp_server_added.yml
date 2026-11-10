@@ -4,16 +4,21 @@ id: b7b44fb9-02f5-4a6d-b25f-8159e88b7230
 title: MCP server added to an agent config
 status: experimental
 description: >
-  The agent writes a config that defines mcpServers (.mcp.json, ~/.claude.json, Claude settings). A new MCP server
-  gives a third party tool access inside the session. `claude mcp add` commands are files_mcp_server_command.
+  The agent writes a config that defines MCP servers: mcpServers in .mcp.json, ~/.claude.json, Claude settings,
+  .gemini/settings.json or Antigravity mcp_config.json, or `[mcp_servers.<name>]` in Codex .codex/config.toml. A new MCP server
+  gives a third party tool access inside the session. `claude mcp add` style commands are files_mcp_server_command.
 level: medium
 tags: [attack.persistence, attack.t1546, owasp_agentic.asi04, owasp_agentic.asi02]
 falsepositives:
   - A user who asked the agent to set up a known MCP server.
+  - A Codex config.toml rewrite that keeps an existing [mcp_servers.*] table unchanged.
 x-retrohound: { lane: hunt }
 logsource: { product: ai_coding_agent, category: file_event }
 detection:
   written:
-    target_path|endswith: ['/.mcp.json', '/.claude.json', '/.claude/settings.json', '/.claude/settings.local.json']
+    target_path|endswith: ['/.mcp.json', '/.claude.json', '/.claude/settings.json', '/.claude/settings.local.json', '/.gemini/settings.json', '/mcp_config.json']
     content|contains: '"mcpservers"'
-  condition: written
+  written_toml:
+    target_path|endswith: '/.codex/config.toml'
+    content|contains: 'mcp_servers'
+  condition: written or written_toml

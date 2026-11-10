@@ -4,9 +4,9 @@ name: control_plane_agent_config_risky_write
 author: Raman Kumar
 status: experimental
 description: >-
-  Same files as control_plane_agent_config_write (Write/Edit), but the written content adds `hooks` or SessionStart, an
-  `env.*_BASE_URL`, `apiKeyHelper`, `enableAllProjectMcpServers` / `enabledMcpjsonServers`, or an MCP server command
-  under a hidden directory. This is the persistence shape of supply-chain droppers (SessionStart hook running a repo-local
+  Same files as control_plane_agent_config_write (Write/Edit, apply_patch), but the written content adds `hooks` or SessionStart (also Codex `[hooks]`), an
+  `env.*_BASE_URL` or a TOML `base_url =`, `apiKeyHelper`, `enableAllProjectMcpServers` / `enabledMcpjsonServers`, or an MCP server command
+  under a hidden directory (JSON or Codex `[mcp_servers]` TOML). This is the persistence shape of supply-chain droppers (SessionStart hook running a repo-local
   script) and of CVE-2026-21852 style base-URL redirects. Shell writes are control_plane_agent_config_risky_shell_write.
   A permissions.allow wildcard is reported by control_plane_disable_safety.
 tags:
@@ -30,6 +30,12 @@ detection:
       - .continue/config.json
       - .windsurf/mcp.json
       - claude_desktop_config.json
+      - .codex/config.toml
+      - .codex/hooks.json
+      - .gemini/config/mcp_config.json
+      - .gemini/config/hooks.json
+      - .agents/mcp_config.json
+      - .agents/hooks.json
   selection_risky:
     - content|contains: &risky
         - '"hooks"'
@@ -40,9 +46,15 @@ detection:
         - apikeyhelper
         - enableallprojectmcpservers
         - enabledmcpjsonservers
+        - '[hooks'
+        - '[[hooks'
+        - 'base_url ='
+        - 'base_url='
     - tool_input|contains: *risky
     - content|re|i: &hidden_mcp '(?:mcpservers)[^}]{0,400}command\\{0,2}"\s{0,3}:\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
     - tool_input|re|i: *hidden_mcp
+    - content|re|i: '(?:mcp_servers)[^\[]{0,400}command\s{0,3}=\s{0,3}\[?\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
+    - tool_input|re|i: '(?:mcp_servers)[^\[]{0,400}command\s{0,3}=\s{0,3}\[?\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
   condition: selection_file and selection_risky
 falsepositives:
   - ruflo and similar tools register hook-handler commands under .claude/helpers on purpose
