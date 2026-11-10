@@ -11,7 +11,7 @@ import type { Category, RawEvent } from "../../normalize/types.ts";
 export const MAX_FILE_BYTES = 1_048_576;
 export const MAX_PACKAGES = 500; // workspace package.json files per repo
 export const MAX_WORKSPACE_DIRS = 5000; // directories a workspace glob (`**`) may list; a deep tree is reported, not walked
-const MAX_FILES = 400; // per directory walk; a bomb of agent files is reported as skipped, not read
+export const MAX_FILES = 400; // per directory walk; a bomb of agent files is reported as skipped, not read
 export const SESSION_ID = "preflight";
 const SKIP_DIRS = new Set(["node_modules", ".git"]);
 
@@ -28,8 +28,8 @@ const DIRS: [string, RegExp][] = [
   [".claude/agents", /\.md$/i], [".claude/commands", /\.md$/i], [".claude/skills", /(?:^|\/)SKILL\.md$/i], [".cursor/rules", /\.mdc?$/i],
 ];
 
-const fwd = (p: string) => p.replaceAll("\\", "/");
-const inside = (root: string, p: string) => p === root || p.startsWith(root + "/");
+export const fwd = (p: string) => p.replaceAll("\\", "/");
+export const inside = (root: string, p: string) => p === root || p.startsWith(root + "/");
 
 function event(rel: string, abs: string, category: Category, n: number, ts: string): RawEvent {
   const id = createHash("sha256").update(`${SESSION_ID}\0${rel}\0${n}`).digest("hex").slice(0, 32);
@@ -53,7 +53,7 @@ function workspaceGlobs(root: string): string[] {
 }
 
 /** Hook commands of a settings.json become `hook:<Event>` process_creation events, as the live parser emits them. */
-function hookCommands(text: string): [string, string][] {
+export function hookCommands(text: string): [string, string][] {
   try {
     const hooks = (JSON.parse(text) as { hooks?: Record<string, unknown> }).hooks ?? {};
     return Object.entries(hooks).flatMap(([name, groups]) =>

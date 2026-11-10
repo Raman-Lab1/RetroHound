@@ -36,7 +36,7 @@ async function setup() {
   const lines = [row(1, `hitcmd https://example.invalid/x ${CWD}/a.txt`), row(2, "ls", { agentId: "a1" })];
   writeFileSync(join(proj, "sess1111.jsonl"), lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
   const io: IO = { out: () => {}, err: () => {}, isTTY: false, env: {} };
-  await main(["scan", "--root", join(dir, "claude"), "--db", db, "--rules", join(dir, "rules")], io);
+  await main(["scan", "--root", join(dir, "claude"), "--db", db, "--rules", join(dir, "rules"), "--no-report"], io);
   return { dir, db };
 }
 

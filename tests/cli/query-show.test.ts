@@ -34,7 +34,7 @@ let out: string;
 let err: string;
 let io: IO;
 const run = (...argv: string[]) => main(argv, io);
-const scan = () => run("scan", "--root", join(dir, "claude"), "--db", db, "--rules", join(dir, "rules"));
+const scan = () => run("scan", "--root", join(dir, "claude"), "--db", db, "--rules", join(dir, "rules"), "--no-report");
 
 beforeEach(async () => {
   dir = mkdtempSync(join(base, "case-"));

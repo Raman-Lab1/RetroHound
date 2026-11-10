@@ -151,3 +151,28 @@ grouped under their root). Counts only; no real text is reproduced here or in th
   the path without `.zst`.
 - **Legacy Claude imports:** `discover` skips rollouts whose uuid is an `imported_thread_id` in
   `external_agent_session_imports.json` (field names from R2; no such ledger on the local machine, so unverified).
+
+## Configuration surface (`src/footprint/config-codex.ts`, footprint "configured versus used")
+
+Checked 2026-11-10 on macOS (Codex Desktop + CLI) by key names and table headers only, against the
+[config reference](https://learn.chatgpt.com/docs/config-file/config-reference), [hooks](https://learn.chatgpt.com/docs/hooks)
+and [skills](https://learn.chatgpt.com/docs/build-skills) docs. `$CODEX_HOME` defaults to `~/.codex`.
+
+| What | Location (scope) | Key path | Item `name` | Seen here |
+|---|---|---|---|---|
+| MCP server | `$CODEX_HOME/config.toml` (user), `<project>/.codex/config.toml` (project, trusted projects only) | `[mcp_servers.<name>]`; `command` = stdio, `url` = streamable HTTP; `enabled = false` drops it | `<name>` | both |
+| Hook | `$CODEX_HOME/hooks.json` (user), `<project>/.codex/hooks.json` (project) | `hooks.<Event>[].hooks[].command`, the Claude Code shape | the command (masked), `detail` `hook:<Event>` | project only |
+| Hook (inline) | the same `config.toml` files | `[[hooks.<Event>]]` / `[[hooks.<Event>.hooks]]` `command = '...'` | as above | docs only |
+| Plugin | `$CODEX_HOME/config.toml` (user) | `[plugins."<plugin>@<marketplace>"]`, `enabled` | `<plugin>` (Claude Code's indexed `plugin:<x>` has no `@`) | yes |
+| Skill | `$HOME/.agents/skills/<dir>/SKILL.md`, `$CODEX_HOME/skills/<dir>/SKILL.md` (user), `<project>/.agents/skills/<dir>/SKILL.md` (project) | frontmatter `name` | `name`, else `<dir>` | project only |
+
+Not read: env, args, headers, URLs, tokens (only key names decide the transport); plugin-bundled hooks, MCP servers and
+skills (`plugins/cache/<marketplace>/<plugin>/<version>/`: config does not say which version is active); managed
+`requirements.toml`; `/etc/codex/skills`; `.agents/skills` in parent folders up to the repo root; project trust
+(`projects.<path>.trust_level`), so an untrusted project's files are listed too. TOML is a line scan, not a parser:
+inline tables, dotted keys outside a header and multi-line hook commands are not read (the last are reported skipped).
+
+**Join with the index: unverified.** The collector (`codex/v3`) fills no `mcp_server`, `attribution` or `hook:` event
+for Codex (0 rows in the local index). The forms above follow R2: rollout `McpToolCall.server` and hook tool names
+`mcp__<server>__<tool>` carry the configured server name. Locally the one `McpToolCall` in 39 rollouts names a server
+that no config file sets up (a built-in), so no configured name could be matched yet.

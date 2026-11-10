@@ -101,6 +101,29 @@ describe("renderFootprint", () => {
     expect(renderFootprint(d)).toContain("7 more sessions not shown");
   });
 
+  test("configured versus used: never-seen items flagged, unlisted ones listed, hostile names escaped", () => {
+    const d = sample();
+    d.configured = {
+      items: [{ agent: "claude_code", kind: "mcp_server", name: EVIL, scopes: ["local", "project"], files: 3, source: "/home/dev/app/.mcp.json", detail: "stdio",
+        events: 0, sessions: 0, observable: true },
+      { agent: "codex", kind: "hook", name: "node guard.js", scopes: ["user"], files: 1, source: "/home/dev/.codex/hooks.json", detail: "hook:PreToolUse",
+        events: 0, sessions: 0, observable: false }],
+      unlisted: [{ agent: "claude_code", kind: "skill", name: "gone-skill", events: 2, sessions: 1, last_ts: T0 }],
+      files: 4, skipped: 1,
+    };
+    const page = renderFootprint(d);
+    expect(page).toContain("<h2>Configured versus used</h2>");
+    expect(page).toContain("Read now from 4 agent config files, 1 skipped");
+    expect(page).toContain(`<span class="warn">never seen used</span>`);
+    expect(page).toContain("<b>codex · hook</b> · 1 configured · use not recorded in this agent's transcripts");
+    expect(page).toContain(`<span class="mu">not recorded</span>`);
+    expect(page).toContain("gone-skill");
+    expect(page).toContain("<td>local, project</td>");
+    expect(page).toContain("/home/dev/app/.mcp.json and 2 more");
+    expect(page).not.toContain(EVIL);
+    expect(renderFootprint(sample())).not.toContain("Configured versus used"); // no config read: no section
+  });
+
   test("an empty index still renders a whole page", () => {
     const e = renderFootprint(empty());
     expect(e).toContain("index predates the hash chain");

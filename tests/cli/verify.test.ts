@@ -37,7 +37,7 @@ let db: string;
 let transcript: string;
 let out: string;
 let io: IO;
-const scan = () => main(["scan", "--root", join(dir, "claude"), "--db", db, "--rules", join(dir, "rules")], io);
+const scan = () => main(["scan", "--root", join(dir, "claude"), "--db", db, "--rules", join(dir, "rules"), "--no-report"], io);
 
 /** Runs `verify` the way main.ts will once it registers it. */
 async function verify(...argv: string[]): Promise<number> {

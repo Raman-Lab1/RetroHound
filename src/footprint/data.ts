@@ -7,7 +7,9 @@ import { LEVELS, type Level } from "../normalize/types.ts";
 import { GENESIS } from "../store/chain.ts";
 import type { Db, SqlValue } from "../store/sqlite.ts";
 import { TOOL_VERSION } from "../version.ts";
-import type { AgentNode, FindingRow, Footprint, ProjectNode, SecretReach, Seen, SessionNode, SubAgentNode } from "./types.ts";
+import type {
+  AgentNode, ConfigFootprint, ConfigItem, ConfigRead, FindingRow, Footprint, ProjectNode, SecretReach, Seen, SessionNode, SubAgentNode,
+} from "./types.ts";
 
 const SESSION_CAP = 200; // sessions listed in the agent tree, across all projects
 const FINDING_CAP = 500; // finding rows
@@ -35,7 +37,56 @@ export function top<T>(rows: T[], cap: number, order?: (a: T, b: T) => number): 
   return [sorted.slice(0, cap), Math.max(0, rows.length - cap)];
 }
 
-export function collectFootprint(db: Db, opts: { rules: Rule[]; retentionDays?: number; now?: Date }): Footprint {
+const CONFIG_CAP = 500; // distinct configured items listed (agent + kind + name)
+// Agents whose collector records MCP servers, hook runs and skill/plugin attribution (docs/logsource.md: Claude-only)
+const OBSERVABLE = new Set(["claude_code"]);
+const UNLISTED_CAP = 100; // used-but-not-configured rows listed
+
+type Used = { agent: string; kind: ConfigItem["kind"]; name: string; events: number; sessions: number; last_ts: string };
+const key = (x: { agent: string; kind: string; name: string }) => `${x.agent}\0${x.kind}\0${x.name}`;
+
+/** Each configured item with how often transcripts show it in use, and what was used that no config file read now
+ * sets up. Skills and plugins count the tool calls attributed to them (`attribution`), not the Skill call itself; a
+ * plugin also counts the calls of its own skills (`skill:<plugin>:<name>`), since the transcript names the skill first.
+ * ponytail: a plugin's MCP servers (`plugin_<p>_<server>`) are not counted toward it: the split is ambiguous when names
+ * hold `_`. Count them if plugins turn out to be used through MCP only. */
+export function compareConfig(db: Db, reads: ConfigRead[]): [ConfigFootprint, number] {
+  const used = db.prepare(`SELECT agent, kind, name, COUNT(*) AS events, COUNT(DISTINCT session_id) AS sessions, MAX(ts) AS last_ts FROM (
+      SELECT agent, 'mcp_server' AS kind, mcp_server AS name, session_id, ts FROM events WHERE mcp_server IS NOT NULL
+      UNION ALL SELECT agent, 'hook', COALESCE(command_line, tool_name), session_id, ts FROM events WHERE tool_name LIKE 'hook:%'
+      UNION ALL SELECT agent, 'skill', substr(attribution, 7), session_id, ts FROM events WHERE attribution LIKE 'skill:%'
+      UNION ALL SELECT agent, 'plugin', CASE WHEN attribution LIKE 'plugin:%' THEN substr(attribution, 8)
+        ELSE substr(attribution, 7, instr(substr(attribution, 7), ':') - 1) END, session_id, ts
+        FROM events WHERE attribution LIKE 'plugin:%' OR attribution LIKE 'skill:%:%'
+    ) GROUP BY agent, kind, name`).all() as unknown as Used[];
+  const byKey = new Map(used.map((u) => [key(u), u]));
+  const items = reads.flatMap((r) => r.items);
+  const configured = new Set(items.map(key));
+  const order = (a: { agent: string; kind: string; name: string; events: number }, b: typeof a) =>
+    asc(a.agent, b.agent) || asc(a.kind, b.kind) || b.events - a.events || asc(a.name, b.name);
+  const merged = new Map<string, { i: ConfigItem; scopes: Set<string>; files: Set<string>; details: Set<string> }>();
+  for (const i of items) {
+    const m = merged.get(key(i)) ?? { i, scopes: new Set(), files: new Set(), details: new Set() };
+    m.scopes.add(i.scope);
+    m.files.add(i.source);
+    if (i.detail) m.details.add(i.detail);
+    merged.set(key(i), m);
+  }
+  const [listed, cutItems] = top([...merged.values()].map(({ i, scopes, files, details }) => {
+    const u = byKey.get(key(i));
+    return {
+      agent: i.agent, kind: i.kind, name: i.name, ...(details.size ? { detail: [...details].sort(asc).join(", ") } : {}),
+      scopes: [...scopes].sort(asc), files: files.size, source: [...files].sort(asc)[0]!,
+      events: u?.events ?? 0, sessions: u?.sessions ?? 0, ...(u ? { last_ts: u.last_ts } : {}), observable: OBSERVABLE.has(i.agent),
+    };
+  }), CONFIG_CAP, order);
+  const [unlisted, cutUnlisted] = top(used.filter((u) => !configured.has(key(u))), UNLISTED_CAP, order);
+  const files = reads.reduce((n, r) => n + r.files, 0);
+  const skipped = reads.reduce((n, r) => n + r.skipped.length, 0);
+  return [{ items: listed, unlisted, files, skipped }, cutItems + cutUnlisted];
+}
+
+export function collectFootprint(db: Db, opts: { rules: Rule[]; retentionDays?: number; now?: Date; config?: ConfigRead[] }): Footprint {
   const all = <T>(sql: string, ...p: SqlValue[]) => db.prepare(sql).all(...p) as unknown as T[];
   const one = <T>(sql: string) => all<T>(sql)[0]!;
 
@@ -133,6 +184,7 @@ export function collectFootprint(db: Db, opts: { rules: Rule[]; retentionDays?: 
   const [mcp, cutMcp] = top(seen("mcp_server", "mcp_server IS NOT NULL"), TOOL_CAP);
   const [hooks, cutHooks] = top(seen("COALESCE(command_line, tool_name)", "tool_name LIKE 'hook:%'", "tool_name"), TOOL_CAP);
   const [attributions, cutAttr] = top(seen("attribution", "attribution IS NOT NULL"), TOOL_CAP);
+  const [configured, cutConfig] = opts.config ? compareConfig(db, opts.config) : [undefined, 0];
   const [domains, omittedDomains] = top(seen("domain", "domain IS NOT NULL"), DOMAIN_CAP);
 
   const findingsByDay = new Map(all<{ day: string; n: number }>("SELECT substr(ts, 1, 10) AS day, COUNT(*) AS n FROM findings GROUP BY day")
@@ -185,7 +237,11 @@ export function collectFootprint(db: Db, opts: { rules: Rule[]; retentionDays?: 
         AND denial_category IS NOT NULL GROUP BY name ORDER BY count DESC, name`),
     },
     findings: findings.map(({ id, ...f }) => ({ ...f, rule: loaded.get(f.rule) ?? f.rule })),
-    omitted: { sessions: omittedSessions, findings: omittedFindings, domains: omittedDomains, secrets: omittedSecrets, tools: cutMcp + cutHooks + cutAttr },
+    ...(configured ? { configured } : {}),
+    omitted: {
+      sessions: omittedSessions, findings: omittedFindings, domains: omittedDomains, secrets: omittedSecrets,
+      tools: cutMcp + cutHooks + cutAttr + cutConfig, // configured-versus-used rows count as tools
+    },
   };
   // Plain objects out (Node rows have a null prototype), SQL NULLs dropped as absent optionals (chain keeps its null),
   // and every string masked again.
