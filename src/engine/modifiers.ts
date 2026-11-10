@@ -3,6 +3,7 @@
 // at most once per event, however many rules read it.
 import { isInside } from "../normalize/paths.ts";
 import { downloadExecuted, resetDerived, unquotedOf } from "./derived.ts";
+import { firstSeen } from "./first-seen.ts";
 import type { RawEvent } from "../normalize/types.ts";
 
 export type Row = Record<string, unknown>;
@@ -33,6 +34,10 @@ const UNQUOTED = "command_line_unquoted";
 const BOOLEANS = new Map<string, { reads: string[]; test: (ev: Row) => boolean }>([
   ["target_outside_project", { reads: ["target_path", "project_path"], test: (ev) => outsideProject(ev) }],
   ["download_executed", { reads: ["command_line"], test: (ev) => typeof ev.command_line === "string" && downloadExecuted(ev.command_line) }],
+  // From the scan's pre-pass, not the event's fields (first-seen.ts). `reads` names the field so load.ts can demand
+  // `x-retrohound.requires: [first_seen]`.
+  ["first_seen_project", { reads: ["first_seen_project"], test: (ev) => firstSeen("project", ev) }],
+  ["first_seen_global", { reads: ["first_seen_global"], test: (ev) => firstSeen("global", ev) }],
 ]);
 const FIELDS = new Set([...Object.keys(FIELD_TABLE), ...BOOLEANS.keys(), UNQUOTED]);
 const ALIASES = new Map([
