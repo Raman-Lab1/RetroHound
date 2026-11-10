@@ -6,7 +6,8 @@ status: experimental
 description: >-
   A shell command (sed -i, redirect, tee, cp, mv, sponge, Set-Content, Add-Content, Out-File) writes an AI-tool
   control-plane file: .claude/settings.json, .claude/settings.local.json, .mcp.json, ~/.claude.json,
-  .gemini/settings.json, .cursor/mcp.json, .continue/config.json, .windsurf/mcp.json or the Claude Desktop config.
+  .gemini/settings.json, .cursor/mcp.json, .continue/config.json, .windsurf/mcp.json, the Claude Desktop config, Codex .codex/config.toml and .codex/hooks.json, or Antigravity
+  .gemini/config/{mcp_config,hooks}.json and project .agents/.
   Write/Edit are control_plane_agent_config_write. Commands that add hooks, SessionStart, a *_BASE_URL, apiKeyHelper
   or MCP auto-enable are control_plane_agent_config_risky_shell_write.
 tags:
@@ -28,7 +29,13 @@ detection:
       - .continue?config.json
       - .windsurf?mcp.json
       - claude_desktop_config.json
-    command_line|re|i: '(?:^|[\s;&|(`])(?:sed\s(?:\S{1,12}\s){0,3}-[a-z]{0,6}i\b|tee\s|cp\s|mv\s|sponge\s|set-content\s|add-content\s|out-file\s)|[^>\d&]>{1,2}\s{0,3}[^\s;&|]{0,200}(?:settings(?:\.local)?\.json|mcp\.json|\.claude\.json|config\.json)'
+      - .codex?config.toml
+      - .codex?hooks.json
+      - .gemini?config?mcp_config.json
+      - .gemini?config?hooks.json
+      - .agents?mcp_config.json
+      - .agents?hooks.json
+    command_line|re|i: '(?:^|[\s;&|(`])(?:sed\s(?:\S{1,12}\s){0,3}-[a-z]{0,6}i\b|tee\s|cp\s|mv\s|sponge\s|set-content\s|add-content\s|out-file\s)|[^>\d&]>{1,2}\s{0,3}[^\s;&|]{0,200}(?:settings(?:\.local)?\.json|mcp\.json|\.claude\.json|config\.json|config\.toml|hooks\.json)'
   selection_risky:
     - command_line|contains: &risky
         - '"hooks"'
@@ -39,7 +46,13 @@ detection:
         - apikeyhelper
         - enableallprojectmcpservers
         - enabledmcpjsonservers
+        - '[hooks'
+        - '[[hooks'
+        - 'base_url ='
+        - 'base_url='
     - tool_input|contains: *risky
+    - command_line|re|i: '(?:mcp_servers)[^\[]{0,400}command\s{0,3}=\s{0,3}\[?\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
+    - tool_input|re|i: '(?:mcp_servers)[^\[]{0,400}command\s{0,3}=\s{0,3}\[?\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
     - tool_input|re|i: '(?:mcpservers)[^}]{0,400}command\\{0,2}"\s{0,3}:\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
   condition: selection_bash and not selection_risky
 falsepositives:
