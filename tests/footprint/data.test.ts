@@ -187,6 +187,34 @@ describe("compareConfig", () => {
     }
   });
 
+  test("a plugin also counts calls on its own MCP servers: longest name wins, each event once", async () => {
+    const d = join(base, "plugin-mcp");
+    const sid = "4444aaaa-0000-4000-8000-000000000004";
+    mkdirSync(join(d, "claude", "projects", "-home-x-kit"), { recursive: true });
+    const attr = { attributionSkill: "kit:review", attributionPlugin: "kit" };
+    const lines = [
+      use(sid, 1, "m1", "mcp__plugin_kit_srv__go", {}),
+      use(sid, 2, "m2", "mcp__plugin_kit_extra_srv__go", {}), // belongs to kit_extra, not kit
+      use(sid, 3, "m3", "mcp__plugin_kit_srv__go", {}, attr), // attributed and on its server: once
+      use(sid, 4, "m4", "mcp__plugin_other_srv__go", {}),
+    ];
+    writeFileSync(join(d, "claude", "projects", "-home-x-kit", `${sid}.jsonl`), lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
+    const path = join(d, "index.db");
+    await runScan({ root: join(d, "claude"), dbPath: path, rulesDir: rules });
+    const index = openReadOnly(path);
+    try {
+      const p = (name: string) => ({ agent: "claude_code", kind: "plugin" as const, name, scope: "user", source: "/home/x/.claude/settings.json" });
+      const c = collectFootprint(index, { rules: [], now, config: [{ items: [p("kit"), p("kit_extra")], files: 1, skipped: [] }] }).configured!;
+      expect(c.items.map((i) => [i.name, i.events])).toEqual([["kit", 2], ["kit_extra", 1]]);
+      // more configured plugins than SQLite allows terms in a compound SELECT (500)
+      const many = Array.from({ length: 600 }, (_, i) => p(`pad${i}`));
+      const big = collectFootprint(index, { rules: [], now, config: [{ items: [...many, p("kit"), p("kit_extra")], files: 1, skipped: [] }] }).configured!;
+      expect(big.items.filter((i) => i.events).map((i) => [i.name, i.events])).toEqual([["kit", 2], ["kit_extra", 1]]);
+    } finally {
+      index.close();
+    }
+  });
+
   test("used but configured nowhere is listed; no config read leaves the section out", () => {
     expect(configured([])!.unlisted.map((u) => [u.agent, u.kind, u.name, u.events])).toEqual([["claude_code", "hook", "node hook.js", 1], ["claude_code", "mcp_server", "srv", 1]]);
     expect(collect().configured).toBeUndefined();

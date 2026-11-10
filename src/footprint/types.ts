@@ -69,7 +69,8 @@ export type ConfigItem = {
   agent: string; // claude_code | codex | antigravity: the index's `agent` column
   kind: "mcp_server" | "hook" | "skill" | "plugin";
   // In the index's own form, so it joins with what transcripts show: the `mcp_server` column value; the hook's
-  // `command_line`; for skill/plugin the part after `skill:` / `plugin:` in `attribution`.
+  // `command_line`; for skill/plugin the part after `skill:` / `plugin:` in `attribution`. A plugin's events also include
+  // the calls on its own MCP servers (`plugin_<name>_<server>`), each event once.
   name: string;
   scope: string; // user | project | local | managed | plugin
   source: string; // the file it was read from

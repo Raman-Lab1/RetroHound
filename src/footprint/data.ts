@@ -48,17 +48,27 @@ const key = (x: { agent: string; kind: string; name: string }) => `${x.agent}\0$
 /** Each configured item with how often transcripts show it in use, and what was used that no config file read now
  * sets up. Skills and plugins count the tool calls attributed to them (`attribution`), not the Skill call itself; a
  * plugin also counts the calls of its own skills (`skill:<plugin>:<name>`), since the transcript names the skill first.
- * ponytail: a plugin's MCP servers (`plugin_<p>_<server>`) are not counted toward it: the split is ambiguous when names
- * hold `_`. Count them if plugins turn out to be used through MCP only. */
+ * A plugin also counts the calls on its own MCP servers, named `plugin_<plugin>_<server>` with the plugin name
+ * normalised like the config reader does; of the configured plugins the longest whose `plugin_<name>_` prefixes the
+ * server wins (names may hold `_`). An event counts once per plugin, whether attributed, on its server, or both. */
+const norm = (s: string) => s.replace(/[^A-Za-z0-9_-]/g, "_");
 export function compareConfig(db: Db, reads: ConfigRead[]): [ConfigFootprint, number] {
+  const plugins = [...new Set(reads.flatMap((r) => r.items).filter((i) => i.agent === "claude_code" && i.kind === "plugin").map((i) => i.name))];
+  // [prefix, name] pairs as one JSON parameter: a compound SELECT per plugin would stop at SQLite's 500 terms
+  const pairs = JSON.stringify(plugins.map((n) => [`plugin_${norm(n)}_`, n]));
   const used = db.prepare(`SELECT agent, kind, name, COUNT(*) AS events, COUNT(DISTINCT session_id) AS sessions, MAX(ts) AS last_ts FROM (
       SELECT agent, 'mcp_server' AS kind, mcp_server AS name, session_id, ts FROM events WHERE mcp_server IS NOT NULL
       UNION ALL SELECT agent, 'hook', COALESCE(command_line, tool_name), session_id, ts FROM events WHERE tool_name LIKE 'hook:%'
       UNION ALL SELECT agent, 'skill', substr(attribution, 7), session_id, ts FROM events WHERE attribution LIKE 'skill:%'
-      UNION ALL SELECT agent, 'plugin', CASE WHEN attribution LIKE 'plugin:%' THEN substr(attribution, 8)
-        ELSE substr(attribution, 7, instr(substr(attribution, 7), ':') - 1) END, session_id, ts
-        FROM events WHERE attribution LIKE 'plugin:%' OR attribution LIKE 'skill:%:%'
-    ) GROUP BY agent, kind, name`).all() as unknown as Used[];
+      UNION ALL SELECT agent, 'plugin', name, session_id, ts FROM (
+        SELECT id, agent, CASE WHEN attribution LIKE 'plugin:%' THEN substr(attribution, 8)
+          ELSE substr(attribution, 7, instr(substr(attribution, 7), ':') - 1) END AS name, session_id, ts
+          FROM events WHERE attribution LIKE 'plugin:%' OR attribution LIKE 'skill:%:%'${plugins.length ? `
+        UNION SELECT id, agent, (SELECT json_extract(c.value, '$[1]') FROM json_each(?) AS c
+          WHERE substr(mcp_server, 1, length(json_extract(c.value, '$[0]'))) = json_extract(c.value, '$[0]')
+          ORDER BY length(json_extract(c.value, '$[0]')) DESC LIMIT 1), session_id, ts FROM events WHERE agent = 'claude_code' AND mcp_server LIKE 'plugin\\_%' ESCAPE '\\'` : ""}
+      ) WHERE name IS NOT NULL
+    ) GROUP BY agent, kind, name`).all(...(plugins.length ? [pairs] : [])) as unknown as Used[];
   const byKey = new Map(used.map((u) => [key(u), u]));
   const items = reads.flatMap((r) => r.items);
   const configured = new Set(items.map(key));
