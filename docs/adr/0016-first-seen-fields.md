@@ -37,8 +37,8 @@ tamper-evident (0015): a new event column changes every row's JSON and forces a 
   latest `ts`.
 - A detection that reads either field must declare `x-retrohound.requires: [first_seen]` (`first-seen-not-required`
   otherwise), and such a rule must be lane `hunt` (`first-seen-enforce`). `requires` takes known values only.
-- The live hook has no index: it loads enforce-lane rules only, so it never runs one of these rules. Elsewhere without a
-  pre-pass (`rules test`) both fields are false.
+- The live hook has no index: it loads enforce-lane rules only, so it never runs one of these rules. `rules test` runs the
+  pre-pass over each test file (amended with the first rules that read the fields).
 
 ## Consequences
 - The hash chain, the schema and the stored events are unchanged: no migration, no re-seed.
@@ -49,4 +49,4 @@ tamper-evident (0015): a new event column changes every row's JSON and forces a 
   differ only in a masked secret are one value in the index and two with `--no-index`.
 - With any rule reading the fields, every indexed scan runs the query, warm scans included. Indexed scans hold every
   agent's dirty sessions in memory at once, instead of one agent's.
-- `rules test` cannot make these fields true: a positive test for such a rule needs the pre-pass over its test file.
+- A positive test for such a rule spans 14 days: an old baseline line with an explicit `ts`.

@@ -1,6 +1,6 @@
 // `first_seen_project` and `first_seen_global` (ADR 0016). The scan computes them in a pre-pass over every event it can
 // see, the index or the in-memory events, before it evaluates; nothing is stored. Rules read the result through
-// BOOLEANS in modifiers.ts. Without a pre-pass (the live hook, `rules test`) both are false.
+// BOOLEANS in modifiers.ts. `rules test` runs it over each test file; without one (the live hook) both are false.
 type Row = Record<string, unknown>;
 
 /** Event ids that are the earliest (ts, id) carrier of a value: per (project_path, kind, value), and per (kind, value). */

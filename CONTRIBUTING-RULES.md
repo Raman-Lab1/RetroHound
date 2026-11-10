@@ -37,6 +37,8 @@ partial event; missing contract fields are filled in (category defaults to `tool
 - Correlation, positive: the file is one session and the rule must fire on it.
 - Negative: non-empty, and the rule must not fire on the file. Put near-misses here (the safe form, the benign look-alike).
 - Include match-only fields (`content`, `tool_input`, ...) in the line if the rule reads them.
+- `first_seen_*` are computed over the file, and stay false unless its `ts` values span 14 days: give such a file an
+  old baseline line, for example `"ts":"2025-12-10T00:00:00.000Z"` (lines default to 2026-01-01, one second apart).
 
 ```
 {"category":"process_creation","tool_name":"Bash","command_line":"git push --force origin main"}
