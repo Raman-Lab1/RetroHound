@@ -54,7 +54,7 @@ retrohound query "SELECT category, count(*) AS n FROM events GROUP BY category O
 retrohound verify                 # check the index was not edited; keep the printed head somewhere safe
 
 # 7. Machine-readable output and CI gates
-retrohound scan --format json > report.json      # also sarif, ndjson-ecs, ndjson-ocsf
+retrohound scan --format json > report.json      # also sarif, ndjson-ecs, ndjson-ocsf, attack-layer
 retrohound scan --no-index --fail-on high         # exit code 1 if anything high or critical is found
 
 # 8. A shareable summary with project and user names hashed
@@ -164,7 +164,7 @@ bun test
 Flags (from `--help`):
 
 - `scan`: `--since <30d|12h|date>`, `--agent <claude_code|codex|antigravity>`, `--project <path-substring>`, `--rules <dir>`,
-  `--level <informational|low|medium|high|critical>` (hide lower), `--format <table|json|sarif|ndjson-ecs|ndjson-ocsf>`, `--no-index` (evaluate in
+  `--level <informational|low|medium|high|critical>` (hide lower), `--format <table|json|sarif|ndjson-ecs|ndjson-ocsf|attack-layer>`, `--no-index` (evaluate in
   memory, write nothing), `--report <file>` (footprint report path; default `<index name>.footprint.html` next to the index),
   `--no-report`, `--fail-on <level>` (exit 1 at or above it, for CI), `--db <path>`,
   `--root <dir>` (Claude config dir or its `projects` dir; default `~/.claude`).
@@ -190,7 +190,8 @@ Flags (from `--help`):
   command; at run time a missing extra dir is one stderr line and the hook still decides with the rules that do load.
 
 `scan --format json` prints one document, schema `retrohound.scan/0.1`; `sarif` is SARIF 2.1.0 and `ndjson-ecs` /
-`ndjson-ocsf` give one SIEM line per finding: [docs/output-schema.md](docs/output-schema.md).
+`ndjson-ocsf` give one SIEM line per finding; `attack-layer` is a MITRE ATT&CK Navigator layer of the techniques the
+findings map to, scored by finding count (open it in the Navigator): [docs/output-schema.md](docs/output-schema.md).
 
 ### Ignoring known-benign findings
 
