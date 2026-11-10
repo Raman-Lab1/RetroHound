@@ -99,6 +99,22 @@ export const MIGRATIONS: readonly Migration[] = [
   `,
   // 3: the hash chain (ADR 0015), seeded from the rows already present; sha256 needs JS, hence a function.
   createChain,
+  // 4: what the agents' config files set up at each indexed scan (src/footprint/snapshot.ts), the last 10 scans kept.
+  // Not chained, like `sessions`: it is re-read from the config files on every scan. `hash` is entryHash of the masked
+  // entry, never the value. rule_runs.config_items is NULL for a scan that took no snapshot (every scan before this).
+  `
+  CREATE TABLE config_snapshots (
+    scan_id INTEGER NOT NULL, -- rule_runs.id
+    agent TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    name TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    source TEXT NOT NULL,
+    hash TEXT NOT NULL
+  );
+  CREATE INDEX config_snapshots_scan ON config_snapshots (scan_id);
+  ALTER TABLE rule_runs ADD COLUMN config_items INTEGER;
+  `,
 ];
 
 /** Applies the entries `db` has not had yet, each in its own transaction. Refuses a DB newer than `migrations`, and

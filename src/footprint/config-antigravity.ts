@@ -22,13 +22,14 @@ export const readAntigravityConfig: ConfigReader = ({ home, projects }) => {
       return void c.skip(file, "not JSON");
     }
   };
-  // `mcpServers.<name>`: `command` is stdio, `serverUrl`/`url` Streamable HTTP. Only key names are looked at.
+  // `mcpServers.<name>`: `command` is stdio, `serverUrl`/`url` Streamable HTTP. Only key names are looked at; the
+  // values go into the hash only.
   const mcp = (root: string, file: string, scope: string) => {
     for (const [name, s] of Object.entries(obj(json(root, file)?.mcpServers))) {
       const v = obj(s);
       if (v.disabled === true) continue;
       const detail = "command" in v ? "stdio" : "serverUrl" in v || "url" in v ? "http" : undefined;
-      c.add({ kind: "mcp_server", name, scope, source: file, ...(detail ? { detail } : {}) });
+      c.add({ kind: "mcp_server", name, scope, source: file, ...(detail ? { detail } : {}) }, v);
     }
   };
   // Top-level keys are named groups (`enabled: false` turns one off). PreToolUse/PostToolUse hold {matcher, hooks: [...]},

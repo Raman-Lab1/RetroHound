@@ -124,6 +124,20 @@ describe("renderFootprint", () => {
     expect(renderFootprint(sample())).not.toContain("Configured versus used"); // no config read: no section
   });
 
+  test("config changes: nothing to compare until two snapshots, then new, changed and removed, escaped", () => {
+    const d = sample();
+    d.config_changes = { compared: false, new: [], changed: [], removed: [] };
+    expect(renderFootprint(d)).toContain("Nothing to compare yet");
+    const row = (name: string) => ({ agent: "claude_code", kind: "mcp_server", name, scope: "user", source: "/home/dev/.claude.json" });
+    d.config_changes = { compared: true, new: [row(EVIL)], changed: [row("edited")], removed: [] };
+    const page = renderFootprint(d);
+    expect(page).toContain("<h3>New since last scan</h3>");
+    expect(page).toContain("<h3>Changed since last scan</h3><div class=\"w\"><table><tr><th>agent</th>");
+    expect(page).toContain("<td>edited</td>");
+    expect(page).not.toContain(EVIL);
+    expect(renderFootprint(sample())).not.toContain("What changed in their config?");
+  });
+
   test("an empty index still renders a whole page", () => {
     const e = renderFootprint(empty());
     expect(e).toContain("index predates the hash chain");

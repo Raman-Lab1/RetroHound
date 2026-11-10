@@ -29,7 +29,7 @@ user can open it with `sqlite3`; `query` being read-only (0002) only keeps Retro
   to `success`. A parser-version rebuild chains a delete and a write for each event.
 - Not chained: `files_indexed.last_seen`, which every scan rewrites for every file (chaining it would add one entry per
   file per scan), so it is left out of the row hash; `sessions`, which is recomputed from events; `rule_runs`, which
-  is bookkeeping.
+  is bookkeeping; `config_snapshots`, which is re-read from the config files at every scan.
 - Upgrading: migration 3 seeds the chain from the rows already there (`files_indexed` by path, then `events` and
   `findings` by id) as `seed` entries; the same rows give the same head. **History before the upgrade is attested
   only from that point:** a seed entry records what the index held at upgrade, not that it was never changed before.

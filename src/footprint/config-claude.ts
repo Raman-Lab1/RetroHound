@@ -2,13 +2,13 @@
 // the MCP servers, hooks, skills and plugins set up on this machine, named in the index's own form so they join with
 // what transcripts show. Files are read as text from fixed locations only: nothing is executed, imported, fetched or
 // written, no symlink is followed out of the directory being read, and env, headers, args, url and OAuth/token values
-// are never read out. Every string returned is masked.
+// are never read out, only hashed after masking (entryHash). Every string returned is masked.
 import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { fwd, hookCommands, inside, MAX_FILE_BYTES, MAX_FILES } from "../collectors/repo/collect.ts";
 import { settingsPath } from "../hooks/install.ts";
 import { mask } from "../normalize/mask.ts";
-import { type ConfigItem, type ConfigRead, type ConfigReader, MAX_CONFIG_ITEMS } from "./types.ts";
+import { type ConfigItem, type ConfigRead, type ConfigReader, entryHash, MAX_CONFIG_ITEMS } from "./types.ts";
 
 // ponytail: the index can hold thousands of project paths; the first 200 are read, which bounds a report's disk reads.
 export const MAX_PROJECTS = 200;
@@ -39,13 +39,13 @@ export function readClaude({ home, projects, env = process.env }: Parameters<Con
   const out: ConfigRead = { items: [], files: 0, skipped: [] };
   const skip = (path: string, reason: string) => void out.skipped.push({ path: mask(path), reason });
   let full = false;
-  const add = (kind: ConfigItem["kind"], name: string, scope: string, source: string, detail?: string) => {
+  const add = (kind: ConfigItem["kind"], name: string, scope: string, source: string, detail?: string, entry: unknown = [name, detail]) => {
     if (out.items.length >= MAX_CONFIG_ITEMS) {
       if (!full) skip(source, `more than ${MAX_CONFIG_ITEMS} configured items, the rest left out`);
       full = true;
       return;
     }
-    out.items.push({ agent: "claude_code", kind, name: mask(name), scope, source: mask(source), ...(detail ? { detail: mask(detail) } : {}) });
+    out.items.push({ agent: "claude_code", kind, name: mask(name), scope, source: mask(source), ...(detail ? { detail: mask(detail) } : {}), hash: entryHash(entry) });
   };
 
   /** The text of a regular file that resolves inside `root` and fits MAX_FILE_BYTES; a missing file is normal. */
@@ -90,11 +90,11 @@ export function readClaude({ home, projects, env = process.env }: Parameters<Con
     }
   };
 
-  // Server names only, plus the transport: env, headers, args and url stay unread.
+  // Server names only, plus the transport: env, headers, args and url go into the hash only.
   const servers = (map: unknown, scope: string, source: string, prefix = "") => {
     for (const [name, s] of Object.entries(obj(map))) {
       const type = obj(s).type;
-      add("mcp_server", toolName(prefix + name), scope, source, typeof type === "string" ? type : undefined);
+      add("mcp_server", toolName(prefix + name), scope, source, typeof type === "string" ? type : undefined, s);
     }
   };
   const hooks = (text: string, scope: string, source: string) => {
@@ -120,7 +120,7 @@ export function readClaude({ home, projects, env = process.env }: Parameters<Con
       const text = read(file, root);
       if (text === undefined) continue;
       const front = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? "";
-      add("skill", prefix + (/^name:[ \t]*["']?([a-z0-9-]+)["']?[ \t]*\r?$/m.exec(front)?.[1] ?? e.name), scope, file);
+      add("skill", prefix + (/^name:[ \t]*["']?([a-z0-9-]+)["']?[ \t]*\r?$/m.exec(front)?.[1] ?? e.name), scope, file, undefined, text);
     }
   };
   /** One installed plugin: hooks/hooks.json, .mcp.json and skills/, plus the hooks and MCP servers plugin.json adds. */
