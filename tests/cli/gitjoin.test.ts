@@ -66,3 +66,14 @@ test("a project whose history lacks the secret exits 0; bad input exits 2", asyn
   expect(await run("git-secrets", "--db", db, "--format", "xml")).toBe(2);
   expect(await run("git-secrets", "--db", join(base, "missing.db"))).toBe(2);
 });
+
+test("no git on PATH: every project is skipped, no hang", async () => {
+  const path = process.env.PATH;
+  process.env.PATH = mkdtempSync(join(base, "empty-path-"));
+  try {
+    expect(await run("git-secrets", "--db", db, "--format", "json")).toBe(0);
+  } finally {
+    process.env.PATH = path;
+  }
+  expect(JSON.parse(out)).toMatchObject({ hits: [], projects_scanned: 0, projects_skipped: [clean, leaky, join(base, "not-a-repo")] });
+}, 5000);
