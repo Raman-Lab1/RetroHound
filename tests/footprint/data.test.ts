@@ -144,3 +144,29 @@ describe("collectFootprint", () => {
     expect(fp.agents).toEqual([]);
   });
 });
+
+describe("compareConfig", () => {
+  const item = (kind: "mcp_server" | "hook", name: string) => ({ agent: "claude_code", kind, name, scope: "user", source: "/home/x/.claude.json" });
+  const configured = (config: Parameters<typeof collectFootprint>[1]["config"]) => {
+    const index = openReadOnly(db);
+    try {
+      return collectFootprint(index, { rules: [], now, config }).configured;
+    } finally {
+      index.close();
+    }
+  };
+
+  test("each configured item with its use, never-seen ones at 0, and nothing unlisted when all is configured", () => {
+    const c = configured([{ items: [item("mcp_server", "idle"), item("mcp_server", "srv"), item("hook", "node hook.js")], files: 2,
+      skipped: [{ path: "/home/x/.claude.json", reason: "larger than 1048576 bytes" }] }])!;
+    expect(c.items.map((i) => [i.kind, i.name, i.events, i.sessions])).toEqual([["hook", "node hook.js", 1, 1], ["mcp_server", "srv", 1, 1], ["mcp_server", "idle", 0, 0]]);
+    expect(c.items[2]!.last_ts).toBeUndefined();
+    expect(c.unlisted).toEqual([]);
+    expect(c).toMatchObject({ files: 2, skipped: 1 });
+  });
+
+  test("used but configured nowhere is listed; no config read leaves the section out", () => {
+    expect(configured([])!.unlisted.map((u) => [u.agent, u.kind, u.name, u.events])).toEqual([["claude_code", "hook", "node hook.js", 1], ["claude_code", "mcp_server", "srv", 1]]);
+    expect(collect().configured).toBeUndefined();
+  });
+});

@@ -89,6 +89,16 @@ function tree(agents: Footprint["agents"]): string {
 const seen = (label: string, rows: Seen[]) => `<h3>${h(label)}</h3>` + table([label, "events", "sessions", "blocked", "% sub-agent", "first seen", "last seen"],
   rows.map((s) => [s.detail ? `${s.name} (${s.detail})` : s.name, s.events, s.sessions, s.blocked, pct(s.sub_agent, s.events), s.first_ts, s.last_ts]));
 
+function configured(c: NonNullable<Footprint["configured"]>): string {
+  const used = (n: number) => (n ? h(n) : `<span class="warn">never seen used</span>`);
+  return `<p class="mu">Read now from ${h(c.files)} agent config files${c.skipped ? `, ${h(c.skipped)} skipped` : ""}: names and hook `
+    + "commands only, never env, headers or arguments. Skills and plugins count the tool calls made under them.</p>"
+    + `<h3>Set up in config</h3>${table(["agent", "kind", "name", "scope", "events", "sessions", "last seen", "file"], c.items.map((i) =>
+      [i.agent, i.kind, i.detail ? `${i.name} (${i.detail})` : i.name, i.scope, raw(used(i.events)), i.sessions, i.last_ts ?? "-", i.source]))}`
+    + `<h3>Used, but in no config file read now</h3><p class="mu">Removed since, or set up where RetroHound does not read.</p>`
+    + table(["agent", "kind", "name", "events", "sessions", "last seen"], c.unlisted.map((u) => [u.agent, u.kind, u.name, u.events, u.sessions, u.last_ts]));
+}
+
 export function renderFootprint(d: Footprint): string {
   const T = d.totals;
   const tile = (label: string, v: unknown, hot = false) => `<div class="t${hot ? " hot" : ""}"><b>${h(v)}</b>${h(label)}</div>`;
@@ -106,6 +116,7 @@ export function renderFootprint(d: Footprint): string {
     section("Where did agents work?", tree(d.agents)),
     section("What could they reach?", seen("MCP servers", d.tools.mcp_servers) + seen("Hooks", d.tools.hooks)
       + seen("Skills and plugins", d.tools.attributions)),
+    d.configured ? section("Configured versus used", configured(d.configured)) : "",
     section("Who did they contact?", table(["#", "domain", "share", "events", "sessions", "blocked", "% sub-agent", "first seen", "last seen"],
       d.domains.map((x, i) => [i + 1, x.name, raw(`<div class="bw"><div class="bar" style="width:${Math.round((x.events / dmax) * 100)}%"></div></div>`),
         x.events, x.sessions, x.blocked, pct(x.sub_agent, x.events), x.first_ts, x.last_ts]))),

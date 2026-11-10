@@ -101,6 +101,23 @@ describe("renderFootprint", () => {
     expect(renderFootprint(d)).toContain("7 more sessions not shown");
   });
 
+  test("configured versus used: never-seen items flagged, unlisted ones listed, hostile names escaped", () => {
+    const d = sample();
+    d.configured = {
+      items: [{ agent: "claude_code", kind: "mcp_server", name: EVIL, scope: "project", source: "/home/dev/app/.mcp.json", detail: "stdio", events: 0, sessions: 0 },
+        { agent: "codex", kind: "hook", name: "node guard.js", scope: "user", source: "/home/dev/.codex/hooks.json", detail: "hook:PreToolUse", events: 3, sessions: 1, last_ts: T1 }],
+      unlisted: [{ agent: "claude_code", kind: "skill", name: "gone-skill", events: 2, sessions: 1, last_ts: T0 }],
+      files: 4, skipped: 1,
+    };
+    const page = renderFootprint(d);
+    expect(page).toContain("<h2>Configured versus used</h2>");
+    expect(page).toContain("Read now from 4 agent config files, 1 skipped");
+    expect(page).toContain(`<span class="warn">never seen used</span>`);
+    expect(page).toContain("gone-skill");
+    expect(page).not.toContain(EVIL);
+    expect(renderFootprint(sample())).not.toContain("Configured versus used"); // no config read: no section
+  });
+
   test("an empty index still renders a whole page", () => {
     const e = renderFootprint(empty());
     expect(e).toContain("index predates the hash chain");
