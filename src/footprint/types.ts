@@ -88,8 +88,8 @@ export type ConfigReader = (o: { home: string; projects: string[]; env?: Record<
 /** Configured versus observed: each item with how often transcripts show it, and what transcripts show that no
  * config file read now sets up (removed since, or set up somewhere RetroHound does not read). */
 export type ConfigFootprint = {
-  // events 0 means "never seen used" only when `observable`: Codex and Antigravity transcripts, as collected, record no
-  // MCP server, hook run or skill/plugin attribution, so for them 0 says nothing.
+  // events 0 means "never seen used" only when `observable`: as collected, Codex transcripts record MCP calls but no hook
+  // run or skill/plugin attribution, and Antigravity's none of the four, so for those 0 says nothing.
   // One row per agent + kind + name, however many files set it up (a skill folder copied into every project is one row).
   items: {
     agent: string; kind: ConfigItem["kind"]; name: string;

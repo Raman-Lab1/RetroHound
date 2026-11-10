@@ -48,14 +48,28 @@ function commandFields(item: Line): Fields {
   const ev = shellFields(argvOf(item.command), cwdOf(item.cwd));
   const ok = item.status === "completed" && item.exit_code === 0;
   ev.outcome = ok ? "success" : item.status === "failed" || (typeof item.exit_code === "number" && item.exit_code !== 0) ? "error" : "unknown";
-  const out = str(item.aggregated_output);
-  if (out) {
-    ev.tool_response = out;
-    const kinds = secretKinds(out);
-    if (kinds.length) ev.result_secret_kinds = kinds;
-  }
+  withOutput(ev, str(item.aggregated_output));
   const cwd = cwdOf(item.cwd);
   return cwd ? { ...ev, project_path: cwd } : ev;
+}
+
+function withOutput(ev: Fields, out: string | undefined) {
+  if (!out) return;
+  ev.tool_response = out;
+  const kinds = secretKinds(out);
+  if (kinds.length) ev.result_secret_kinds = kinds;
+}
+
+/** An MCP call, named as Claude Code and Codex hooks name it (`mcp__<server>__<tool>`), with the exact server and tool:
+ * the name split in mapToolUse guesses when a tool name holds `__`. */
+function mcpFields(item: Line): Fields | undefined {
+  const server = str(item.server), tool = str(item.tool);
+  if (!server || !tool) return undefined;
+  const ev: Fields = { ...mapToolUse(`mcp__${server}__${tool}`, item.arguments ?? {}), mcp_server: server, mcp_tool: tool };
+  const failed = item.status === "failed" || item.result?.isError === true || item.error != null;
+  ev.outcome = failed ? "error" : item.status === "completed" ? "success" : "unknown";
+  withOutput(ev, textOf(item.result?.content));
+  return ev;
 }
 
 function webFields(item: Line): Fields {
@@ -70,6 +84,8 @@ export function mapItem(item: Line, fromSubagent: boolean): Fields | undefined {
   switch (item.type) {
     case "CommandExecution":
       return commandFields(item);
+    case "McpToolCall":
+      return mcpFields(item);
     case "Extension":
       return item.kind === "web.search" ? webFields(item) : undefined;
     case "UserMessage": {

@@ -38,8 +38,8 @@ export function top<T>(rows: T[], cap: number, order?: (a: T, b: T) => number): 
 }
 
 const CONFIG_CAP = 500; // distinct configured items listed (agent + kind + name)
-// Agents whose collector records MCP servers, hook runs and skill/plugin attribution (docs/logsource.md: Claude-only)
-const OBSERVABLE = new Set(["claude_code"]);
+// What each collector records in use (docs/logsource.md): Claude Code all four kinds, Codex its MCP calls only
+const OBSERVABLE = new Set(["claude_code", "codex:mcp_server"]);
 const UNLISTED_CAP = 100; // used-but-not-configured rows listed
 
 type Used = { agent: string; kind: ConfigItem["kind"]; name: string; events: number; sessions: number; last_ts: string };
@@ -77,7 +77,7 @@ export function compareConfig(db: Db, reads: ConfigRead[]): [ConfigFootprint, nu
     return {
       agent: i.agent, kind: i.kind, name: i.name, ...(details.size ? { detail: [...details].sort(asc).join(", ") } : {}),
       scopes: [...scopes].sort(asc), files: files.size, source: [...files].sort(asc)[0]!,
-      events: u?.events ?? 0, sessions: u?.sessions ?? 0, ...(u ? { last_ts: u.last_ts } : {}), observable: OBSERVABLE.has(i.agent),
+      events: u?.events ?? 0, sessions: u?.sessions ?? 0, ...(u ? { last_ts: u.last_ts } : {}), observable: OBSERVABLE.has(i.agent) || OBSERVABLE.has(`${i.agent}:${i.kind}`),
     };
   }), CONFIG_CAP, order);
   const [unlisted, cutUnlisted] = top(used.filter((u) => !configured.has(key(u))), UNLISTED_CAP, order);

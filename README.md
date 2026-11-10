@@ -262,8 +262,9 @@ covers the whole index (every agent, project and session RetroHound has kept, no
 - **Configured versus used:** what each agent's config files set up (MCP servers, hooks, skills, plugins, per scope)
   next to how often transcripts show it used. Items never seen used are flagged (surface you may not need), and
   anything used that no config file sets up now is listed (removed since, or set up somewhere unexpected). One row
-  per item, with every scope and how many files set it up. Use is visible in Claude Code transcripts only; for Codex
-  and Antigravity the page lists what is configured and says their use is not recorded.
+  per item, with every scope and how many files set it up. Use is visible in Claude Code transcripts, and for Codex
+  MCP servers; for Codex hooks, skills and plugins and for Antigravity the page lists what is configured and says their
+  use is not recorded.
 - **What must I rotate?** Each secret by fingerprint, with the sessions, sub-agents and projects it appeared in.
 - **How long were guard rails off?** Events and sessions per permission mode.
 - **What did they try?** Blocked calls by kind and category, and findings (the 500 most severe, newest first).
@@ -322,7 +323,7 @@ read the [code of conduct](CODE_OF_CONDUCT.md), and report vulnerabilities or ru
 
 - v0.2: `hook` (log / confirm / block) with a parsed-rule cache and install path checks, SARIF and NDJSON export,
   `preflight`, `mcp`, ignore file, `wrapped` SVG card, Codex CLI and Antigravity CLI collectors. Next: `scan --agent all`,
-  Codex file-edit and MCP items once real samples exist, Gemini CLI.
+  Codex file-edit items once real samples exist, Gemini CLI.
   Dropped: rule #22 (ssh/scp to an unknown host; no threat needs it and it is noisy).
 - Later: SIEM conversion via pySigma, upstream logsource proposal to SigmaHQ.
 
