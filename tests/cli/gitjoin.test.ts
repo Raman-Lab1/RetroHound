@@ -1,0 +1,68 @@
+// git-secrets over an index built by a real scan and throwaway local repos. Placeholder keys only.
+import { afterAll, beforeAll, expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { IO } from "../../src/cli/io.ts";
+import { main } from "../../src/cli/main.ts";
+
+const KEY = "AK" + "IA" + "EXAMPLE0".repeat(2); // matches aws_access_key; split so the source never holds it whole
+const base = mkdtempSync(join(tmpdir(), "rh-gj-"));
+afterAll(() => rmSync(base, { recursive: true, force: true }));
+const db = join(base, "index.db");
+const leaky = join(base, "leaky");
+const clean = join(base, "clean");
+
+const repo = (dir: string, content: string) => {
+  mkdirSync(dir);
+  const git = (...a: string[]) => execFileSync("git", ["-C", dir, ...a], { stdio: "ignore" });
+  git("init", "-q");
+  git("config", "user.name", "Test");
+  git("config", "user.email", "test@example.invalid");
+  git("config", "commit.gpgsign", "false");
+  writeFileSync(join(dir, "config.env"), content);
+  git("add", ".");
+  git("commit", "-q", "-m", "add config");
+};
+const session = (sid: string, cwd: string) =>
+  JSON.stringify({
+    type: "assistant", uuid: `u-${sid}`, sessionId: sid, timestamp: "2026-11-07T10:00:00.000Z", cwd,
+    message: { content: [{ type: "tool_use", id: `t-${sid}`, name: "Bash", input: { command: `aws configure set aws_access_key_id ${KEY}` } }] },
+  }) + "\n";
+
+let out = "";
+const io: IO = { out: (s) => (out += s), err: (s) => (out += s), isTTY: false, env: {} };
+const run = (...argv: string[]) => ((out = ""), main(argv, io));
+
+beforeAll(async () => {
+  repo(leaky, `AWS_ACCESS_KEY_ID=${KEY}\n`);
+  repo(clean, "AWS_REGION=us-east-1\n");
+  const proj = join(base, "claude", "projects", "p");
+  mkdirSync(proj, { recursive: true });
+  writeFileSync(join(proj, "aaaa1111.jsonl"), session("aaaa1111", leaky));
+  writeFileSync(join(proj, "bbbb2222.jsonl"), session("bbbb2222", clean));
+  writeFileSync(join(proj, "cccc3333.jsonl"), session("cccc3333", join(base, "not-a-repo")));
+  expect(await run("scan", "--root", join(base, "claude"), "--db", db, "--no-report")).toBe(0);
+});
+
+test("a secret the agent saw and that is committed: exit 1, commit and session named, value never printed", async () => {
+  expect(await run("git-secrets", "--db", db, "--format", "json")).toBe(1);
+  expect(out).not.toContain(KEY);
+  const r = JSON.parse(out);
+  expect(r.hits).toHaveLength(1);
+  expect(r.hits[0]).toMatchObject({ kinds: ["aws_access_key"], file: "config.env", sessions: ["aaaa1111", "bbbb2222", "cccc3333"] });
+  expect(r.hits[0].commit).toMatch(/^[0-9a-f]{12}$/);
+  expect(r.projects_scanned).toBe(2);
+  expect(r.projects_skipped).toEqual([join(base, "not-a-repo")]);
+  expect(await run("git-secrets", "--db", db)).toBe(1);
+  expect(out).toContain("1 commit(s) hold a secret the agent saw");
+  expect(out).not.toContain(KEY);
+});
+
+test("a project whose history lacks the secret exits 0; bad input exits 2", async () => {
+  expect(await run("git-secrets", "--db", db, "--project", "clean")).toBe(0);
+  expect(out).toContain("0 commit(s)");
+  expect(await run("git-secrets", "--db", db, "--format", "xml")).toBe(2);
+  expect(await run("git-secrets", "--db", join(base, "missing.db"))).toBe(2);
+});

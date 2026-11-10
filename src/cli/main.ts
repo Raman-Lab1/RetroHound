@@ -13,6 +13,7 @@ import { toSarif } from "../outputs/sarif.ts";
 import { toTable } from "../outputs/table.ts";
 import { defaultDbPath } from "../store/index.ts";
 import { oneOf, parseSince, processIO, UsageError, useColor, type IO } from "./io.ts";
+import { registerGitSecrets } from "./gitjoin.ts";
 import { registerHook } from "./hook.ts";
 import { registerIncident } from "./incident.ts";
 import { registerVerify } from "./verify.ts";
@@ -149,6 +150,7 @@ export function buildProgram(io: IO, setCode: (n: number) => void): Command {
   registerPreflight(program, run, io);
   registerMcp(program, run, io);
   registerHook(program, run, io);
+  registerGitSecrets(program, run, io);
   return program;
 }
 
