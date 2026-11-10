@@ -267,7 +267,8 @@ covers the whole index (every agent, project and session RetroHound has kept, no
   anything used that no config file sets up now is listed (removed since, or set up somewhere unexpected). One row
   per item, with every scope and how many files set it up. Use is visible in Claude Code transcripts, and for Codex
   MCP servers; for Codex hooks, skills and plugins and for Antigravity the page lists what is configured and says their
-  use is not recorded.
+  use is not recorded (their transcripts hold no such record). A plugin counts the calls made under it, under its skills
+  and on its own MCP servers, each call once.
 - **What must I rotate?** Each secret by fingerprint, with the sessions, sub-agents and projects it appeared in.
 - **How long were guard rails off?** Events and sessions per permission mode.
 - **What did they try?** Blocked calls by kind and category, and findings (the 500 most severe, newest first).

@@ -22,6 +22,13 @@ and versions follow [Semantic Versioning](https://semver.org/).
   Codex edits, not only on its shell commands.
 - `scan --format attack-layer`: a MITRE ATT&CK Navigator layer (format 4.5) of the techniques this scan's findings map
   to, scored by finding count, with the rules behind each technique in its comment.
+- Footprint: a configured Claude Code plugin also counts the calls on its own MCP servers (`plugin_<plugin>_<server>`),
+  each call once next to its attributed calls and its skills' calls.
+
+### Changed
+- Agent-config rules (`files_mcp_server_added`, `control_plane_agent_config_*`) also cover Codex (`.codex/config.toml`
+  `[mcp_servers]`, `[hooks]` and `base_url`, `.codex/hooks.json`) and Antigravity (`.gemini/config/mcp_config.json`,
+  `hooks.json`, project `.agents/`) config files.
 
 ### Fixed
 - `incident` and `wrapped` pages: no whole-page mask pass after escaping, which could swallow markup after a short
