@@ -133,16 +133,41 @@ stripped before output. For ECS the primary event's attributes are copied into t
 Detection Finding (`class_uid` 2004, `type_uid` 200401, `activity_id` 1, `status_id` 1, `is_alert`). `time` is epoch
 milliseconds. `severity_id` is the Sigma level 1 to 5. `finding_info` carries `uid`, `title`, `desc`, `analytic`
 (rule id, `type_id` 1), `attacks[]`, `related_events[]`, `first_seen_time`, `last_seen_time`; `evidences[]` has one
-entry per event (process, file, url). `metadata.uid` = finding id, `metadata.correlation_uid` = session id.
-Agent context is in `unmapped.retrohound` (`session_id`, `agent`, `agent_id`, `parent_session_id`, `project_path`,
-`raw_ref`, `ai_agent` with `type_id` 99).
+entry per event (process, file, url, plus `ai_agent` and `api` below). `metadata.uid` = finding id,
+`metadata.correlation_uid` = session id. The rest of the agent context is in `unmapped.retrohound` (`session_id`,
+`agent`, `agent_id`, `parent_session_id`, `project_path`, `raw_ref`, `rule_author`, `other_tags`).
 
-Example (shortened): `{"class_uid":2004,"type_uid":200401,"time":1789380160500,"severity_id":4,"finding_info":{"uid":"9b1e...","analytic":{"uid":"r1","type_id":1}},"unmapped":{"retrohound":{"agent_id":"agentxyz99"}}}`
+AI context per event, in `evidences[]` (OCSF 1.9.0 added `ai_agent` to the `evidences` object):
+
+| Event field | OCSF |
+|---|---|
+| `agent` | `evidences[].ai_agent.name` |
+| `agent_version` | `evidences[].ai_agent.version` (absent when the transcript has none) |
+| `session_id` | `evidences[].ai_agent.instance_uid` |
+| (constant) | `evidences[].ai_agent.type_id` 1 (Native: the agents are first-party, no third-party framework) |
+| `mcp_server`, `mcp_tool` | `evidences[].api.service.name`, `evidences[].api.operation` (MCP calls only) |
+
+Not filled: `ai_agent.ai_model` (no event field carries the model; it needs a collector change first),
+`ai_agent.uid` (the agents have no stable agent id), and the non-MCP tool name (no schema-valid place on a finding).
+
+The `ai_operation` profile is **not** declared in `metadata.profiles`. It was added in OCSF 1.8.0 (`ai_model`,
+`message_context`), 1.9.0 added `ai_agent` and `delegation` to it and applied it to the system, network, application
+and IAM classes, but no released version applies it to the Findings category: Detection Finding 1.9.0 lists Cloud,
+Container, Data Classification, Date/Time, Host, Incident, Linux Users, macOS Users, OSINT, Record Integrity and
+Security Control, and the base `finding` class on the schema's `main` branch still lists only `incident`. Declaring it
+would put `ai_model`/`message_context` on a class that has no such attributes. `OCSF_VERSION` stays 1.9.0, the first
+version with `evidences[].ai_agent`. Sources, checked 2026-11-11:
+<https://github.com/ocsf/ocsf-schema/blob/main/CHANGELOG.md>, <https://schema.ocsf.io/1.9.0/profiles/ai_operation>,
+<https://schema.ocsf.io/1.9.0/classes/detection_finding>, <https://schema.ocsf.io/1.9.0/objects/evidences>,
+<https://schema.ocsf.io/1.9.0/objects/ai_agent>, <https://github.com/ocsf/ocsf-schema/blob/main/events/findings/finding.json>.
+
+Example (shortened): `{"class_uid":2004,"type_uid":200401,"time":1789380160500,"severity_id":4,"finding_info":{"uid":"9b1e...","analytic":{"uid":"r1","type_id":1}},"evidences":[{"ai_agent":{"name":"claude_code","instance_uid":"aaaaaaaa-1111","type_id":1},"api":{"operation":"fetch","service":{"name":"docs"}}}],"unmapped":{"retrohound":{"agent_id":"agentxyz99"}}}`
 
 Known limits:
 - `ecs.version` is pinned to 9.1.0, the first with `gen_ai.*`, which is beta; `retrohound.*` copies survive renames.
-- `ai_agent` is only schema-valid with the `ai_operation` profile, which Detection Finding is not in; it sits in `unmapped`.
-  Sub-agent lineage (`parent_session_id`) stays in `unmapped` too. No OCSF extension is registered.
+- Sub-agent lineage (`agent_id`, `parent_session_id`) stays in `unmapped`. No OCSF extension is registered.
+- An evidence with only `ai_agent` (a non-MCP tool call with no command, path or URL) misses 1.9.0's `evidences`
+  at-least-one constraint, which does not count `ai_agent` yet (the unreleased changelog adds it).
 - Per-event classes are not emitted, only findings.
 
 ## ATT&CK Navigator layer
