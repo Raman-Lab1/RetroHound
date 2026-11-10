@@ -24,7 +24,7 @@ const ECS_CATEGORY: Partial<Record<Category, { category: string[]; type: string[
 type Attack = { tactics: string[]; techniques: string[]; subtechniques: string[]; other: string[] };
 
 /** Splits Sigma tags: attack.t1552.001 -> technique T1552 + sub T1552.001, attack.credential_access -> tactic. */
-function parseTags(tags: string[]): Attack {
+export function parseTags(tags: string[]): Attack {
   const a: Attack = { tactics: [], techniques: [], subtechniques: [], other: [] };
   const add = (list: string[], v: string) => { if (!list.includes(v)) list.push(v); };
   for (const t of tags) {

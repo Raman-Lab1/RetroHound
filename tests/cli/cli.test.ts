@@ -69,6 +69,11 @@ describe("scan", () => {
     expect(existsSync(join(dir, "index.db"))).toBe(false);
   });
 
+  test("--format attack-layer prints a Navigator layer", async () => {
+    expect(await run("scan", ...common(), "--format", "attack-layer", "--no-index")).toBe(0);
+    expect(JSON.parse(out)).toMatchObject({ domain: "enterprise-attack", versions: { layer: "4.5" } });
+  });
+
   test.each([
     [["--level", "severe"]], [["--format", "xml"]], [["--agent", "cursor"]], [["--since", "yesterday"]], [["--fail-on", "x"]], [["--bogus"]],
     [["--agent", "all"]], // with common()'s --root: each agent has its own root

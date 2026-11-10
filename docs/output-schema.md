@@ -144,3 +144,15 @@ Known limits:
 - `ai_agent` is only schema-valid with the `ai_operation` profile, which Detection Finding is not in; it sits in `unmapped`.
   Sub-agent lineage (`parent_session_id`) stays in `unmapped` too. No OCSF extension is registered.
 - Per-event classes are not emitted, only findings.
+
+## ATT&CK Navigator layer
+
+`retrohound scan --format attack-layer` (`src/outputs/attack.ts`): one JSON layer, layer format 4.5 (`versions.layer`
+4.5, `navigator` 4.9.0, no `attack`, so the Navigator uses its current ATT&CK), `domain` `enterprise-attack`. One
+`techniques[]` entry per technique the findings' rules are tagged with (`attack.t1552.001` -> `T1552.001`; a rule
+tagged with a sub-technique scores only the sub-technique, not also its parent). `score` = findings, `comment` = the
+rules and their counts (`secrets_read_secret_file (3), ...`). No `tactic`, so an entry shows under every tactic of its
+technique. `gradient` runs from 0 to the highest score; `layout.expandedSubtechniques` `annotated` opens scored
+sub-techniques. `description` names the tool version, the scan time and the finding and session counts, and how many
+findings came from rules with no technique tag (those are not in the layer). Masked like `json`; no session ids,
+paths or event data.

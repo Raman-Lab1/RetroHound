@@ -6,6 +6,7 @@ import { COLLECTORS } from "../collectors/index.ts";
 import { runScan, type ScanOptions } from "../scan.ts";
 import { DEFAULT_RULES_DIR, TOOL_VERSION } from "../version.ts";
 import { LEVELS, type Level } from "../normalize/types.ts";
+import { toAttackLayer } from "../outputs/attack.ts";
 import { toJson } from "../outputs/json.ts";
 import { toNdjson } from "../outputs/ndjson.ts";
 import { toSarif } from "../outputs/sarif.ts";
@@ -35,7 +36,7 @@ type ScanFlags = {
 
 const AGENTS = Object.keys(COLLECTORS);
 const DB_FILES = ["", "-wal", "-shm", "-journal"]; // the index and SQLite's side files
-const FORMATS = ["table", "json", "sarif", "ndjson-ecs", "ndjson-ocsf"] as const;
+const FORMATS = ["table", "json", "sarif", "ndjson-ecs", "ndjson-ocsf", "attack-layer"] as const;
 
 async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
   const agent = oneOf("agent", f.agent, [...AGENTS, "all"]);
@@ -59,6 +60,7 @@ async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
   else if (format === "sarif") io.out(toSarif(report) + "\n");
   else if (format === "ndjson-ecs") io.out(toNdjson(report, "ecs")); // ends with its own newline
   else if (format === "ndjson-ocsf") io.out(toNdjson(report, "ocsf"));
+  else if (format === "attack-layer") io.out(toAttackLayer(report) + "\n");
   else {
     const root = f.root ?? join(homedir(), ".claude");
     // the retention summary reads Claude Code's own settings, so it only applies to that agent
@@ -109,7 +111,7 @@ export function buildProgram(io: IO, setCode: (n: number) => void): Command {
     .option("--rules <dir>", "rules directory", DEFAULT_RULES_DIR)
     .option("--extra-rules <dir>", EXTRA_HELP, repeat)
     .option("--level <level>", `hide findings below this level (${LEVELS.join("|")})`)
-    .option("--format <format>", "table, json, sarif, ndjson-ecs or ndjson-ocsf", "table")
+    .option("--format <format>", "table, json, sarif, ndjson-ecs, ndjson-ocsf or attack-layer (ATT&CK Navigator)", "table")
     .option("--no-index", "evaluate in memory, write nothing")
     .option("--report <file>", "where to write the offline footprint report (default: report.html next to the index)")
     .option("--no-report", "do not write the footprint report")

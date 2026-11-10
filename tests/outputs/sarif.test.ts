@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { toSarif } from "../../src/outputs/sarif.ts";
 import { toNdjson } from "../../src/outputs/ndjson.ts";
+import { toAttackLayer } from "../../src/outputs/attack.ts";
 import type { ScanReport } from "../../src/outputs/report.ts";
 import type { AgentEvent, Finding, Level } from "../../src/normalize/types.ts";
 
@@ -118,5 +119,28 @@ describe("toNdjson", () => {
       const out = toNdjson(report([finding({ message: TOKEN, events: [e] })]), s);
       for (const w of [TOKEN, "C0NTENT", "T2ESP"]) expect(out).not.toContain(w);
     }
+  });
+});
+
+describe("toAttackLayer", () => {
+  test("one entry per technique, the sub-technique instead of its parent, scored by findings; untagged ones only counted", () => {
+    const r = report([finding(), finding({ id: "f2" }), finding({ id: "f3", rule_id: "r2" })]);
+    r.rules.push({ id: "r2", title: "No technique", level: "low", tags: ["attack.discovery"], lane: "hunt" });
+    const layer = JSON.parse(toAttackLayer(r));
+    expect(layer).toMatchObject({ name: "RetroHound findings", domain: "enterprise-attack", versions: { layer: "4.5" } });
+    expect(layer.techniques).toEqual([
+      { techniqueID: "T1041", score: 2, comment: "secret_read_then_egress (2)", enabled: true },
+      { techniqueID: "T1552.001", score: 2, comment: "secret_read_then_egress (2)", enabled: true },
+    ]);
+    expect(layer.gradient).toMatchObject({ minValue: 0, maxValue: 2 });
+    expect(layer.description).toContain("3 findings in 1 sessions");
+    expect(layer.description).toContain("1 findings come from rules with no ATT&CK technique");
+  });
+
+  test("no findings is still a valid layer (maxValue above minValue); rule names are masked", () => {
+    expect(JSON.parse(toAttackLayer(report([]))).gradient.maxValue).toBe(1);
+    const r = report();
+    r.rules[0]!.name = `rule ${TOKEN}`;
+    expect(toAttackLayer(r)).not.toContain(TOKEN);
   });
 });

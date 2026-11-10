@@ -17,6 +17,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 - Codex collector (`codex/v4`): MCP tool calls are indexed as `mcp` events (`mcp__<server>__<tool>`, `mcp_server`,
   `mcp_tool`, arguments, result, outcome), so MCP rules fire on Codex and the footprint shows which Codex MCP servers
   were used. Codex rollouts are re-read once.
+- `scan --format attack-layer`: a MITRE ATT&CK Navigator layer (format 4.5) of the techniques this scan's findings map
+  to, scored by finding count, with the rules behind each technique in its comment.
 
 ### Fixed
 - `incident` and `wrapped` pages: no whole-page mask pass after escaping, which could swallow markup after a short
