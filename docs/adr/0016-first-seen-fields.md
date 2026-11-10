@@ -33,8 +33,8 @@ tamper-evident (0015): a new event column changes every row's JSON and forces a 
 - Indexed scans: every agent is indexed first, then one grouped query over `events` (`row_number()` per key, ordered by
   `ts, id`) gives the ids, then every agent is evaluated. `--no-index`: the same computation over the in-memory events.
   The ids sit in a module-level set that the scan clears when it ends.
-- Cold start: both are false until the data (the index, or the in-memory events) spans 14 days from earliest to
-  latest `ts`.
+- Cold start: the first 14 days of the data (the index, or the in-memory events) from its earliest `ts` are the
+  baseline. An event is first-seen only if it is the earliest carrier and its `ts` is at least that earliest `ts` + 14 days.
 - A detection that reads either field must declare `x-retrohound.requires: [first_seen]` (`first-seen-not-required`
   otherwise), and such a rule must be lane `hunt` (`first-seen-enforce`). `requires` takes known values only.
 - The live hook has no index: it loads enforce-lane rules only, so it never runs one of these rules. `rules test` runs the
@@ -43,8 +43,8 @@ tamper-evident (0015): a new event column changes every row's JSON and forces a 
 ## Consequences
 - The hash chain, the schema and the stored events are unchanged: no migration, no re-seed.
 - Findings are as of the scan that evaluated the session. A transcript older than everything indexed, found later,
-  does not re-evaluate untouched sessions; a rule-set change (a full re-evaluation) does. Sessions evaluated during
-  the cold start keep no first-seen findings until then.
+  does not re-evaluate untouched sessions; a rule-set change (a full re-evaluation) does. Baseline events never
+  give first-seen findings, on any re-evaluation.
 - Values compare as stored: indexed values are masked (0007), in-memory values are not, so two hook commands that
   differ only in a masked secret are one value in the index and two with `--no-index`.
 - With any rule reading the fields, every indexed scan runs the query, warm scans included. Indexed scans hold every

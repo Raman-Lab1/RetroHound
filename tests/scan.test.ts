@@ -288,6 +288,8 @@ x-retrohound: { requires: [first_seen] }
   test("the earliest use of a domain fires, per project and overall; --no-index agrees with the index", async () => {
     writeFileSync(join(dir, "rules", "fs.yml"), FS);
     const proj = join(root, "projects", "-home-x-acme");
+    // Baseline: inside the first 14 days, so its domain never fires.
+    put(join(proj, "s09.jsonl"), [fetch("s09", "2026-10-01T10:00:00.000Z", "https://base.example.invalid/")]);
     put(join(proj, "s10.jsonl"), [fetch("s10", "2026-10-20T10:00:00.000Z", "https://a.example.invalid/x")]);
     put(join(proj, "s11.jsonl"), [
       fetch("s11", "2026-11-08T10:00:00.000Z", "https://a.example.invalid/y"),

@@ -4,7 +4,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { evaluate } from "../../src/engine/evaluate.ts";
-import { firstSeenOf, setFirstSeen, type FirstSeen } from "../../src/engine/first-seen.ts";
+import { coldStartCutoff, firstSeenOf, setFirstSeen, type FirstSeen } from "../../src/engine/first-seen.ts";
+import { loadRuleDir } from "../../src/cli/rules.ts";
 import { loadEnforceRules } from "../../src/hooks/run.ts";
 import type { RawEvent } from "../../src/normalize/types.ts";
 import { openStore } from "../../src/store/index.ts";
@@ -18,8 +19,8 @@ const day = (d: number, h = 0) => new Date(Date.UTC(2026, 0, 1 + d, h)).toISOStr
 const REQ = "x-retrohound: { requires: [first_seen] }\n";
 const rule = (field: string, header = REQ) => compile(ruleYaml(`selection: { ${field}: true }\ncondition: selection`, "product: ai_coding_agent", header));
 
-// The anchor makes the data span the cold-start window; it carries no first-seen kind.
-const anchor = (d = 20) => event({ id: `anchor${d}`, ts: day(d) });
+// The anchor is a baseline 20 days before the rest, so their earliest carriers count; it carries no first-seen kind.
+const anchor = (d = -20) => event({ id: `anchor${d}`, ts: day(d) });
 const ids = (fs: FirstSeen) => ({ project: [...fs.project].sort(), global: [...fs.global].sort() });
 
 describe("firstSeenOf", () => {
@@ -68,10 +69,25 @@ describe("firstSeenOf", () => {
     expect(ids(firstSeenOf(evs)).global).toEqual(["t1"]);
   });
 
-  test("cold start: all false until the events span 14 days, earliest to latest", () => {
-    const evs = [event({ id: "c1", ts: day(1), domain: "a.example.invalid" }), event({ id: "bad", ts: "not a time" })];
-    expect(ids(firstSeenOf([...evs, event({ id: "late", ts: day(14, 23) })])).global).toEqual([]); // 13 days 23 h
-    expect(ids(firstSeenOf([...evs, event({ id: "late", ts: day(15) })])).global).toEqual(["c1"]);
+  test("cold start: an earliest carrier counts from 14 days after the earliest ts", () => {
+    const evs = [
+      event({ id: "c0", ts: day(1) }),
+      event({ id: "c1", ts: day(14, 23), domain: "a.example.invalid" }), // 13 days 23 h in: baseline
+      event({ id: "c2", ts: day(15), domain: "b.example.invalid" }),
+      event({ id: "bad", ts: "not a time" }),
+    ];
+    expect(ids(firstSeenOf(evs)).global).toEqual(["c2"]);
+  });
+
+  test("baseline: a secret read and a domain in the first 14 days stay quiet once the data spans more", () => {
+    const evs = [
+      event({ id: "r0", session_id: "s0", ts: day(0), category: "file_access", tool_name: "Read", target_path: "/home/dev/app/.env" }),
+      event({ id: "d0", session_id: "s0", ts: day(0, 1), category: "web_request", tool_name: "WebFetch", domain: "api.example.invalid" }),
+      event({ id: "late", session_id: "s1", ts: day(20) }),
+    ];
+    expect(ids(firstSeenOf(evs))).toEqual({ project: [], global: [] });
+    setFirstSeen(firstSeenOf(evs));
+    expect(evaluate(loadRuleDir("rules/ai_coding_agent").rules, evs).filter((m) => m.rule.name === "network_new_domain_after_secret_read")).toEqual([]);
   });
 });
 
@@ -89,13 +105,15 @@ describe("the index gives the same answer as the in-memory pre-pass", () => {
       event({ id: "s1", ts: day(7), project_path: "/one", attribution: "skill:alpha" }),
       event({ id: "s2", ts: day(8), project_path: "/one", attribution: "plugin:beta", domain: "b.example.invalid" }),
       event({ id: "s3", ts: day(9), project_path: "/one", attribution: "mcp:srv" }),
+      event({ id: "o1", ts: day(-19), project_path: "/one", domain: "old.example.invalid" }), // baseline: never first-seen
       anchor(),
     ];
     const store = openStore(join(base, "parity.db"));
     try {
       store.transaction(() => store.upsertEvents("f.jsonl", evs));
-      expect(ids(store.firstSeen())).toEqual(ids(firstSeenOf(evs)));
-      expect(ids(store.firstSeen())).toEqual({
+      const fs = ids(store.firstSeen(coldStartCutoff(evs.map((e) => e.ts))));
+      expect(fs).toEqual(ids(firstSeenOf(evs)));
+      expect(fs).toEqual({
         project: ["d1", "d2", "d3", "h1", "h2", "m1", "s1", "s2"],
         global: ["d2", "h1", "m1", "s1", "s2"],
       });

@@ -191,9 +191,9 @@ export function openStore(path: string = defaultDbPath()) {
           WHERE substr(tool_name, 1, 5) = 'hook:' AND command_line <> ''
         UNION ALL SELECT id, ts, coalesce(project_path, ''), 'skill', attribution FROM events
           WHERE substr(attribution, 1, 6) = 'skill:' OR substr(attribution, 1, 7) = 'plugin:'
-      ), r AS (SELECT id, row_number() OVER (PARTITION BY kind, v ORDER BY ts, id) AS g,
+      ), r AS (SELECT id, ts, row_number() OVER (PARTITION BY kind, v ORDER BY ts, id) AS g,
           row_number() OVER (PARTITION BY p, kind, v ORDER BY ts, id) AS pr FROM k)
-      SELECT id, g = 1 AS global, pr = 1 AS project FROM r WHERE g = 1 OR pr = 1`),
+      SELECT id, g = 1 AS global, pr = 1 AS project FROM r WHERE (g = 1 OR pr = 1) AND ts >= ?`),
     lastRuleRunId: db.prepare("SELECT id FROM rule_runs ORDER BY id DESC LIMIT 1"),
     insertSnapshot: db.prepare("INSERT INTO config_snapshots (scan_id, agent, kind, name, scope, source, hash) VALUES (?, ?, ?, ?, ?, ?, ?)"),
     markSnapshot: db.prepare("UPDATE rule_runs SET config_items = ? WHERE id = ?"),
@@ -332,10 +332,11 @@ export function openStore(path: string = defaultDbPath()) {
       q.insertRuleRun.run(run.rule_set_hash, run.started_at, run.finished_at, run.events, run.findings);
     },
 
-    /** Ids of the events that first carried a domain, MCP server, hook command or skill/plugin (ADR 0016). */
-    firstSeen(): { project: Set<string>; global: Set<string> } {
+    /** Ids of the events that first carried a domain, MCP server, hook command or skill/plugin, at or after `cutoff`
+     * (the cold start, ADR 0016). */
+    firstSeen(cutoff: string): { project: Set<string>; global: Set<string> } {
       const fs = { project: new Set<string>(), global: new Set<string>() };
-      for (const row of q.firstSeen.all()) {
+      for (const row of q.firstSeen.all(cutoff)) {
         if (row.global) fs.global.add(row.id as string);
         if (row.project) fs.project.add(row.id as string);
       }
