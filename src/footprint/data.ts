@@ -54,7 +54,8 @@ const key = (x: { agent: string; kind: string; name: string }) => `${x.agent}\0$
 const norm = (s: string) => s.replace(/[^A-Za-z0-9_-]/g, "_");
 export function compareConfig(db: Db, reads: ConfigRead[]): [ConfigFootprint, number] {
   const plugins = [...new Set(reads.flatMap((r) => r.items).filter((i) => i.agent === "claude_code" && i.kind === "plugin").map((i) => i.name))];
-  const cfg = plugins.map(() => "SELECT ? AS p, ? AS n").join(" UNION ALL ");
+  // [prefix, name] pairs as one JSON parameter: a compound SELECT per plugin would stop at SQLite's 500 terms
+  const pairs = JSON.stringify(plugins.map((n) => [`plugin_${norm(n)}_`, n]));
   const used = db.prepare(`SELECT agent, kind, name, COUNT(*) AS events, COUNT(DISTINCT session_id) AS sessions, MAX(ts) AS last_ts FROM (
       SELECT agent, 'mcp_server' AS kind, mcp_server AS name, session_id, ts FROM events WHERE mcp_server IS NOT NULL
       UNION ALL SELECT agent, 'hook', COALESCE(command_line, tool_name), session_id, ts FROM events WHERE tool_name LIKE 'hook:%'
@@ -63,10 +64,11 @@ export function compareConfig(db: Db, reads: ConfigRead[]): [ConfigFootprint, nu
         SELECT id, agent, CASE WHEN attribution LIKE 'plugin:%' THEN substr(attribution, 8)
           ELSE substr(attribution, 7, instr(substr(attribution, 7), ':') - 1) END AS name, session_id, ts
           FROM events WHERE attribution LIKE 'plugin:%' OR attribution LIKE 'skill:%:%'${plugins.length ? `
-        UNION SELECT id, agent, (SELECT n FROM (${cfg}) AS c WHERE substr(mcp_server, 1, length(c.p)) = c.p
-          ORDER BY length(c.p) DESC LIMIT 1), session_id, ts FROM events WHERE agent = 'claude_code' AND mcp_server LIKE 'plugin\\_%' ESCAPE '\\'` : ""}
+        UNION SELECT id, agent, (SELECT json_extract(c.value, '$[1]') FROM json_each(?) AS c
+          WHERE substr(mcp_server, 1, length(json_extract(c.value, '$[0]'))) = json_extract(c.value, '$[0]')
+          ORDER BY length(json_extract(c.value, '$[0]')) DESC LIMIT 1), session_id, ts FROM events WHERE agent = 'claude_code' AND mcp_server LIKE 'plugin\\_%' ESCAPE '\\'` : ""}
       ) WHERE name IS NOT NULL
-    ) GROUP BY agent, kind, name`).all(...plugins.flatMap((n) => [`plugin_${norm(n)}_`, n])) as unknown as Used[];
+    ) GROUP BY agent, kind, name`).all(...(plugins.length ? [pairs] : [])) as unknown as Used[];
   const byKey = new Map(used.map((u) => [key(u), u]));
   const items = reads.flatMap((r) => r.items);
   const configured = new Set(items.map(key));

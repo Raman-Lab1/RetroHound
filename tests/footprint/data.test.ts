@@ -206,6 +206,10 @@ describe("compareConfig", () => {
       const p = (name: string) => ({ agent: "claude_code", kind: "plugin" as const, name, scope: "user", source: "/home/x/.claude/settings.json" });
       const c = collectFootprint(index, { rules: [], now, config: [{ items: [p("kit"), p("kit_extra")], files: 1, skipped: [] }] }).configured!;
       expect(c.items.map((i) => [i.name, i.events])).toEqual([["kit", 2], ["kit_extra", 1]]);
+      // more configured plugins than SQLite allows terms in a compound SELECT (500)
+      const many = Array.from({ length: 600 }, (_, i) => p(`pad${i}`));
+      const big = collectFootprint(index, { rules: [], now, config: [{ items: [...many, p("kit"), p("kit_extra")], files: 1, skipped: [] }] }).configured!;
+      expect(big.items.filter((i) => i.events).map((i) => [i.name, i.events])).toEqual([["kit", 2], ["kit_extra", 1]]);
     } finally {
       index.close();
     }
