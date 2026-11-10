@@ -111,7 +111,18 @@ describe("toNdjson", () => {
     expect(o.finding_info.analytic.uid).toBe("r1");
     expect(o.finding_info.attacks).toContainEqual({ technique: { uid: "T1552" }, sub_technique: { uid: "T1552.001" } });
     expect(o.finding_info.related_events).toEqual([{ uid: "e1" }]);
-    expect(o.unmapped.retrohound).toMatchObject({ agent_id: "agentxyz99", ai_agent: { type_id: 99 } });
+    expect(o.unmapped.retrohound).toMatchObject({ agent_id: "agentxyz99" });
+    expect(o.unmapped.retrohound.ai_agent).toBeUndefined();
+    expect(o.evidences[0].ai_agent).toEqual({ name: "claude_code", instance_uid: "aaaaaaaa-1111", type_id: 1 });
+    expect(o.evidences[0].api).toBeUndefined();
+  });
+  test("OCSF evidence per event: agent version, MCP server and tool as api", () => {
+    const mcp = ev({ id: "e2", category: "mcp", agent: "codex", agent_version: "0.50.0", tool_name: "mcp__docs__fetch", mcp_server: "docs", mcp_tool: "fetch" });
+    const o = JSON.parse(toNdjson(report([finding({ events: [ev(), mcp] })]), "ocsf").trim());
+    expect(o.metadata.profiles).toBeUndefined();
+    expect(o.evidences[1]).toMatchObject({
+      ai_agent: { name: "codex", version: "0.50.0", type_id: 1 }, api: { operation: "fetch", service: { name: "docs" } },
+    });
   });
   test("masks secrets and strips match-only fields in both schemas", () => {
     const e = { ...ev({ command_line: `echo ${TOKEN}`, text_excerpt: TOKEN }), content: "C0NTENT", tool_response: "T2ESP" } as AgentEvent;

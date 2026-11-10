@@ -100,7 +100,11 @@ function ecsLine(f: Finding, rule: ReportRule | undefined, report: ScanReport) {
   };
 }
 
+// evidences[].ai_agent is OCSF 1.9.0. type_id 1 Native: every parsed agent is first-party, no third-party framework.
+// The ai_operation profile (ai_model, message_context) does not apply to Detection Finding, so it is not declared.
 const evidence = (e: AgentEvent) => ({
+  ai_agent: { name: e.agent, version: e.agent_version, instance_uid: e.session_id, type_id: 1 },
+  api: e.mcp_server ? { operation: e.mcp_tool, service: { name: e.mcp_server } } : undefined,
   process: e.command_line ? { cmd_line: e.command_line } : undefined,
   file: e.target_path ? { path: e.target_path, name: baseName(e.target_path), type_id: 1 } : undefined,
   url: e.url ? { url_string: e.url, hostname: e.domain } : undefined,
@@ -132,13 +136,11 @@ function ocsfLine(f: Finding, rule: ReportRule | undefined, report: ScanReport) 
       first_seen_time: times.length ? Math.min(...times) : time, last_seen_time: times.length ? Math.max(...times) : time,
     },
     evidences: f.events.map(evidence),
-    // ai_agent is only schema-valid on classes with the ai_operation profile; Detection Finding is not one, so it rides in unmapped.
     unmapped: {
       retrohound: {
         session_id: f.session_id, agent: p?.agent, agent_id: p?.agent_id, parent_session_id: p?.parent_session_id,
         rule_author: rule?.author,
         project_path: p?.project_path, raw_ref: p?.raw_ref, other_tags: atk.other,
-        ai_agent: p ? { name: p.agent, version: p.agent_version, instance_uid: p.session_id, type_id: 99 } : undefined,
       },
     },
   };
