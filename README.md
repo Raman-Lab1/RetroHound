@@ -324,7 +324,7 @@ read the [code of conduct](CODE_OF_CONDUCT.md), and report vulnerabilities or ru
 
 - v0.2: `hook` (log / confirm / block) with a parsed-rule cache and install path checks, SARIF and NDJSON export,
   `preflight`, `mcp`, ignore file, `wrapped` SVG card, Codex CLI and Antigravity CLI collectors. Next: `scan --agent all`,
-  Codex file-edit items once real samples exist, Gemini CLI.
+  Gemini CLI.
   Dropped: rule #22 (ssh/scp to an unknown host; no threat needs it and it is noisy).
 - Later: SIEM conversion via pySigma, upstream logsource proposal to SigmaHQ.
 
