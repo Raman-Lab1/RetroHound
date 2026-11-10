@@ -66,7 +66,7 @@ function mcpFields(item: Line): Fields | undefined {
   const server = str(item.server), tool = str(item.tool);
   if (!server || !tool) return undefined;
   const ev: Fields = { ...mapToolUse(`mcp__${server}__${tool}`, item.arguments ?? {}), mcp_server: server, mcp_tool: tool };
-  const failed = item.status === "failed" || item.result?.isError === true || item.error != null;
+  const failed = item.status === "failed" || item.result?.isError === true;
   ev.outcome = failed ? "error" : item.status === "completed" ? "success" : "unknown";
   withOutput(ev, textOf(item.result?.content));
   return ev;
@@ -80,33 +80,34 @@ function webFields(item: Line): Fields {
 }
 
 /** apply_patch: one file_event per changed file, shaped like Claude Code's Write so the file rules apply. `tool_input` is
- * the raw change (content, or the diff with its removed lines); `content` is what the file now holds: the whole file for
- * an add, the diff's added lines for an update.
- * ponytail: a moved file (`move_path`, never seen set) keeps its old path as target_path; the new one is in tool_input. */
-function fileFields(item: Line): Fields[] {
+ * the raw change (content, or the diff with its removed lines) plus `path`; `content` is what was written: the whole file
+ * for an add, the diff's added lines for an update, nothing for a delete (its text, if any, still counts for secrets
+ * through tool_input). A move (`move_path`) targets where the content lands; relative paths resolve against `cwd`. */
+function fileFields(item: Line, cwd?: string): Fields[] {
   const changes = item.changes && typeof item.changes === "object" && !Array.isArray(item.changes) ? Object.entries(item.changes) : [];
   const outcome = item.status === "completed" ? "success" : item.status === "failed" ? "error" : "unknown";
-  return changes.map(([path, c]) => {
+  return changes.filter(([path]) => path).map(([path, c]) => {
     const change: Line = c && typeof c === "object" ? c : {};
-    const ev: Fields = { ...mapToolUse("Write", { file_path: path, ...change }), tool_name: "apply_patch", outcome };
+    const ev: Fields = { ...mapToolUse("Write", { ...change, path, file_path: str(change.move_path) ?? path }, cwd), tool_name: "apply_patch", outcome };
     if (change.type === "update") {
-      const added = String(change.unified_diff ?? "").split("\n").filter((l) => l.startsWith("+") && !l.startsWith("+++ "));
-      ev.content = str(added.map((l) => l.slice(1)).join("\n"));
-    }
+      const lines = String(change.unified_diff ?? "").split("\n");
+      const hunk = lines.findIndex((l) => l.startsWith("@@")); // `---`/`+++` headers, when present, precede the first hunk
+      ev.content = str(lines.slice(Math.max(0, hunk)).filter((l) => l.startsWith("+")).map((l) => l.slice(1)).join("\n"));
+    } else if (change.type === "delete") delete ev.content;
     return ev;
   });
 }
 
 /** Fields for one item (several for a multi-file patch), or undefined when the item is not an event (reasoning, a
  * finished sub-agent, unknown kinds). */
-export function mapItem(item: Line, fromSubagent: boolean): Fields | Fields[] | undefined {
+export function mapItem(item: Line, fromSubagent: boolean, cwd?: string): Fields | Fields[] | undefined {
   switch (item.type) {
     case "CommandExecution":
       return commandFields(item);
     case "McpToolCall":
       return mcpFields(item);
     case "FileChange":
-      return fileFields(item);
+      return fileFields(item, cwd);
     case "Extension":
       return item.kind === "web.search" ? webFields(item) : undefined;
     case "UserMessage": {

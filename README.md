@@ -216,6 +216,8 @@ it with `--ignore` if you trust it.
 (`--scope project` uses `.codex/` or `.agents/` in the repo). Both are set up from the vendors' docs and tested on temp
 files only, not yet in a live session:
 - Codex runs a new or changed hook only after you trust it in `/hooks`, and has no "ask", so `confirm` is refused there.
+  Its file edits (`apply_patch`) reach the hook as plain tool calls, so file rules (config writes, MCP servers added)
+  fire on them in `scan`, not yet in the hook.
 - Antigravity's docs call the hook's `decision` required; RetroHound prints nothing when it has nothing to say (it
   never prints "allow"). Try `--agent antigravity --scope project --mode log` in a throwaway repo first and check that
   normal tool calls still run before installing it for your user.

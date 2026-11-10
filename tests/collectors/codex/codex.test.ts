@@ -132,6 +132,28 @@ describe("FileChange (apply_patch)", () => {
     expect(ev).toMatchObject({ category: "file_event", target_path: "/w/.env", content: "KEY=placeholder\nadded", secret_kinds: ["aws_access_key"] });
   });
 
+  test("a move targets where the content lands; a delete writes nothing but its secrets still count", async () => {
+    const [moved, deleted] = await parse(patch({
+      "/w/old.sh": { type: "update", unified_diff: "@@ -1 +1 @@\n-a\n+b", move_path: "/home/x/.bashrc" },
+      "/w/.env": { type: "delete", content: `KEY=${KEY}` },
+    }));
+    expect(moved).toMatchObject({ target_path: "/home/x/.bashrc", content: "b" });
+    expect(moved!.tool_input).toContain('"path":"/w/old.sh"');
+    expect(deleted).toMatchObject({ category: "file_event", target_path: "/w/.env", secret_kinds: ["aws_access_key"] });
+    expect("content" in deleted!).toBe(false);
+  });
+
+  test("headerless diffs keep an added line that starts with ++; relative paths resolve; empty or forged paths do not win", async () => {
+    const evs = await parse(patch({
+      "/w/c.txt": { type: "update", unified_diff: "@@ -1 +1,2 @@\n x\n+++ y", move_path: null, file_path: "/etc/passwd" },
+      "src/a.ts": { type: "add", content: "z" }, "": { type: "add", content: "lost" },
+    }));
+    expect(evs).toHaveLength(2);
+    const [ev, rel] = evs;
+    expect(ev).toMatchObject({ target_path: "/w/c.txt", content: "++ y" });
+    expect(rel!.target_path).toBe("C:/Users/x/proj/src/a.ts");
+  });
+
   test("a failed patch is an error; no changes, no event", async () => {
     expect((await parse(patch({ "/w/a": { type: "add", content: "x" } }, "failed"))).map((e) => e.outcome)).toEqual(["error"]);
     expect(await parse(patch({}), patch("nope"), patch(undefined))).toEqual([]);

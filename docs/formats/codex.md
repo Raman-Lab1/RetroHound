@@ -57,8 +57,8 @@ text is not a stable structure. The structured record of what ran is `event_msg.
 | `item.type` | Count (main thread) | Fields seen | RetroHound event |
 |---|---|---|---|
 | `CommandExecution` | 11 | `command` (argv: on Windows `[pwsh.exe, -Command, <script>]`), `cwd` (**`file:///C:/...` URI**), `parsed_cmd[]` (`{type: unknown|read|listFiles|search, cmd}`), `exit_code` (int; `-1` when the process could not start), `status` (`completed`, `failed`), `aggregated_output` (truncated, R2), `duration {secs, nanos}`, `source` (`unified_exec_startup`), `process_id` (absent on spawn failure) | `process_creation`; `command_line` from `parsed_cmd[].cmd` (else the last argv element); `outcome` success/error |
-| `FileChange` | 15 (later look, 48 rollouts; macOS) | `changes` (object: absolute native path -> `{type: add, content}` or `{type: update, unified_diff, move_path}`; `move_path` always null so far), `status` (`completed`), `stdout`, `stderr` | `file_event`, one per changed path |
-| `McpToolCall` | 11 (later look, 48 rollouts) | `server`, `tool`, `arguments` (object), `status` (`completed`, `failed`), `result {content[] {type: text, text}, isError}`, `duration {secs, nanos}` | `mcp` (or `web_request` with a URL argument) |
+| `FileChange` | 15 in 48 rollouts (later look, macOS) | `changes` (object: absolute native path -> `{type: add, content}` or `{type: update, unified_diff, move_path}`; `move_path` always null so far), `status` (`completed`), `stdout`, `stderr` | `file_event`, one per changed path |
+| `McpToolCall` | 11 in 48 rollouts (later look) | `server`, `tool`, `arguments` (object), `status` (`completed`, `failed`), `result {content[] {type: text, text}, isError}`, `duration {secs, nanos}` | `mcp` (or `web_request` with a URL argument) |
 | `Extension` (`kind: web.search`) | 1 | `query`, `action {type: openPage, url}` (or a search), `results[] {domain, title, ref_id, snippet}` | `web_request` (`url`, `domain`) |
 | `SubAgentActivity` | 2 | `kind` (`started`, `completed`), `agent_thread_id`, `agent_path`, `model`, `reasoning_effort` | links parent and child thread |
 | `UserMessage` | 1 | `content[] {type: text, text}` | `user_prompt` (`text_excerpt` masked) |
@@ -138,12 +138,14 @@ grouped under their root). Counts only; no real text is reproduced here or in th
   `tool_call` `WebSearch`. `McpToolCall` (v4) -> `tool_name` `mcp__<server>__<tool>` (the name Codex hooks use), `mcp_server` and
   `mcp_tool` taken as given (not split from the name), `tool_input` = `arguments`, `tool_response` = the result text;
   `mcp`, or `web_request` when an argument is a URL (as for Claude Code); outcome `error` when `status` is `failed` or
-  `result.isError`, `success` when `completed`. Seen: 7 completed / not error, 4 failed / `isError`; no `error` key.
-  `FileChange` (v5) -> one `file_event` per changed path, `tool_name` `apply_patch`, `target_path` the path (slashes
-  normalised), `tool_input` = the raw change, `content` = the whole file for `add`, the diff's added lines (`+` lines
-  without the `+++ ` header) for `update`, so the file rules see what was written; a secret on a removed line is still
-  flagged through `tool_input`. Outcome `success` for `completed`, `error` for `failed`. A moved file keeps its old path
-  as target (no sample). Checked: a synthetic add of `.mcp.json` with `mcpServers` fires `files_mcp_server_added` and
+  `result.isError`, `success` when `completed`, else `unknown`. Seen: 7 completed / not error, 4 failed / `isError`.
+  `FileChange` (v5) -> one `file_event` per changed path (an empty path is skipped), `tool_name` `apply_patch`,
+  `target_path` the path, or `move_path` when set (where the content lands), slashes normalised and a relative path
+  resolved against the turn's cwd; `tool_input` = the raw change plus `path`; `content` = the whole file for `add`, the
+  diff's added lines for `update` (`+` lines from the first `@@`; real diffs start there, a `---`/`+++` header before it
+  is skipped), none for `delete`, so the file rules see what was written. A secret on a removed line or in a deleted
+  file's text is still flagged through `tool_input`. Outcome `success` for `completed`, `error` for `failed`, else
+  `unknown`. Delete and move are unseen (no sample). Checked: a synthetic add of `.mcp.json` with `mcpServers` fires `files_mcp_server_added` and
   `control_plane_agent_config_write`; the 26 real paths fire nothing.
   `UserMessage` -> `user_prompt` (`prompt_source` typed, or system in a sub-agent).
   `AgentMessage` -> `assistant_message`. `SubAgentActivity` `started` -> `tool_call` `Agent`. Reasoning, `completed`
@@ -190,5 +192,11 @@ inline tables, dotted keys outside a header and multi-line hook commands are not
 
 **Join with the index.** MCP servers: checked. Since `codex/v4` the rollout's `McpToolCall.server` fills `mcp_server`,
 and locally it matched 1 of 4 configured servers by name; one more server in use is a built-in no config file sets up.
+Names with `-` or `.` (2 of the 4 configured) were never seen in a rollout, so whether Codex keeps them as written there
+is unchecked; if it does not, those servers read "never seen used".
+**Live hook versus rollout.** The hook (`retrohound hook`, src/hooks/agents.ts) maps Codex's `apply_patch` with
+`mapToolUse`, which does not know it, so live it is a `tool_call`, while the rollout gives `file_event`s: file rules fire
+on `scan`, not in `hook --mode log|block`. The hook's `tool_input` for `apply_patch` has not been seen yet (R2: patch
+text with `*** Add/Update/Delete File:` headers), so no parser is written for it.
 Hooks, skills and plugins: checked, not recorded in rollouts (see "What is not in the rollout"), so the collector fills
 no `attribution` or `hook:` event for Codex and the page says their use is not recorded.

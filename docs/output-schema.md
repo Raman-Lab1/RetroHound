@@ -150,9 +150,12 @@ Known limits:
 `retrohound scan --format attack-layer` (`src/outputs/attack.ts`): one JSON layer, layer format 4.5 (`versions.layer`
 4.5, `navigator` 4.9.0, no `attack`, so the Navigator uses its current ATT&CK), `domain` `enterprise-attack`. One
 `techniques[]` entry per technique the findings' rules are tagged with (`attack.t1552.001` -> `T1552.001`; a rule
-tagged with a sub-technique scores only the sub-technique, not also its parent). `score` = findings, `comment` = the
-rules and their counts (`secrets_read_secret_file (3), ...`). No `tactic`, so an entry shows under every tactic of its
+tagged with a sub-technique scores only the sub-technique, not also its parent). A parent tagged by other rules keeps
+its own entry and score; `layout.showAggregateScores` with `aggregateFunction` `sum` makes the Navigator show it with
+its sub-techniques added. `score` = findings, `comment` = each rule (name, else title, else id; counted per rule id)
+with its count (`secrets_read_secret_file (3), ...`). No `tactic`, so an entry shows under every tactic of its
 technique. `gradient` runs from 0 to the highest score; `layout.expandedSubtechniques` `annotated` opens scored
-sub-techniques. `description` names the tool version, the scan time and the finding and session counts, and how many
-findings came from rules with no technique tag (those are not in the layer). Masked like `json`; no session ids,
+sub-techniques. `description` names the tool version, the scan time, the findings and the sessions scanned (after
+`--since`/`--project`), and how many findings came from rules with no technique tag (those are not in the layer). A
+technique id the Navigator's current ATT&CK no longer has is not shown there. Masked like `json`; no session ids,
 paths or event data.
