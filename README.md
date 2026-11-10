@@ -261,7 +261,9 @@ covers the whole index (every agent, project and session RetroHound has kept, no
 - **What could they reach?** MCP servers, hook commands, skills and plugins, and the domains they contacted.
 - **Configured versus used:** what each agent's config files set up (MCP servers, hooks, skills, plugins, per scope)
   next to how often transcripts show it used. Items never seen used are flagged (surface you may not need), and
-  anything used that no config file sets up now is listed (removed since, or set up somewhere unexpected).
+  anything used that no config file sets up now is listed (removed since, or set up somewhere unexpected). One row
+  per item, with every scope and how many files set it up. Use is visible in Claude Code transcripts only; for Codex
+  and Antigravity the page lists what is configured and says their use is not recorded.
 - **What must I rotate?** Each secret by fingerprint, with the sessions, sub-agents and projects it appeared in.
 - **How long were guard rails off?** Events and sessions per permission mode.
 - **What did they try?** Blocked calls by kind and category, and findings (the 500 most severe, newest first).
