@@ -19,16 +19,14 @@ export function setFirstSeen(fs: FirstSeen = none()): void {
 
 export const firstSeen = (scope: keyof FirstSeen, ev: Row): boolean => current[scope].has(ev.id as string);
 
-/** True when the parseable timestamps span the cold-start window, earliest to latest. */
-export function spansColdStart(tss: Iterable<string>): boolean {
+/** The earliest parseable ts plus the cold-start window: an event before it is baseline, never first-seen. */
+export function coldStartCutoff(tss: Iterable<string>): string {
   let min = Infinity;
-  let max = -Infinity;
   for (const ts of tss) {
-    const t = Date.parse(ts); // NaN fails both comparisons: a bad ts is skipped
+    const t = Date.parse(ts); // NaN fails the comparison: a bad ts is skipped
     if (t < min) min = t;
-    if (t > max) max = t;
   }
-  return max - min >= COLD_START_MS;
+  return Number.isFinite(min) ? new Date(min + COLD_START_MS).toISOString() : "~"; // "~" sorts after any ts
 }
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
@@ -47,9 +45,9 @@ function keys(ev: Row): string[] {
 
 const before = (a: Row, b: Row): boolean => str(a.ts) < str(b.ts) || (a.ts === b.ts && str(a.id) < str(b.id));
 
-/** The pre-pass over in-memory events (`--no-index`): all false until they span the cold-start window. */
+/** The pre-pass over in-memory events (`--no-index`): earliest carriers at or after the cold-start cutoff. */
 export function firstSeenOf(events: Row[]): FirstSeen {
-  if (!spansColdStart(events.map((e) => str(e.ts)))) return none();
+  const cutoff = coldStartCutoff(events.map((e) => str(e.ts)));
   const project = new Map<string, Row>();
   const global = new Map<string, Row>();
   const keep = (m: Map<string, Row>, key: string, ev: Row) => {
@@ -62,6 +60,6 @@ export function firstSeenOf(events: Row[]): FirstSeen {
       keep(project, `${str(ev.project_path)}\0${k}`, ev);
     }
   }
-  const ids = (m: Map<string, Row>) => new Set([...m.values()].map((e) => e.id as string));
+  const ids = (m: Map<string, Row>) => new Set([...m.values()].filter((e) => str(e.ts) >= cutoff).map((e) => e.id as string));
   return { project: ids(project), global: ids(global) };
 }

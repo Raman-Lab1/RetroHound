@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { IO } from "../../src/cli/io.ts";
 import { main } from "../../src/cli/main.ts";
+import { scanHistory } from "../../src/gitjoin.ts";
+import { secretFingerprints } from "../../src/normalize/mask.ts";
 
 const KEY = "AK" + "IA" + "EXAMPLE0".repeat(2); // matches aws_access_key; split so the source never holds it whole
 const base = mkdtempSync(join(tmpdir(), "rh-gj-"));
@@ -65,4 +67,28 @@ test("a project whose history lacks the secret exits 0; bad input exits 2", asyn
   expect(out).toContain("0 commit(s)");
   expect(await run("git-secrets", "--db", db, "--format", "xml")).toBe(2);
   expect(await run("git-secrets", "--db", join(base, "missing.db"))).toBe(2);
+});
+
+test("no git on PATH: every project is skipped, no hang", async () => {
+  const path = process.env.PATH;
+  process.env.PATH = mkdtempSync(join(base, "empty-path-"));
+  try {
+    expect(await run("git-secrets", "--db", db, "--format", "json")).toBe(0);
+  } finally {
+    process.env.PATH = path;
+  }
+  expect(JSON.parse(out)).toMatchObject({ hits: [], projects_scanned: 0, projects_skipped: [clean, leaky, join(base, "not-a-repo")] });
+}, 5000);
+
+test("the repo's own config does not change what git log prints", async () => {
+  const dir = join(base, "configured");
+  repo(dir, `AWS_ACCESS_KEY_ID=${KEY}\n`);
+  for (const [k, v] of [["format.pretty", "oneline"], ["diff.noprefix", "true"], ["log.showSignature", "true"]])
+    execFileSync("git", ["-C", dir, "config", k!, v!]);
+  const hits: string[][] = [];
+  expect(await scanHistory(dir, new Set(secretFingerprints(KEY)), (_fp, commit, file, date) => hits.push([commit, file, date]))).toBe(true);
+  expect(hits).toHaveLength(1);
+  expect(hits[0]![0]).toMatch(/^[0-9a-f]{12}$/);
+  expect(hits[0]![1]).toBe("config.env");
+  expect(hits[0]![2]).toMatch(/^\d{4}-\d\d-\d\dT/);
 });

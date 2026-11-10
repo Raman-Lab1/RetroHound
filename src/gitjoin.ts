@@ -35,13 +35,16 @@ export function seenSecrets(dbPath: string, project?: string): { seen: Map<strin
 }
 
 /** Streams `git log -p --all` of `dir`, calling `found` for every wanted fingerprint in added lines or a commit message.
- * Resolves false when `dir` is not a work tree (or missing). */
+ * Resolves false when `dir` is not a work tree (or missing), or git is not installed. */
 export async function scanHistory(dir: string, wanted: Set<string>, found: (fp: string, commit: string, file: string, date: string) => void): Promise<boolean> {
-  const git = spawn("git", ["-C", dir, "log", "-p", "--all", "--no-color", "--no-ext-diff", "--no-textconv", "--date=iso-strict"], {
+  const git = spawn("git", ["-C", dir, "log", "-p", "--all", "--no-color", "--no-ext-diff", "--no-textconv", "--date=iso-strict",
+    "--pretty=medium", "--no-show-signature", "--src-prefix=a/", "--dst-prefix=b/"], { // the repo's config must not change the format
     stdio: ["ignore", "pipe", "ignore"],
     env: { ...process.env, GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0" }, // a partial clone must not fetch blobs
   });
-  const exit = new Promise<number>((ok, fail) => (git.on("error", fail), git.on("close", (c) => ok(c ?? 1))));
+  const lines = createInterface({ input: git.stdout! });
+  // no git (spawn 'error'): stdout never ends (Bun), so close the reader and skip the project
+  const exit = new Promise<number>((ok) => (git.on("error", () => (lines.close(), ok(1))), git.on("close", (c) => ok(c ?? 1))));
   let commit = "", date = "", file = "", inHunk = false;
   let buf: string[] = [];
   const flush = (where: string) => {
@@ -49,7 +52,7 @@ export async function scanHistory(dir: string, wanted: Set<string>, found: (fp: 
     if (buf.length) for (const fp of secretFingerprints(buf.join("\n"))) if (wanted.has(fp)) found(fp, commit, where, date);
     buf = [];
   };
-  for await (const line of createInterface({ input: git.stdout! })) {
+  for await (const line of lines) {
     if (line.startsWith("commit ")) {
       flush(file || "(commit message)"), (file = ""), (inHunk = false), (commit = line.split(" ")[1]!.slice(0, 12)), (date = "");
     } else if (line.startsWith("diff --git ")) {

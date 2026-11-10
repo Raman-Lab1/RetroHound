@@ -146,7 +146,7 @@ index, or the in-memory events with `--no-index`), across sessions and agents:
 filter on the kind too (`category: web_request` or `domain|exists: true` for domains). Use the global scope for hooks
 and MCP servers, and the project scope for domains.
 
-- Cold start: both are false until the data spans 14 days from the earliest to the latest `ts`.
+- Cold start: the first 14 days from the earliest `ts` are the baseline; an event in them is never first-seen.
 - A rule that reads either must declare `x-retrohound: { requires: [first_seen] }` (`first-seen-not-required`
   otherwise) and must be lane `hunt` (`first-seen-enforce`): the live hook has no index. `rules test` runs the
   pre-pass over each test file, so a positive file must span 14 days (an old baseline line with its own `ts`).

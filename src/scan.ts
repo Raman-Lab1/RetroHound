@@ -4,7 +4,7 @@
 import { createHash } from "node:crypto";
 import { COLLECTORS, type Collector } from "./collectors/index.ts";
 import { evaluate, type Match } from "./engine/evaluate.ts";
-import { FIRST_SEEN_FIELDS, firstSeenOf, setFirstSeen, spansColdStart, type FirstSeen } from "./engine/first-seen.ts";
+import { coldStartCutoff, FIRST_SEEN_FIELDS, firstSeenOf, setFirstSeen, type FirstSeen } from "./engine/first-seen.ts";
 import { snapshotConfig } from "./footprint/snapshot.ts";
 import { type Rejection, type Rule } from "./engine/load.ts";
 import { loadSources, ruleSources } from "./cli/rules.ts";
@@ -180,7 +180,7 @@ async function scanIndexed(jobs: Job[], store: Store, rules: Rule[], hash: strin
     files.failed += index.failed.length;
   }
   // Every agent is indexed before any evaluates, so the first-seen query sees all of this scan's events (ADR 0016).
-  withFirstSeen(rules, () => indexedFirstSeen(store), () => {
+  withFirstSeen(rules, () => store.firstSeen(coldStartCutoff(store.listSessions().map((s) => s.first_ts))), () => {
     for (const { c, sessions } of dirty) evaluateAgent(c, store, rules, sessions, full);
   });
   const events = store.listSessions().reduce((n, s) => n + s.event_count, 0);
@@ -196,12 +196,6 @@ async function scanIndexed(jobs: Job[], store: Store, rules: Rule[], hash: strin
     files,
     lines,
   };
-}
-
-/** All false until the index spans the cold-start window (ADR 0016). */
-function indexedFirstSeen(store: Store): FirstSeen {
-  const spans = spansColdStart(store.listSessions().flatMap((s) => [s.first_ts, s.last_ts]));
-  return spans ? store.firstSeen() : { project: new Set(), global: new Set() };
 }
 
 /** Indexes one agent's files and parses the sessions to re-evaluate: those with a touched file, or all on `full`. */

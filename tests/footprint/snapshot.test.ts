@@ -1,5 +1,5 @@
 // Config snapshots (src/footprint/snapshot.ts): taken on every indexed scan, pruned to the last SNAPSHOTS, diffed by the
-// footprint, never holding a raw value. Scans run against a temp HOME with defanged config files.
+// footprint, never holding a raw value. Scans run against the temp HOME (tests/preload.ts) with defanged config files.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -16,17 +16,10 @@ import { open } from "../../src/store/sqlite.ts";
 const base = mkdtempSync(join(tmpdir(), "rh-snapshot-"));
 const KEY = "sk-" + "PLACEHOLDER0000000000000000"; // placeholder in the sk- key shape, split so no file holds it whole
 const AWS = "AKIA" + "ABCDEFGHIJKLMNOP";
-const saved = { ...process.env };
-beforeAll(() => {
-  process.env.HOME = join(base, "home");
-  process.env.RETROHOUND_MANAGED_DIR = join(base, "managed");
-  delete process.env.CLAUDE_CONFIG_DIR;
-  delete process.env.CODEX_HOME;
-  mkdirSync(join(base, "home"), { recursive: true });
-  mkdirSync(join(base, "claude", "projects"), { recursive: true });
-});
+const claudeJson = join(process.env.HOME!, ".claude.json"); // HOME is a temp dir (tests/preload.ts)
+beforeAll(() => mkdirSync(join(base, "claude", "projects"), { recursive: true }));
 afterAll(() => {
-  process.env = saved;
+  rmSync(claudeJson, { force: true });
   rmSync(base, { recursive: true, force: true });
 });
 
@@ -44,7 +37,7 @@ const diff = (path: string) => {
     db.close();
   }
 };
-const servers = (args: string[]) => writeFileSync(join(base, "home", ".claude.json"), JSON.stringify({
+const servers = (args: string[]) => writeFileSync(claudeJson, JSON.stringify({
   mcpServers: { docs: { command: "npx", args, env: { API_KEY: KEY } } },
 }));
 const scan = (dbPath: string, noIndex = false) => runScan({ root: join(base, "claude"), dbPath, noIndex });
