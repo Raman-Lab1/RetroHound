@@ -147,7 +147,7 @@ describe("collectFootprint", () => {
 
 describe("compareConfig", () => {
   const item = (kind: "mcp_server" | "hook", name: string, agent = "claude_code", scope = "user", source = "/home/x/.claude.json") =>
-    ({ agent, kind, name, scope, source });
+    ({ agent, kind, name, scope, source, hash: "h" });
   const configured = (config: Parameters<typeof collectFootprint>[1]["config"]) => {
     const index = openReadOnly(db);
     try {
@@ -179,7 +179,7 @@ describe("compareConfig", () => {
     await runScan({ root: join(d, "claude"), dbPath: path, rulesDir: rules });
     const index = openReadOnly(path);
     try {
-      const plugin = { agent: "claude_code", kind: "plugin" as const, name: "kit", scope: "user", source: "/home/x/.claude/settings.json" };
+      const plugin = { agent: "claude_code", kind: "plugin" as const, name: "kit", scope: "user", source: "/home/x/.claude/settings.json", hash: "h" };
       const c = collectFootprint(index, { rules: [], now, config: [{ items: [plugin], files: 1, skipped: [] }] }).configured!;
       expect(c.items[0]).toMatchObject({ name: "kit", events: 1, observable: true });
     } finally {
@@ -203,7 +203,7 @@ describe("compareConfig", () => {
     await runScan({ root: join(d, "claude"), dbPath: path, rulesDir: rules });
     const index = openReadOnly(path);
     try {
-      const p = (name: string) => ({ agent: "claude_code", kind: "plugin" as const, name, scope: "user", source: "/home/x/.claude/settings.json" });
+      const p = (name: string) => ({ agent: "claude_code", kind: "plugin" as const, name, scope: "user", source: "/home/x/.claude/settings.json", hash: "h" });
       const c = collectFootprint(index, { rules: [], now, config: [{ items: [p("kit"), p("kit_extra")], files: 1, skipped: [] }] }).configured!;
       expect(c.items.map((i) => [i.name, i.events])).toEqual([["kit", 2], ["kit_extra", 1]]);
       // more configured plugins than SQLite allows terms in a compound SELECT (500)

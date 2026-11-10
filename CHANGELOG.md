@@ -14,6 +14,9 @@ and versions follow [Semantic Versioning](https://semver.org/).
 - Footprint report: configured versus used. The agents' config files (MCP servers, hooks, skills, plugins; user,
   project, local and managed scopes) are read for names and hook commands only, and set against what transcripts show
   was used: never-used items are flagged, and used items that no config file sets up now are listed.
+- Config snapshots: every indexed scan stores what the agents' config files set up (name, scope, file and a sha256 of
+  the masked entry, never a value; the last 10 scans kept, outside the hash chain). The footprint report shows what is
+  new, changed and removed since the scan before. Index schema version 4; the first scan upgrades it.
 - Codex collector (`codex/v4`): MCP tool calls are indexed as `mcp` events (`mcp__<server>__<tool>`, `mcp_server`,
   `mcp_tool`, arguments, result, outcome), so MCP rules fire on Codex and the footprint shows which Codex MCP servers
   were used. Codex rollouts are re-read once.

@@ -1,12 +1,13 @@
 // What Codex CLI is configured to reach (docs/formats/codex.md, "Configuration surface"): MCP servers and inline hooks
 // in config.toml, hooks.json, plugins, skills. Fixed locations only, read as text: nothing is executed, imported or
-// written, and env, headers, args, URLs and tokens are never read out (only their key names decide the transport).
+// written, and env, headers, args, URLs and tokens are never read out (only their key names decide the transport; the
+// masked values go into the hash).
 import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
 import { hookCommands, MAX_FILE_BYTES } from "../collectors/repo/collect.ts";
 import { settingsPath } from "../hooks/install.ts";
 import { mask } from "../normalize/mask.ts";
-import { type ConfigItem, type ConfigRead, type ConfigReader, MAX_CONFIG_ITEMS } from "./types.ts";
+import { type ConfigItem, type ConfigRead, type ConfigReader, entryHash, MAX_CONFIG_ITEMS } from "./types.ts";
 
 export const MAX_PROJECTS = 200; // project paths read per agent: each costs a few stat calls; the index can hold thousands
 const MAX_ENTRIES = 500; // skill or plugin folders read per directory
@@ -16,13 +17,14 @@ export function collector(agent: string) {
   const out: ConfigRead = { items: [], files: 0, skipped: [] };
   const skip = (path: string, reason: string) => void out.skipped.push({ path: mask(path), reason });
   let full = false;
-  const add = (i: Omit<ConfigItem, "agent">) => {
+  /** `entry`: what the hash covers, the whole config entry; default its name and detail. */
+  const add = (i: Omit<ConfigItem, "agent" | "hash">, entry: unknown = [i.name, i.detail]) => {
     if (out.items.length >= MAX_CONFIG_ITEMS) {
       if (!full) skip(i.source, `more than ${MAX_CONFIG_ITEMS} configured items, the rest left out`);
       full = true;
       return;
     }
-    out.items.push({ agent, kind: i.kind, name: mask(i.name), scope: i.scope, source: mask(i.source), ...(i.detail ? { detail: mask(i.detail) } : {}) });
+    out.items.push({ agent, kind: i.kind, name: mask(i.name), scope: i.scope, source: mask(i.source), ...(i.detail ? { detail: mask(i.detail) } : {}), hash: entryHash(entry) });
   };
   /** Text of `path` if it is a file inside `root` once symlinks are resolved and not oversized; absent -> undefined. */
   const read = (root: string, path: string): string | undefined => {
@@ -62,7 +64,7 @@ export function collector(agent: string) {
       if (text === undefined) continue;
       const front = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? "";
       const name = /^name:[ \t]*["']?([^"'\r\n]+?)["']?[ \t]*$/m.exec(front)?.[1] ?? f;
-      add({ kind: "skill", name, scope, source: join(dir, f, "SKILL.md") });
+      add({ kind: "skill", name, scope, source: join(dir, f, "SKILL.md") }, text);
     }
   };
   /** Index project paths still on disk, deduplicated, home excluded (its files are the user scope), capped. */
@@ -102,13 +104,15 @@ function tomlString(v: string): string | undefined {
 // ponytail: a line scan, not a TOML parser. It sees table headers ([mcp_servers.<name>], [plugins."<id>"],
 // [[hooks.<Event>.hooks]]), key NAMES inside them, `enabled = false`, and single-line hook `command` strings. Not seen:
 // inline tables (`mcp_servers = { ... }`), dotted keys outside a header, multi-line hook commands (reported as skipped).
+// An item's hash covers the key = value lines of its own table, not its sub-tables ([mcp_servers.<name>.env]).
 // Upgrade: a real TOML parser if configs in those forms turn up.
 function scanToml(text: string, source: string, scope: string, c: ReturnType<typeof collector>): void {
   let table: string[] = [];
-  let item: Omit<ConfigItem, "agent"> | undefined; // the server or plugin of the current table, added at its end
+  let item: Omit<ConfigItem, "agent" | "hash"> | undefined; // the server or plugin of the current table, added at its end
+  let body: string[] = []; // its key = value lines, for the hash
   let enabled = true;
   let multi = false; // inside a multi-line string: no header or key there is real
-  const flush = () => void (item && enabled && c.add(item));
+  const flush = () => void (item && enabled && c.add(item, body));
   for (const line of text.split(/\r?\n/)) {
     const wasMulti = multi;
     if ((line.match(/"""|'''/g)?.length ?? 0) % 2) multi = !multi;
@@ -118,6 +122,7 @@ function scanToml(text: string, source: string, scope: string, c: ReturnType<typ
       flush();
       table = keyParts(header[1]!);
       enabled = true;
+      body = [];
       const [root, name] = table;
       item = table.length !== 2 ? undefined
         : root === "mcp_servers" ? { kind: "mcp_server", name: name!, scope, source }
@@ -128,6 +133,7 @@ function scanToml(text: string, source: string, scope: string, c: ReturnType<typ
     const kv = /^\s*([\w-]+)\s*=\s*(.*)$/.exec(line);
     if (!kv) continue;
     const [, key, value = ""] = kv;
+    body.push(line.trim());
     if (item && key === "enabled") enabled = !value.startsWith("false");
     else if (item?.kind === "mcp_server" && (key === "command" || key === "url")) item.detail = key === "command" ? "stdio" : "http";
     else if (table[0] === "hooks" && table[2] === "hooks" && table.length === 3 && key === "command") {

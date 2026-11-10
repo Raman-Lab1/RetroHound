@@ -244,8 +244,10 @@ installed paths every time and warns if they no longer pass.
 - **Raw text is never stored.** Rules see raw text in memory while parsing; the index holds masked fields and a
   pointer (`raw_ref`: file and line) back to the transcript.
 - **Agent config files** (Claude Code, Codex CLI, Antigravity CLI: user, project and managed scopes, for the
-  projects in the index) are read when the footprint report is built, for MCP server, hook, skill and plugin names
-  and hook commands only. Env, headers, arguments and URLs in them are never read out, and nothing is stored.
+  projects in the index) are read when the footprint report is built and at every indexed scan, for MCP server, hook,
+  skill and plugin names and hook commands only. Env, headers, arguments and URLs in them are never read out: each
+  entry is stored only as name, scope, file and a sha256 of its masked form, for the last 10 scans, so the report can
+  show what changed.
 - **The index** is `~/.retrohound/index.db` (override with `--db`), directory 0700, file 0600 on macOS and Linux.
   On Windows those modes protect nothing; rely on your user profile permissions. It is long-lived evidence, so it
   may be the only copy of sessions Claude Code deleted. `retrohound purge --yes` deletes it, and the

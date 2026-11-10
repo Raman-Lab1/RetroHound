@@ -4,6 +4,7 @@
 import { createHash } from "node:crypto";
 import { COLLECTORS, type Collector } from "./collectors/index.ts";
 import { evaluate, type Match } from "./engine/evaluate.ts";
+import { snapshotConfig } from "./footprint/snapshot.ts";
 import { type Rejection, type Rule } from "./engine/load.ts";
 import { loadSources, ruleSources } from "./cli/rules.ts";
 import { mask } from "./normalize/mask.ts";
@@ -165,6 +166,7 @@ async function scanIndexed(jobs: Job[], store: Store, rules: Rule[], hash: strin
   }
   const events = store.listSessions().reduce((n, s) => n + s.event_count, 0);
   store.recordRuleRun({ rule_set_hash: hash, started_at: started, finished_at: new Date().toISOString(), events, findings: store.listFindings().length });
+  snapshotConfig(store); // what the agents' config files set up now, for the footprint's "changed since last scan"
   const agents = new Set(jobs.map((j) => j.c.agent as string)); // one DB holds every agent
   return {
     sessions: store.listSessions().filter((s) => agents.has(s.agent))

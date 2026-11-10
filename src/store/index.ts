@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { chmodSync, closeSync, mkdirSync, openSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import type { ConfigItem } from "../footprint/types.ts";
 import { mask } from "../normalize/mask.ts";
 import { LIST_FIELDS, OPTIONAL_STRINGS, toStored } from "../normalize/stored.ts";
 import type { AgentEvent, Finding, RawEvent } from "../normalize/types.ts";
@@ -51,6 +52,8 @@ const SESSION_SELECT = `SELECT s.*, NOT EXISTS (
     SELECT 1 FROM events e JOIN files_indexed f ON f.path = e.source_file
     WHERE e.session_id = s.session_id AND f.gone_at IS NULL
   ) AS archived FROM sessions s`;
+
+export const SNAPSHOTS = 10; // config snapshots kept, one per indexed scan
 
 const now = () => new Date().toISOString();
 const plain = <T>(row: Row) => ({ ...row }) as unknown as T; // Node rows have a null prototype
@@ -179,6 +182,11 @@ export function openStore(path: string = defaultDbPath()) {
       VALUES (?, ?, ?, ?, ?)`),
     lastRuleRun: db.prepare(`SELECT rule_set_hash, started_at, finished_at, events, findings
       FROM rule_runs ORDER BY id DESC LIMIT 1`),
+    lastRuleRunId: db.prepare("SELECT id FROM rule_runs ORDER BY id DESC LIMIT 1"),
+    insertSnapshot: db.prepare("INSERT INTO config_snapshots (scan_id, agent, kind, name, scope, source, hash) VALUES (?, ?, ?, ?, ?, ?, ?)"),
+    markSnapshot: db.prepare("UPDATE rule_runs SET config_items = ? WHERE id = ?"),
+    pruneSnapshots: db.prepare(`DELETE FROM config_snapshots WHERE scan_id NOT IN
+      (SELECT id FROM rule_runs WHERE config_items IS NOT NULL ORDER BY id DESC LIMIT ?)`),
   };
 
   function refreshSessions(ids: Iterable<string>): void {
@@ -315,6 +323,18 @@ export function openStore(path: string = defaultDbPath()) {
     lastRuleRun(): RuleRun | undefined {
       const row = q.lastRuleRun.get();
       return row && plain<RuleRun>(row);
+    },
+
+    /** Stores `items` as the snapshot of the last recorded rule run (call right after recordRuleRun) and drops every
+     * snapshot but the last SNAPSHOTS, in one transaction. Not chained (ADR 0015): the config files are re-read each scan. */
+    recordConfigSnapshot(items: ConfigItem[]): void {
+      transaction(() => {
+        const id = q.lastRuleRunId.get()?.id;
+        if (id === undefined) return;
+        for (const i of items) q.insertSnapshot.run(id, mask(i.agent), mask(i.kind), mask(i.name), mask(i.scope), mask(i.source), i.hash);
+        q.markSnapshot.run(items.length, id);
+        q.pruneSnapshots.run(SNAPSHOTS);
+      });
     },
 
     close: () => db.close(),

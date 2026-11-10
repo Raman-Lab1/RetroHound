@@ -103,11 +103,20 @@ function configured(c: NonNullable<Footprint["configured"]>): string {
       [i.detail ? `${i.name} (${i.detail})` : i.name, i.scopes.join(", "), raw(used(i)), i.sessions, i.last_ts ?? "-",
         i.files > 1 ? `${i.source} and ${i.files - 1} more` : i.source])) + "</details>").join("");
   return `<p class="mu">Read now from ${h(c.files)} agent config files${c.skipped ? `, ${h(c.skipped)} skipped` : ""}: names and hook `
-    + "commands only; env values, headers and MCP server arguments are never read. Skills and plugins count the tool calls "
+    + "commands only; env values, headers and MCP server arguments are never shown or stored. Skills and plugins count the tool calls "
     + "made under them (a plugin also counts its skills' and its own MCP servers').</p>"
     + `<h3>Set up in config</h3>${blocks || NONE}`
     + `<h3>Used, but in no config file read now</h3><p class="mu">Removed since, built into the agent, or set up where RetroHound does not read.</p>`
     + table(["agent", "kind", "name", "events", "sessions", "last seen"], c.unlisted.map((u) => [u.agent, u.kind, u.name, u.events, u.sessions, u.last_ts]));
+}
+
+function changes(c: NonNullable<Footprint["config_changes"]>): string {
+  if (!c.compared) return `<p class="mu">Nothing to compare yet: a snapshot is taken at each indexed scan, and this needs two.</p>`;
+  const list = (title: string, rows: typeof c.new) => `<h3>${h(title)}</h3>`
+    + table(["agent", "kind", "name", "scope", "set up in"], rows.map((r) => [r.agent, r.kind, r.name, r.scope, r.source]));
+  return `<p class="mu">The config files as read at the latest indexed scan, against the scan before. A change is seen by a hash `
+    + "of the masked entry (command, arguments, URL, env); the values are not stored.</p>"
+    + list("New since last scan", c.new) + list("Changed since last scan", c.changed) + list("Removed since last scan", c.removed);
 }
 
 export function renderFootprint(d: Footprint): string {
@@ -128,6 +137,7 @@ export function renderFootprint(d: Footprint): string {
     section("What could they reach?", seen("MCP servers", d.tools.mcp_servers) + seen("Hooks", d.tools.hooks)
       + seen("Skills and plugins", d.tools.attributions)),
     d.configured ? section("Configured versus used", configured(d.configured)) : "",
+    d.config_changes ? section("What changed in their config?", changes(d.config_changes)) : "",
     section("Who did they contact?", table(["#", "domain", "share", "events", "sessions", "blocked", "% sub-agent", "first seen", "last seen"],
       d.domains.map((x, i) => [i + 1, x.name, raw(`<div class="bw"><div class="bar" style="width:${Math.round((x.events / dmax) * 100)}%"></div></div>`),
         x.events, x.sessions, x.blocked, pct(x.sub_agent, x.events), x.first_ts, x.last_ts]))),

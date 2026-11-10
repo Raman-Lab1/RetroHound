@@ -7,6 +7,7 @@ import { LEVELS, type Level } from "../normalize/types.ts";
 import { GENESIS } from "../store/chain.ts";
 import type { Db, SqlValue } from "../store/sqlite.ts";
 import { TOOL_VERSION } from "../version.ts";
+import { snapshotDiff } from "./snapshot.ts";
 import type {
   AgentNode, ConfigFootprint, ConfigItem, ConfigRead, FindingRow, Footprint, ProjectNode, SecretReach, Seen, SessionNode, SubAgentNode,
 } from "./types.ts";
@@ -195,6 +196,7 @@ export function collectFootprint(db: Db, opts: { rules: Rule[]; retentionDays?: 
   const [hooks, cutHooks] = top(seen("COALESCE(command_line, tool_name)", "tool_name LIKE 'hook:%'", "tool_name"), TOOL_CAP);
   const [attributions, cutAttr] = top(seen("attribution", "attribution IS NOT NULL"), TOOL_CAP);
   const [configured, cutConfig] = opts.config ? compareConfig(db, opts.config) : [undefined, 0];
+  const [changes, cutChanges] = snapshotDiff(db);
   const [domains, omittedDomains] = top(seen("domain", "domain IS NOT NULL"), DOMAIN_CAP);
 
   const findingsByDay = new Map(all<{ day: string; n: number }>("SELECT substr(ts, 1, 10) AS day, COUNT(*) AS n FROM findings GROUP BY day")
@@ -248,9 +250,10 @@ export function collectFootprint(db: Db, opts: { rules: Rule[]; retentionDays?: 
     },
     findings: findings.map(({ id, ...f }) => ({ ...f, rule: loaded.get(f.rule) ?? f.rule })),
     ...(configured ? { configured } : {}),
+    ...(changes ? { config_changes: changes } : {}),
     omitted: {
       sessions: omittedSessions, findings: omittedFindings, domains: omittedDomains, secrets: omittedSecrets,
-      tools: cutMcp + cutHooks + cutAttr + cutConfig, // configured-versus-used rows count as tools
+      tools: cutMcp + cutHooks + cutAttr + cutConfig + cutChanges, // configured-versus-used and config-change rows count as tools
     },
   };
   // Plain objects out (Node rows have a null prototype), SQL NULLs dropped as absent optionals (chain keeps its null),

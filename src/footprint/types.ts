@@ -2,6 +2,8 @@
 // Built from the index only by src/footprint/data.ts (no transcript re-read, so deleted sessions still count) and
 // rendered by src/footprint/html.ts as one offline page. Every string here is already masked (ADR 0007).
 // Lists are sorted (most first, then by name) and capped; `omitted` says how many rows each cap left out.
+import { createHash } from "node:crypto";
+import { mask } from "../normalize/mask.ts";
 import type { Level } from "../normalize/types.ts";
 
 /** One thing the agents used or reached: an MCP server, a hook command, a skill/plugin, a web domain. */
@@ -75,9 +77,17 @@ export type ConfigItem = {
   scope: string; // user | project | local | managed | plugin
   source: string; // the file it was read from
   detail?: string; // hook: `hook:<Event>`; mcp_server: transport (stdio, http, sse) when given
+  hash: string; // entryHash of the whole entry (server object, SKILL.md text, ...), so a change shows; set by every reader
 };
 
-/** What one agent's reader found. Names and hook commands only: env, headers, args and URLs are never read out. */
+/** sha256 of the masked, canonical (keys sorted) JSON of a config entry: a change in command, args, url or env shows
+ * in the config snapshots (src/footprint/snapshot.ts) without the value being stored. A masked secret that changes
+ * stays the same hash. */
+export const entryHash = (entry: unknown) => createHash("sha256").update(mask(JSON.stringify(entry ?? null, (_k, v: unknown) =>
+  v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v))).digest("hex");
+
+/** What one agent's reader found. Names and hook commands only: env, headers, args and URLs are never read out, only
+ * hashed (masked) into `hash`. */
 export type ConfigRead = { items: ConfigItem[]; files: number; skipped: { path: string; reason: string }[] };
 
 /** home: the user's home dir; projects: project paths from the index (only those still on disk are read). */
@@ -103,6 +113,15 @@ export type ConfigFootprint = {
   unlisted: { agent: string; kind: ConfigItem["kind"]; name: string; events: number; sessions: number; last_ts: string }[];
   files: number;
   skipped: number;
+};
+
+/** The config snapshot of the latest indexed scan against the one before (src/footprint/snapshot.ts). new and removed:
+ * agent + kind + name in one and not the other; changed: same agent, kind, name, scope and source, another hash. */
+export type ConfigSnapshotDiff = {
+  compared: boolean; // false until two scans have taken a snapshot; the lists are then empty
+  new: { agent: string; kind: string; name: string; scope: string; source: string }[];
+  changed: ConfigSnapshotDiff["new"];
+  removed: ConfigSnapshotDiff["new"];
 };
 
 export type Footprint = {
@@ -137,5 +156,6 @@ export type Footprint = {
   blocked: { kinds: { name: string; count: number }[]; categories: { name: string; count: number }[] };
   findings: FindingRow[]; // highest level first, then newest
   configured?: ConfigFootprint; // absent when the caller read no config
+  config_changes?: ConfigSnapshotDiff; // absent on an index from before config snapshots (opened read-only, never upgraded)
   omitted: { sessions: number; findings: number; domains: number; secrets: number; tools: number };
 };
