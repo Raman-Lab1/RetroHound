@@ -1,0 +1,53 @@
+name: RetroHound
+description: Check a repo's AI coding agent surface (preflight) or agent transcripts (scan) with Sigma rules, offline.
+author: Raman Kumar
+branding:
+  icon: shield
+  color: purple
+inputs:
+  command:
+    description: "preflight (the checked-out repo's .claude, .mcp.json, CLAUDE.md, tasks, npm scripts) or scan (transcripts)"
+    required: false
+    default: preflight
+  fail-on:
+    description: "Fail the step when a finding is at or above this level: informational, low, medium, high, critical. Empty: never fail on findings."
+    required: false
+    default: high
+  args:
+    description: "Extra arguments, split on spaces. preflight: the directory (default .), --format json. scan: --root, --format sarif, ... Do not pass untrusted text here."
+    required: false
+    default: ""
+  output:
+    description: "Write RetroHound's report to this file instead of the log (for example rh.sarif with args --format sarif)."
+    required: false
+    default: ""
+outputs:
+  exit-code:
+    description: "RetroHound's exit code: 0 ok, 1 findings at or above fail-on, 2 bad input, 3 runtime failure."
+    value: ${{ steps.run.outputs.exit-code }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v5
+      with:
+        node-version: "24"
+    - id: run
+      shell: bash
+      env:
+        RH_COMMAND: ${{ inputs.command }}
+        RH_FAIL_ON: ${{ inputs.fail-on }}
+        RH_ARGS: ${{ inputs.args }}
+        RH_OUTPUT: ${{ inputs.output }}
+      run: |
+        case "$RH_COMMAND" in preflight|scan) ;; *) echo "::error::command must be preflight or scan"; exit 2 ;; esac
+        set -- "$RH_COMMAND"
+        [ -n "$RH_FAIL_ON" ] && set -- "$@" --fail-on "$RH_FAIL_ON"
+        [ "$RH_COMMAND" = scan ] && set -- "$@" --no-index
+        # word splitting on purpose: args is a list of flags
+        # shellcheck disable=SC2086
+        set -f; set -- "$@" $RH_ARGS; set +f
+        code=0
+        if [ -n "$RH_OUTPUT" ]; then npx --yes retrohound@0.2.0 "$@" > "$RH_OUTPUT" || code=$?
+        else npx --yes retrohound@0.2.0 "$@" || code=$?; fi
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        exit "$code"

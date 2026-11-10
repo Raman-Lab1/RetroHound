@@ -1,0 +1,78 @@
+name: Custom.RetroHound.Scan
+description: |
+  Runs RetroHound over every user's AI coding agent transcripts (Claude Code, Codex CLI, Antigravity CLI) and returns
+  one row per finding: Sigma rules for credential reads, piped installers, disabled safety settings and more.
+
+  Needs Node.js 22.13 or later on the endpoint (NodePath). The tool is RetroHound's npm package tarball; it is
+  unpacked to a temporary directory and run with --no-index, so nothing is written on the endpoint and the scan makes
+  no network calls. Output is the ndjson-ecs format, one finding per line (docs/output-schema.md).
+author: RetroHound
+type: CLIENT
+
+required_permissions:
+  - EXECVE
+
+tools:
+  - name: RetroHound
+    # The npm registry tarball for the pinned version. Set expected_hash to its SHA-256 before use
+    # (shasum -a 256 retrohound-0.2.0.tgz), or upload the tarball in the GUI and serve it locally.
+    url: https://registry.npmjs.org/retrohound/-/retrohound-0.2.0.tgz
+    serve_locally: true
+
+parameters:
+  - name: NodePath
+    description: Node.js 22.13+ executable on the endpoint (a full path if node is not on the client's PATH).
+    default: node
+  - name: AgentRoots
+    description: Agent and glob of each user's transcript root (scan --agent <Agent> --root <match>).
+    type: csv
+    default: |
+      Agent,Glob
+      claude_code,/home/*/.claude
+      claude_code,/Users/*/.claude
+      claude_code,/root/.claude
+      claude_code,C:\Users\*\.claude
+      codex,/home/*/.codex
+      codex,/Users/*/.codex
+      codex,/root/.codex
+      codex,C:\Users\*\.codex
+      antigravity,/home/*/.gemini/antigravity-cli
+      antigravity,/Users/*/.gemini/antigravity-cli
+      antigravity,/root/.gemini/antigravity-cli
+      antigravity,C:\Users\*\.gemini\antigravity-cli
+
+sources:
+  - query: |
+      LET Dir <= tempdir()
+
+      LET _ <= SELECT * FROM foreach(
+        row={ SELECT OSPath FROM Artifact.Generic.Utils.FetchBinary(ToolName="RetroHound", IsExecutable=FALSE) },
+        query={ SELECT * FROM unzip(filename=OSPath, output_directory=Dir, type="tgz") })
+
+      LET Cli <= path_join(components=[Dir, "package", "dist", "cli.mjs"])
+
+      LET Roots = SELECT * FROM foreach(row=AgentRoots,
+        query={ SELECT Agent, FullPath AS Root FROM glob(globs=Glob) })
+
+      LET Lines = SELECT * FROM foreach(row=Roots, query={
+        SELECT Agent, Root, parse_json(data=Stdout) AS F
+        FROM execve(argv=[NodePath, Cli, "scan", "--agent", Agent, "--root", Root, "--no-index",
+                          "--format", "ndjson-ecs"],
+                    sep="\n", length=10000000)
+        WHERE Stdout
+      })
+
+      SELECT Agent, Root,
+             get(item=F, field="@timestamp") AS Timestamp,
+             F.rule.name AS Rule,
+             F.event.severity AS Severity,
+             F.message AS Message,
+             F.retrohound.session_id AS SessionId,
+             F.retrohound.project_path AS Project,
+             F.process.command_line AS CommandLine,
+             F.file.path AS FilePath,
+             F.url.full AS Url,
+             F.threat.technique.id AS Techniques,
+             F.log.file.path AS Transcript,
+             F.event.id AS FindingId
+      FROM Lines
