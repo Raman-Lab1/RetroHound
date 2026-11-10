@@ -148,8 +148,8 @@ and MCP servers, and the project scope for domains.
 
 - Cold start: both are false until the data spans 14 days from the earliest to the latest `ts`.
 - A rule that reads either must declare `x-retrohound: { requires: [first_seen] }` (`first-seen-not-required`
-  otherwise) and must be lane `hunt` (`first-seen-enforce`): the live hook has no index. `rules test` runs no pre-pass,
-  so both read false there.
+  otherwise) and must be lane `hunt` (`first-seen-enforce`): the live hook has no index. `rules test` runs the
+  pre-pass over each test file, so a positive file must span 14 days (an old baseline line with its own `ts`).
 - Findings are as of the scan that evaluated the session: an older transcript found later does not change an untouched
   session's findings until the rule set changes. Indexed values are masked, in-memory ones are not.
 

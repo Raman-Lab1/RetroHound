@@ -1,0 +1,8 @@
+{"session_id":"s0","category":"process_creation","tool_name":"Bash","command_line":"ls","attribution":"skill:old-skill","ts":"2025-12-10T00:00:00.000Z"}
+{"session_id":"s0","category":"mcp","tool_name":"mcp__notes__list","mcp_server":"notes","mcp_tool":"list","ts":"2025-12-10T00:01:00.000Z"}
+{"session_id":"s1","category":"process_creation","tool_name":"Bash","command_line":"ls","attribution":"skill:old-skill"}
+{"session_id":"s1","category":"mcp","tool_name":"mcp__notes__save","mcp_server":"notes","mcp_tool":"save","attribution":"skill:old-skill"}
+{"session_id":"s2","category":"process_creation","tool_name":"Bash","command_line":"ls","attribution":"plugin:fresh"}
+{"session_id":"s2","category":"mcp","tool_name":"mcp__notes__save","mcp_server":"notes","mcp_tool":"save","attribution":"skill:old-skill"}
+{"session_id":"s3","category":"process_creation","tool_name":"Bash","command_line":"ls","attribution":"skill:lonely"}
+{"session_id":"s3","category":"mcp","tool_name":"mcp__notes__save","mcp_server":"notes","mcp_tool":"save"}
