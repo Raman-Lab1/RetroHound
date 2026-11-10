@@ -101,6 +101,24 @@ collection (ADR 0006, 0007).
   it is never guessed from the paths that file tools touched. v1 had only (2), so a root without sub-agents had none.
 - Event id = sha256(file, step_index, sub-index). No `parent_tool_use_id` (calls have no ids).
 
+## MCP, skill and hook markers (inspected, 10 transcripts, 629 lines)
+
+Step `type` counts: PLANNER_RESPONSE 286, GENERIC 253, USER_INPUT 27, EPHEMERAL_MESSAGE 26, SYSTEM_MESSAGE 12,
+LIST_DIRECTORY 6, VIEW_FILE 6, GREP_SEARCH 5, CONVERSATION_HISTORY 3, CHECKPOINT 3, ERROR_MESSAGE 2. Line keys:
+`step_index, source, type, status, created_at` (all), `content, tool_calls, thinking, error`, token counts.
+Tool call `name` counts (259 calls): run_command 122, read_file 75, edit_file 26, view_file 19, manage_task 10,
+list_dir 6, grep_search 5, write_file 3, schedule 2, invoke_subagent 1, manage_subagents 1.
+
+- No tool name contains `mcp`, `skill` or `hook`; no call carries a server name or a `mcp_*` argument. **No MCP calls
+  were recorded** in this data (the machine has no `mcp_config.json`, so none were configured either).
+- No skill-use or hook-run step exists. The words appear 7 (mcp), 9 (skill) and 26 (hook) times, only inside free text
+  (tool results, prompts, assistant prose), and once in a `tool_calls` value (a `run_command` command line).
+- So the collector cannot attribute `mcp_server`, skill or hook use for Antigravity; how a configured MCP server would
+  appear in a transcript is still unverified (no sample). Not mapped; revisit when a transcript with one exists.
+- Names the collector does not map yet (they stay generic `tool_call`, counted as `tool:<name>`): manage_task,
+  list_dir, grep_search, schedule, manage_subagents. New step types seen: EPHEMERAL_MESSAGE, LIST_DIRECTORY,
+  VIEW_FILE, GREP_SEARCH, CONVERSATION_HISTORY, CHECKPOINT, ERROR_MESSAGE.
+
 ## Open questions
 
 - Behaviour when the CLI's permission prompt is rejected, MCP tool calls, browser tool steps, `status` values other
