@@ -5,7 +5,7 @@ import { mask } from "../normalize/mask.ts";
 import type { Pack } from "./pack.ts";
 
 const ESC: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
-const h = (s: unknown) => mask(String(s ?? "")).replace(/[&<>"']/g, (c) => ESC[c]!);
+export const h = (s: unknown) => mask(String(s ?? "")).replace(/[&<>"']/g, (c) => ESC[c]!);
 const table = (head: string[], rows: unknown[][]) => rows.length
   ? `<table><tr>${head.map((c) => `<th>${h(c)}</th>`).join("")}</tr>${rows.map((r) => `<tr>${r.map((c) => `<td>${h(c)}</td>`).join("")}</tr>`).join("")}</table>`
   : "<p>none</p>";
