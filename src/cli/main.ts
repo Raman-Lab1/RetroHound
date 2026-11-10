@@ -24,6 +24,7 @@ import { registerShow } from "./show.ts";
 import { registerWrapped } from "./wrapped.ts";
 import { EXTRA_HELP, listRules, repeat, showRule } from "./rules.ts";
 import { testRules } from "./rules-test.ts";
+import { registerConvert } from "./convert.ts";
 import { retentionDays, summaryLines } from "./summary.ts";
 import { defaultReportPath, writeFootprint } from "./footprint.ts";
 import { homedir } from "node:os";
@@ -136,6 +137,7 @@ export function buildProgram(io: IO, setCode: (n: number) => void): Command {
     .option("--tests <dir>", "tests directory (default: <rules dir>/../tests, per rules dir)")
     .option("--extra-rules <dir>", EXTRA_HELP, repeat)
     .action((dir: string | undefined, f: { tests?: string; extraRules?: string[] }) => run(() => testRules(dir ?? DEFAULT_RULES_DIR, f.tests, io, f.extraRules)));
+  registerConvert(rules, run, io);
 
   program.command("purge").description("Delete the local index database (it may be the only copy of deleted evidence)")
     .option("--db <path>", "index database", defaultDbPath())

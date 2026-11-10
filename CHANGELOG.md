@@ -6,6 +6,9 @@ and versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `rules convert -t <backend> --pipeline ecs|ocsf [rules...]`: converts rules to SIEM queries over the `ndjson-ecs` /
+  `ndjson-ocsf` exports with a sigma-cli already on your PATH (nothing is installed or downloaded; without it, exit 2).
+  The pySigma pipelines ship in `integrations/pysigma/`; fields an export lacks and derived fields fail the rule.
 - `scan` writes a footprint report by default: `index.footprint.html` next to the index (named after it), one offline page (no scripts,
   nothing fetched) with everything the index holds about the agents on this machine: trust in the data, activity,
   agent/project/session/sub-agent tree, MCP servers, hooks, skills and plugins, domains, secrets to rotate,

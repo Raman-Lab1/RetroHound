@@ -1,0 +1,81 @@
+# pySigma processing pipeline: RetroHound `ai_coding_agent` rules -> the fields `retrohound scan --format ndjson-ecs`
+# emits for a finding's primary event. See README.md. Fields with no ECS target fail the rule instead of being invented.
+name: RetroHound ai_coding_agent to ndjson-ecs
+priority: 20
+transformations:
+  - id: retrohound_ecs_derived
+    type: detection_item_failure
+    message: "computed by the RetroHound engine, not in any export: run this rule in RetroHound"
+    field_name_conditions:
+      - type: include_fields
+        mode: re
+        fields: ["target_outside_project", "command_line_unquoted", "download_executed", "first_seen_.*"]
+    rule_conditions: &product
+      - type: logsource
+        product: ai_coding_agent
+  - id: retrohound_ecs_unmapped
+    type: detection_item_failure
+    message: "field not in ndjson-ecs (never exported, or exported with other values): run this rule in RetroHound"
+    field_name_conditions:
+      - type: include_fields
+        fields:
+          - category # values differ (event.category); the logsource category becomes conditions below
+          - parent_tool_use_id
+          - permission_mode
+          - prompt_source
+          - entrypoint
+          - attribution
+          - denial_kind
+          - denial_category
+          - secret_kinds
+          - result_secret_kinds
+          - secret_fps
+          - text_excerpt # ECS `message` carries the finding message
+          - raw_ref # an object; log.file.path holds its file only
+          - content # match-only: never leaves memory
+          - tool_input
+          - tool_response
+          - text
+    rule_conditions: *product
+  - id: retrohound_ecs_fields
+    type: field_name_mapping
+    mapping:
+      id: retrohound.finding.event_ids
+      schema_version: retrohound.schema_version
+      agent: gen_ai.agent.name
+      agent_version: retrohound.agent_version
+      session_id: retrohound.session_id
+      parent_session_id: retrohound.parent_session_id
+      agent_id: gen_ai.agent.id
+      project_path: retrohound.project_path
+      CurrentDirectory: retrohound.project_path
+      ts: "@timestamp"
+      seq: event.sequence
+      tool_name: gen_ai.tool.name
+      command_line: process.command_line
+      CommandLine: process.command_line
+      target_path: file.path
+      TargetFilename: file.path
+      url: url.original
+      domain: url.domain
+      mcp_server: retrohound.mcp.server
+      mcp_tool: retrohound.mcp.tool
+      outcome: retrohound.outcome
+    rule_conditions: *product
+  # Logsource categories, as event.category + event.type. ECS cannot tell instruction_load from file_access, nor
+  # config_change from file_event: the converted rule also matches the other one.
+  - { id: retrohound_ecs_process_creation, type: add_condition, conditions: { event.category: process, event.type: start }, rule_conditions: [{ type: logsource, product: ai_coding_agent, category: process_creation }] }
+  - { id: retrohound_ecs_file_access, type: add_condition, conditions: { event.category: file, event.type: access }, rule_conditions: [{ type: logsource, product: ai_coding_agent, category: file_access }] }
+  - { id: retrohound_ecs_instruction_load, type: add_condition, conditions: { event.category: file, event.type: access }, rule_conditions: [{ type: logsource, product: ai_coding_agent, category: instruction_load }] }
+  - { id: retrohound_ecs_file_event, type: add_condition, conditions: { event.category: file, event.type: change }, rule_conditions: [{ type: logsource, product: ai_coding_agent, category: file_event }] }
+  - { id: retrohound_ecs_config_change, type: add_condition, conditions: { event.category: configuration, event.type: change }, rule_conditions: [{ type: logsource, product: ai_coding_agent, category: config_change }] }
+  - { id: retrohound_ecs_web_request, type: add_condition, conditions: { event.category: web, event.type: access }, rule_conditions: [{ type: logsource, product: ai_coding_agent, category: web_request }] }
+  - { id: retrohound_ecs_mcp, type: add_condition, conditions: { event.category: api, event.type: access }, rule_conditions: [{ type: logsource, product: ai_coding_agent, category: mcp }] }
+  - { id: retrohound_ecs_tool_call, type: add_condition, conditions: { event.category: api, event.type: info }, rule_conditions: [{ type: logsource, product: ai_coding_agent, category: tool_call }] }
+  - id: retrohound_ecs_no_category
+    type: rule_failure
+    message: "ndjson-ecs gives user_prompt and assistant_message events no event.category: run this rule in RetroHound"
+    rule_cond_op: or
+    rule_conditions:
+      - { type: logsource, product: ai_coding_agent, category: user_prompt }
+      - { type: logsource, product: ai_coding_agent, category: assistant_message }
