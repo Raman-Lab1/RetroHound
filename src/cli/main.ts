@@ -22,13 +22,15 @@ import { registerShow } from "./show.ts";
 import { registerWrapped } from "./wrapped.ts";
 import { EXTRA_HELP, listRules, repeat, showRule } from "./rules.ts";
 import { testRules } from "./rules-test.ts";
-import { summaryLines } from "./summary.ts";
+import { retentionDays, summaryLines } from "./summary.ts";
+import { defaultReportPath, writeFootprint } from "./footprint.ts";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
 type ScanFlags = {
   since?: string; agent: string; project?: string; rules: string; extraRules?: string[]; level?: string; format: string;
   index: boolean; failOn?: string; db?: string; root?: string; ignore?: string;
+  report?: string | false; // undefined: next to the index; false: --no-report
 };
 
 const AGENTS = Object.keys(COLLECTORS);
@@ -40,6 +42,9 @@ async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
   const format = oneOf("format", f.format, FORMATS);
   const level = f.level ? oneOf<Level>("level", f.level, LEVELS) : undefined;
   const failOn = f.failOn ? oneOf<Level>("level", f.failOn, LEVELS) : undefined;
+  if (typeof f.report === "string" && (!f.index || format !== "table")) {
+    throw new UsageError("--report needs the index and the table format: it is built from the index after the scan");
+  }
   const opts: ScanOptions = {
     agent, root: f.root, dbPath: f.db, rulesDir: f.rules, extraRules: f.extraRules, project: f.project, level, noIndex: !f.index,
     since: f.since ? parseSince(f.since) : undefined, ignore: f.ignore,
@@ -55,6 +60,19 @@ async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
     const root = f.root ?? join(homedir(), ".claude");
     // the retention summary reads Claude Code's own settings, so it only applies to that agent
     const summary = agent === "claude_code" ? summaryLines(root, f.index ? f.db : undefined, report.scan.archived_sessions.length) : [];
+    if (f.index && f.report !== false) {
+      const dbPath = f.db ?? defaultDbPath();
+      const claude = agent === "claude_code" ? root : join(homedir(), ".claude");
+      try {
+        const url = writeFootprint({
+          dbPath, out: f.report || defaultReportPath(dbPath), rulesDir: f.rules, extraRules: f.extraRules,
+          retentionDays: existsSync(claude) ? retentionDays(claude) : undefined,
+        });
+        summary.push(`  Footprint report (everything in the index): ${url}`);
+      } catch (e) {
+        io.err(`retrohound: footprint report not written: ${(e as Error).message}\n`); // the scan itself succeeded
+      }
+    }
     io.out(toTable(report, { color: useColor(io) }) + summary.join("\n") + "\n");
   }
   const min = failOn ? LEVELS.indexOf(failOn) : undefined;
@@ -71,6 +89,8 @@ function purgeCommand(f: { db?: string; yes?: boolean }, io: IO): number {
   }
   for (const suffix of ["", "-wal", "-shm", "-journal"]) rmSync(path + suffix, { force: true });
   io.out(`Deleted ${path}\n`);
+  const page = defaultReportPath(path); // built from the index, so it goes with it; a --report elsewhere is the user's
+  if (existsSync(page)) rmSync(page), io.out(`Deleted ${page}\n`);
   return 0;
 }
 
@@ -88,6 +108,8 @@ export function buildProgram(io: IO, setCode: (n: number) => void): Command {
     .option("--level <level>", `hide findings below this level (${LEVELS.join("|")})`)
     .option("--format <format>", "table, json, sarif, ndjson-ecs or ndjson-ocsf", "table")
     .option("--no-index", "evaluate in memory, write nothing")
+    .option("--report <file>", "where to write the offline footprint report (default: report.html next to the index)")
+    .option("--no-report", "do not write the footprint report")
     .option("--fail-on <level>", "exit 1 when any finding is at or above this level")
     .option("--db <path>", "index database", defaultDbPath())
     .option("--root <dir>", "Claude config dir or its projects dir (default ~/.claude)")

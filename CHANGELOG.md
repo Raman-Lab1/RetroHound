@@ -5,6 +5,13 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `scan` writes a footprint report by default: `report.html` next to the index, one offline page (no scripts,
+  nothing fetched) with everything the index holds about the agents on this machine: trust in the data, activity,
+  agent/project/session/sub-agent tree, MCP servers, hooks, skills and plugins, domains, secrets to rotate,
+  permission modes, blocked calls and findings. `--report <file>` moves it, `--no-report` skips it; `--no-index` and
+  machine formats never write it. `purge` deletes it with the index.
+
 ## [0.2.0] - 2026-11-09
 
 ### Added

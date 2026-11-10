@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { openReadOnly } from "../store/index.ts";
 
-function retentionDays(root: string): number {
+export function retentionDays(root: string): number {
   try {
     const days = (JSON.parse(readFileSync(join(root, "settings.json"), "utf8")) as { cleanupPeriodDays?: unknown }).cleanupPeriodDays;
     return typeof days === "number" && days > 0 ? days : 30;
