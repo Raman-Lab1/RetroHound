@@ -6,7 +6,7 @@ import { join, sep } from "node:path";
 import { hookCommands, MAX_FILE_BYTES } from "../collectors/repo/collect.ts";
 import { settingsPath } from "../hooks/install.ts";
 import { mask } from "../normalize/mask.ts";
-import type { ConfigItem, ConfigRead, ConfigReader } from "./types.ts";
+import { type ConfigItem, type ConfigRead, type ConfigReader, MAX_CONFIG_ITEMS } from "./types.ts";
 
 export const MAX_PROJECTS = 200; // project paths read per agent: each costs a few stat calls; the index can hold thousands
 const MAX_ENTRIES = 500; // skill or plugin folders read per directory
@@ -14,9 +14,16 @@ const MAX_ENTRIES = 500; // skill or plugin folders read per directory
 /** The result being built, with every string masked on the way in. */
 export function collector(agent: string) {
   const out: ConfigRead = { items: [], files: 0, skipped: [] };
-  const add = (i: Omit<ConfigItem, "agent">) =>
-    out.items.push({ agent, kind: i.kind, name: mask(i.name), scope: i.scope, source: mask(i.source), ...(i.detail ? { detail: mask(i.detail) } : {}) });
   const skip = (path: string, reason: string) => void out.skipped.push({ path: mask(path), reason });
+  let full = false;
+  const add = (i: Omit<ConfigItem, "agent">) => {
+    if (out.items.length >= MAX_CONFIG_ITEMS) {
+      if (!full) skip(i.source, `more than ${MAX_CONFIG_ITEMS} configured items, the rest left out`);
+      full = true;
+      return;
+    }
+    out.items.push({ agent, kind: i.kind, name: mask(i.name), scope: i.scope, source: mask(i.source), ...(i.detail ? { detail: mask(i.detail) } : {}) });
+  };
   /** Text of `path` if it is a file inside `root` once symlinks are resolved and not oversized; absent -> undefined. */
   const read = (root: string, path: string): string | undefined => {
     let real: string, base: string;

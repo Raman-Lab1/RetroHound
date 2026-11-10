@@ -103,7 +103,8 @@ function configured(c: NonNullable<Footprint["configured"]>): string {
       [i.detail ? `${i.name} (${i.detail})` : i.name, i.scopes.join(", "), raw(used(i)), i.sessions, i.last_ts ?? "-",
         i.files > 1 ? `${i.source} and ${i.files - 1} more` : i.source])) + "</details>").join("");
   return `<p class="mu">Read now from ${h(c.files)} agent config files${c.skipped ? `, ${h(c.skipped)} skipped` : ""}: names and hook `
-    + "commands only, never env, headers or arguments. Skills and plugins count the tool calls made under them.</p>"
+    + "commands only; env values, headers and MCP server arguments are never read. Skills and plugins count the tool calls "
+    + "made under them (a plugin also counts its skills').</p>"
     + `<h3>Set up in config</h3>${blocks || NONE}`
     + `<h3>Used, but in no config file read now</h3><p class="mu">Removed since, or set up where RetroHound does not read.</p>`
     + table(["agent", "kind", "name", "events", "sessions", "last seen"], c.unlisted.map((u) => [u.agent, u.kind, u.name, u.events, u.sessions, u.last_ts]));

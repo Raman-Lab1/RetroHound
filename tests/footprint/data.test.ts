@@ -169,6 +169,24 @@ describe("compareConfig", () => {
     expect(c).toMatchObject({ files: 2, skipped: 1 });
   });
 
+  test("a plugin counts the calls of its own skills, which the transcript names first", async () => {
+    const d = join(base, "plugin");
+    const sid = "3333aaaa-0000-4000-8000-000000000003";
+    mkdirSync(join(d, "claude", "projects", "-home-x-kit"), { recursive: true });
+    const line = use(sid, 1, "k1", "Read", { file_path: "/home/x/kit/README.md" }, { attributionSkill: "kit:review", attributionPlugin: "kit" });
+    writeFileSync(join(d, "claude", "projects", "-home-x-kit", `${sid}.jsonl`), JSON.stringify(line) + "\n");
+    const path = join(d, "index.db");
+    await runScan({ root: join(d, "claude"), dbPath: path, rulesDir: rules });
+    const index = openReadOnly(path);
+    try {
+      const plugin = { agent: "claude_code", kind: "plugin" as const, name: "kit", scope: "user", source: "/home/x/.claude/settings.json" };
+      const c = collectFootprint(index, { rules: [], now, config: [{ items: [plugin], files: 1, skipped: [] }] }).configured!;
+      expect(c.items[0]).toMatchObject({ name: "kit", events: 1, observable: true });
+    } finally {
+      index.close();
+    }
+  });
+
   test("used but configured nowhere is listed; no config read leaves the section out", () => {
     expect(configured([])!.unlisted.map((u) => [u.agent, u.kind, u.name, u.events])).toEqual([["claude_code", "hook", "node hook.js", 1], ["claude_code", "mcp_server", "srv", 1]]);
     expect(collect().configured).toBeUndefined();

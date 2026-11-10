@@ -8,7 +8,7 @@ import { dirname, isAbsolute, join } from "node:path";
 import { fwd, hookCommands, inside, MAX_FILE_BYTES, MAX_FILES } from "../collectors/repo/collect.ts";
 import { settingsPath } from "../hooks/install.ts";
 import { mask } from "../normalize/mask.ts";
-import type { ConfigItem, ConfigRead, ConfigReader } from "./types.ts";
+import { type ConfigItem, type ConfigRead, type ConfigReader, MAX_CONFIG_ITEMS } from "./types.ts";
 
 // ponytail: the index can hold thousands of project paths; the first 200 are read, which bounds a report's disk reads.
 export const MAX_PROJECTS = 200;
@@ -31,14 +31,22 @@ const obj = (v: unknown): Json => (v && typeof v === "object" && !Array.isArray(
 /** Tool names are `mcp__<server>__<tool>` with every character outside A-Z a-z 0-9 _ - turned into `_`. */
 const toolName = (s: string) => s.replace(/[^A-Za-z0-9_-]/g, "_");
 
-export const readClaudeConfig: ConfigReader = (o) => readClaude(o, MANAGED_DIR);
+// RETROHOUND_MANAGED_DIR: a test seam, so tests never read the machine's managed config.
+export const readClaudeConfig: ConfigReader = (o) => readClaude(o, o.env?.RETROHOUND_MANAGED_DIR || MANAGED_DIR);
 
 /** readClaudeConfig with the managed directory as a parameter, so tests can point it at a temp dir. */
 export function readClaude({ home, projects, env = process.env }: Parameters<ConfigReader>[0], managed: string): ConfigRead {
   const out: ConfigRead = { items: [], files: 0, skipped: [] };
   const skip = (path: string, reason: string) => void out.skipped.push({ path: mask(path), reason });
-  const add = (kind: ConfigItem["kind"], name: string, scope: string, source: string, detail?: string) =>
-    void out.items.push({ agent: "claude_code", kind, name: mask(name), scope, source: mask(source), ...(detail ? { detail: mask(detail) } : {}) });
+  let full = false;
+  const add = (kind: ConfigItem["kind"], name: string, scope: string, source: string, detail?: string) => {
+    if (out.items.length >= MAX_CONFIG_ITEMS) {
+      if (!full) skip(source, `more than ${MAX_CONFIG_ITEMS} configured items, the rest left out`);
+      full = true;
+      return;
+    }
+    out.items.push({ agent: "claude_code", kind, name: mask(name), scope, source: mask(source), ...(detail ? { detail: mask(detail) } : {}) });
+  };
 
   /** The text of a regular file that resolves inside `root` and fits MAX_FILE_BYTES; a missing file is normal. */
   const read = (file: string, root: string): string | undefined => {
@@ -48,7 +56,7 @@ export function readClaude({ home, projects, env = process.env }: Parameters<Con
       const st = statSync(real);
       if (!st.isFile()) return undefined;
       size = st.size;
-      if (!inside(fwd(realpathSync(root)), real)) return skip(file, "resolves outside the directory (symlink)");
+      if (!inside(fwd(realpathSync(root)), real)) return skip(file, "resolves outside the directory");
     } catch {
       return undefined;
     }
@@ -74,7 +82,7 @@ export function readClaude({ home, projects, env = process.env }: Parameters<Con
   };
   const list = (dir: string) => {
     try {
-      const all = readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+      const all = readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)); // not locale-dependent
       if (all.length > MAX_FILES) skip(dir, `more than ${MAX_FILES} entries, only the first ${MAX_FILES} read`);
       return all.slice(0, MAX_FILES);
     } catch {
@@ -136,11 +144,12 @@ export function readClaude({ home, projects, env = process.env }: Parameters<Con
     hookFile(join(root, "hooks", "hooks.json"));
     mcpFile(join(root, ".mcp.json"));
     // plugin.json `hooks` / `mcpServers`: a ./file.json, an inline object, or an array of either (.mcpb bundles unread).
-    for (const h of [m.hooks].flat()) {
+    // deduplicated and capped: a plugin.json can repeat one file thousands of times
+    for (const h of [...new Set([m.hooks].flat())].slice(0, MAX_FILES)) {
       if (typeof h !== "string") hooks(JSON.stringify({ hooks: h }), "plugin", manifest);
       else if (h.endsWith(".json")) hookFile(join(root, h));
     }
-    for (const s of [m.mcpServers].flat()) {
+    for (const s of [...new Set([m.mcpServers].flat())].slice(0, MAX_FILES)) {
       if (typeof s !== "string") servers(s, "plugin", manifest, `plugin_${name}_`);
       else if (s.endsWith(".json")) mcpFile(join(root, s));
     }
@@ -163,8 +172,10 @@ export function readClaude({ home, projects, env = process.env }: Parameters<Con
   servers(json(fixed, managed)?.[0].mcpServers, "managed", fixed);
   skills(join(managed, ".claude", "skills"), managed, "managed");
 
-  for (const p of [...new Set(projects)].slice(0, MAX_PROJECTS)) {
-    if (!isAbsolute(p) || !isDir(p)) continue; // gone since it was indexed: nothing to read
+  // home is the user scope, read above; a project path that is gone since it was indexed has nothing to read
+  const live = [...new Set(projects)].filter((p) => isAbsolute(p) && p !== home && isDir(p));
+  if (live.length > MAX_PROJECTS) skip("projects", `more than ${MAX_PROJECTS} project paths, only the first ${MAX_PROJECTS} read`);
+  for (const p of live.slice(0, MAX_PROJECTS)) {
     servers(obj(obj(global?.projects)[p]).mcpServers, "local", state);
     const mcp = join(p, ".mcp.json");
     servers(json(mcp, p)?.[0].mcpServers, "project", mcp);

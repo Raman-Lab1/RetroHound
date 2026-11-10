@@ -109,7 +109,7 @@ test("env, header and url values never come out; hook commands are masked", () =
 
 test("a symlink out of the directory, an oversized file and a non-JSON file are skipped", () => {
   expect(result.skipped).toEqual([
-    { path: join(home, ".claude/skills/evil/SKILL.md"), reason: "resolves outside the directory (symlink)" },
+    { path: join(home, ".claude/skills/evil/SKILL.md"), reason: "resolves outside the directory" },
     { path: join(bad, ".mcp.json"), reason: `larger than ${MAX_FILE_BYTES} bytes` },
     { path: join(bad, ".claude/settings.json"), reason: "not a JSON object" },
   ]);
@@ -127,4 +127,16 @@ test("CLAUDE_CONFIG_DIR moves settings, skills, plugins and .claude.json", () =>
   put(join(dir, "settings.json"), hook("Stop", "echo moved"));
   const r = readClaude({ home, projects: [], env: { CLAUDE_CONFIG_DIR: dir } }, join(base, "no-managed"));
   expect(r.items.map((i) => i.name).sort()).toEqual(["echo moved", "moved"]);
+});
+
+test("home is the user scope, never read again as a project", () => {
+  const r = readClaude({ home, projects: [home], env: {} }, join(base, "no-managed"));
+  expect(r.items.filter((i) => i.scope === "project")).toEqual([]);
+});
+
+test("a plugin.json that repeats one hooks file is read once", () => {
+  const root = pluginRoot("2.0.0");
+  put(join(root, ".claude-plugin/plugin.json"), { name: "demo", hooks: Array(2000).fill("./hooks/extra.json") });
+  const r = readClaude({ home, projects: [], env: {} }, join(base, "no-managed"));
+  expect(r.items.filter((i) => i.name === "echo start")).toHaveLength(1);
 });

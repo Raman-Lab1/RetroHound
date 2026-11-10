@@ -80,6 +80,9 @@ export type ConfigItem = {
 export type ConfigRead = { items: ConfigItem[]; files: number; skipped: { path: string; reason: string }[] };
 
 /** home: the user's home dir; projects: project paths from the index (only those still on disk are read). */
+/** Items one reader returns at most: a hostile plugin.json or skill tree must not exhaust memory. */
+export const MAX_CONFIG_ITEMS = 5000;
+
 export type ConfigReader = (o: { home: string; projects: string[]; env?: Record<string, string | undefined> }) => ConfigRead;
 
 /** Configured versus observed: each item with how often transcripts show it, and what transcripts show that no

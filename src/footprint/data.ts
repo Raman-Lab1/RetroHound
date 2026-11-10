@@ -46,13 +46,18 @@ type Used = { agent: string; kind: ConfigItem["kind"]; name: string; events: num
 const key = (x: { agent: string; kind: string; name: string }) => `${x.agent}\0${x.kind}\0${x.name}`;
 
 /** Each configured item with how often transcripts show it in use, and what was used that no config file read now
- * sets up. Skills and plugins count the tool calls attributed to them (`attribution`), not the Skill call itself. */
+ * sets up. Skills and plugins count the tool calls attributed to them (`attribution`), not the Skill call itself; a
+ * plugin also counts the calls of its own skills (`skill:<plugin>:<name>`), since the transcript names the skill first.
+ * ponytail: a plugin's MCP servers (`plugin_<p>_<server>`) are not counted toward it: the split is ambiguous when names
+ * hold `_`. Count them if plugins turn out to be used through MCP only. */
 export function compareConfig(db: Db, reads: ConfigRead[]): [ConfigFootprint, number] {
   const used = db.prepare(`SELECT agent, kind, name, COUNT(*) AS events, COUNT(DISTINCT session_id) AS sessions, MAX(ts) AS last_ts FROM (
       SELECT agent, 'mcp_server' AS kind, mcp_server AS name, session_id, ts FROM events WHERE mcp_server IS NOT NULL
       UNION ALL SELECT agent, 'hook', COALESCE(command_line, tool_name), session_id, ts FROM events WHERE tool_name LIKE 'hook:%'
       UNION ALL SELECT agent, 'skill', substr(attribution, 7), session_id, ts FROM events WHERE attribution LIKE 'skill:%'
-      UNION ALL SELECT agent, 'plugin', substr(attribution, 8), session_id, ts FROM events WHERE attribution LIKE 'plugin:%'
+      UNION ALL SELECT agent, 'plugin', CASE WHEN attribution LIKE 'plugin:%' THEN substr(attribution, 8)
+        ELSE substr(attribution, 7, instr(substr(attribution, 7), ':') - 1) END, session_id, ts
+        FROM events WHERE attribution LIKE 'plugin:%' OR attribution LIKE 'skill:%:%'
     ) GROUP BY agent, kind, name`).all() as unknown as Used[];
   const byKey = new Map(used.map((u) => [key(u), u]));
   const items = reads.flatMap((r) => r.items);
