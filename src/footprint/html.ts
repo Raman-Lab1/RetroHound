@@ -90,11 +90,21 @@ const seen = (label: string, rows: Seen[]) => `<h3>${h(label)}</h3>` + table([la
   rows.map((s) => [s.detail ? `${s.name} (${s.detail})` : s.name, s.events, s.sessions, s.blocked, pct(s.sub_agent, s.events), s.first_ts, s.last_ts]));
 
 function configured(c: NonNullable<Footprint["configured"]>): string {
-  const used = (n: number) => (n ? h(n) : `<span class="warn">never seen used</span>`);
+  type Item = (typeof c.items)[number];
+  const used = (i: Item) => (!i.observable ? `<span class="mu">not recorded</span>` : i.events ? h(i.events) : `<span class="warn">never seen used</span>`);
+  const groups = new Map<string, Item[]>(); // items arrive sorted by agent, then kind
+  for (const i of c.items) {
+    const k = `${i.agent} · ${i.kind}`;
+    groups.get(k)?.push(i) ?? groups.set(k, [i]);
+  }
+  const blocks = [...groups].map(([k, items]) => `<details><summary><b>${h(k)}</b> · ${h(items.length)} configured · ${items[0]!.observable
+    ? `${h(items.filter((i) => i.events).length)} seen used` : "use not recorded in this agent's transcripts"}</summary>`
+    + table(["name", "scopes", "events", "sessions", "last seen", "set up in"], items.map((i) =>
+      [i.detail ? `${i.name} (${i.detail})` : i.name, i.scopes.join(", "), raw(used(i)), i.sessions, i.last_ts ?? "-",
+        i.files > 1 ? `${i.source} and ${i.files - 1} more` : i.source])) + "</details>").join("");
   return `<p class="mu">Read now from ${h(c.files)} agent config files${c.skipped ? `, ${h(c.skipped)} skipped` : ""}: names and hook `
     + "commands only, never env, headers or arguments. Skills and plugins count the tool calls made under them.</p>"
-    + `<h3>Set up in config</h3>${table(["agent", "kind", "name", "scope", "events", "sessions", "last seen", "file"], c.items.map((i) =>
-      [i.agent, i.kind, i.detail ? `${i.name} (${i.detail})` : i.name, i.scope, raw(used(i.events)), i.sessions, i.last_ts ?? "-", i.source]))}`
+    + `<h3>Set up in config</h3>${blocks || NONE}`
     + `<h3>Used, but in no config file read now</h3><p class="mu">Removed since, or set up where RetroHound does not read.</p>`
     + table(["agent", "kind", "name", "events", "sessions", "last seen"], c.unlisted.map((u) => [u.agent, u.kind, u.name, u.events, u.sessions, u.last_ts]));
 }

@@ -69,7 +69,7 @@ async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
       try {
         const url = writeFootprint({
           dbPath, out: f.report || defaultReportPath(dbPath), rulesDir: f.rules, extraRules: f.extraRules,
-          retentionDays: existsSync(claude) ? retentionDays(claude) : undefined,
+          retentionDays: existsSync(claude) ? retentionDays(claude) : undefined, env: io.env,
         });
         summary.push(`  Footprint report (everything in the index): ${url}`);
       } catch (e) {

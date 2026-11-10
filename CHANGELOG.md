@@ -11,6 +11,9 @@ and versions follow [Semantic Versioning](https://semver.org/).
   agent/project/session/sub-agent tree, MCP servers, hooks, skills and plugins, domains, secrets to rotate,
   permission modes, blocked calls and findings. `--report <file>` moves it, `--no-report` skips it; `--no-index` and
   machine formats never write it, and it may not overwrite the index. `purge` deletes it with the index.
+- Footprint report: configured versus used. The agents' config files (MCP servers, hooks, skills, plugins; user,
+  project, local and managed scopes) are read for names and hook commands only, and set against what transcripts show
+  was used: never-used items are flagged, and used items that no config file sets up now are listed.
 
 ### Fixed
 - `incident` and `wrapped` pages: no whole-page mask pass after escaping, which could swallow markup after a short

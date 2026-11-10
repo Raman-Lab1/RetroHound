@@ -37,7 +37,9 @@ export function top<T>(rows: T[], cap: number, order?: (a: T, b: T) => number): 
   return [sorted.slice(0, cap), Math.max(0, rows.length - cap)];
 }
 
-const CONFIG_CAP = 300; // configured items listed
+const CONFIG_CAP = 500; // distinct configured items listed (agent + kind + name)
+// Agents whose collector records MCP servers, hook runs and skill/plugin attribution (docs/logsource.md: Claude-only)
+const OBSERVABLE = new Set(["claude_code"]);
 const UNLISTED_CAP = 100; // used-but-not-configured rows listed
 
 type Used = { agent: string; kind: ConfigItem["kind"]; name: string; events: number; sessions: number; last_ts: string };
@@ -57,10 +59,22 @@ export function compareConfig(db: Db, reads: ConfigRead[]): [ConfigFootprint, nu
   const configured = new Set(items.map(key));
   const order = (a: { agent: string; kind: string; name: string; events: number }, b: typeof a) =>
     asc(a.agent, b.agent) || asc(a.kind, b.kind) || b.events - a.events || asc(a.name, b.name);
-  const [listed, cutItems] = top(items.map((i) => {
+  const merged = new Map<string, { i: ConfigItem; scopes: Set<string>; files: Set<string>; details: Set<string> }>();
+  for (const i of items) {
+    const m = merged.get(key(i)) ?? { i, scopes: new Set(), files: new Set(), details: new Set() };
+    m.scopes.add(i.scope);
+    m.files.add(i.source);
+    if (i.detail) m.details.add(i.detail);
+    merged.set(key(i), m);
+  }
+  const [listed, cutItems] = top([...merged.values()].map(({ i, scopes, files, details }) => {
     const u = byKey.get(key(i));
-    return { ...i, events: u?.events ?? 0, sessions: u?.sessions ?? 0, ...(u ? { last_ts: u.last_ts } : {}) };
-  }), CONFIG_CAP, (a, b) => order(a, b) || asc(a.scope, b.scope) || asc(a.source, b.source));
+    return {
+      agent: i.agent, kind: i.kind, name: i.name, ...(details.size ? { detail: [...details].sort(asc).join(", ") } : {}),
+      scopes: [...scopes].sort(asc), files: files.size, source: [...files].sort(asc)[0]!,
+      events: u?.events ?? 0, sessions: u?.sessions ?? 0, ...(u ? { last_ts: u.last_ts } : {}), observable: OBSERVABLE.has(i.agent),
+    };
+  }), CONFIG_CAP, order);
   const [unlisted, cutUnlisted] = top(used.filter((u) => !configured.has(key(u))), UNLISTED_CAP, order);
   const files = reads.reduce((n, r) => n + r.files, 0);
   const skipped = reads.reduce((n, r) => n + r.skipped.length, 0);

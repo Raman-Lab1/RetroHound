@@ -240,6 +240,9 @@ installed paths every time and warns if they no longer pass.
   fingerprint, never the value.
 - **Raw text is never stored.** Rules see raw text in memory while parsing; the index holds masked fields and a
   pointer (`raw_ref`: file and line) back to the transcript.
+- **Agent config files** (Claude Code, Codex CLI, Antigravity CLI: user, project and managed scopes, for the
+  projects in the index) are read when the footprint report is built, for MCP server, hook, skill and plugin names
+  and hook commands only. Env, headers, arguments and URLs in them are never read out, and nothing is stored.
 - **The index** is `~/.retrohound/index.db` (override with `--db`), directory 0700, file 0600 on macOS and Linux.
   On Windows those modes protect nothing; rely on your user profile permissions. It is long-lived evidence, so it
   may be the only copy of sessions Claude Code deleted. `retrohound purge --yes` deletes it, and the
@@ -256,6 +259,9 @@ covers the whole index (every agent, project and session RetroHound has kept, no
 - **When?** Activity per day, with blocked calls and findings marked.
 - **Where did agents work?** Agent, then project, then session, then sub-agent, as a tree you expand.
 - **What could they reach?** MCP servers, hook commands, skills and plugins, and the domains they contacted.
+- **Configured versus used:** what each agent's config files set up (MCP servers, hooks, skills, plugins, per scope)
+  next to how often transcripts show it used. Items never seen used are flagged (surface you may not need), and
+  anything used that no config file sets up now is listed (removed since, or set up somewhere unexpected).
 - **What must I rotate?** Each secret by fingerprint, with the sessions, sub-agents and projects it appeared in.
 - **How long were guard rails off?** Events and sessions per permission mode.
 - **What did they try?** Blocked calls by kind and category, and findings (the 500 most severe, newest first).

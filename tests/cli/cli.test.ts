@@ -44,7 +44,7 @@ const common = () => ["--root", join(dir, "claude"), "--db", join(dir, "index.db
 beforeEach(() => {
   dir = mkdtempSync(join(base, "case-"));
   out = err = "";
-  io = { out: (s) => (out += s), err: (s) => (err += s), isTTY: false, env: {} };
+  io = { out: (s) => (out += s), err: (s) => (err += s), isTTY: false, env: { HOME: dir } }; // config reads stay in the temp dir
   mkdirSync(join(dir, "rules"));
   writeFileSync(join(dir, "rules", "hit.yml"), HIT);
   put(join(dir, "claude", "projects", "-home-x-acme", "abcdef123456.jsonl"), [line("abcdef123456", 1)]);
@@ -87,7 +87,7 @@ describe("scan", () => {
     await run("scan", ...common());
     expect(out).toContain("\u001b[");
     out = "";
-    io.env = { NO_COLOR: "1" };
+    io.env = { ...io.env, NO_COLOR: "1" };
     await run("scan", ...common());
     expect(out).not.toContain("\u001b[");
   });
