@@ -120,7 +120,7 @@ no setup and no hook, and reports:
   RetroHound keeps a masked, append-only index; deleted transcripts stay searchable there.
 - **Secrets, as rule #1.** Secret files read, secrets in tool input, with masked values and fingerprints, not raw text.
 
-Detections are Sigma v2.1 YAML with a proposed `ai_coding_agent` logsource. 48 rules ship today, plus 9 silent helper rules that only feed correlations (`rules/ai_coding_agent`).
+Detections are Sigma v2.1 YAML with a proposed `ai_coding_agent` logsource. 54 rules ship today, plus 15 silent helper rules that only feed correlations (`rules/ai_coding_agent`).
 
 ## What it does not do
 
@@ -287,7 +287,7 @@ index keeps the masked record either way, as long as you scan before the deletio
 ## What it found on my machine
 
 One developer machine (the author's), mostly sessions working on RetroHound itself, so self-referential. 9 sessions,
-3,272 events, 41 findings from 8 of the 38 rules shipped at that time (48 ship now). Counts only; see [docs/perf.md](docs/perf.md) for the review.
+3,272 events, 41 findings from 8 of the 38 rules shipped at that time (54 ship now). Counts only; see [docs/perf.md](docs/perf.md) for the review.
 
 | Rule | Level | Hits | Sessions |
 |---|---|---|---|

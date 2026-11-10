@@ -1,0 +1,3 @@
+{"session_id":"s0","category":"process_creation","tool_name":"Bash","command_line":"ls","attribution":"skill:old-skill","ts":"2025-12-10T00:00:00.000Z"}
+{"category":"process_creation","tool_name":"Bash","command_line":"ls","attribution":"skill:new-skill"}
+{"category":"mcp","tool_name":"mcp__notes__save","mcp_server":"notes","mcp_tool":"save","attribution":"skill:new-skill"}

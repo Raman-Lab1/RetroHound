@@ -1,0 +1,66 @@
+title: Hook command never seen before, and a blocked call in the same session
+id: cab2ef17-cd3d-4db5-958c-6654afb372a2
+name: control_plane_new_hook_blocked
+author: Raman Kumar
+status: experimental
+description: >-
+  Within one session and one hour, in either order, a hook ran a command never seen in all indexed history and a call
+  was blocked by Claude Code's guard or another mechanism (a hook denial included). User rejections and interrupts do
+  not count. A new hook that coincides with blocks can be a planted hook doing what the agent was refused, or one that
+  steers the agent into refused calls. First-seen holds for any kind an event carries, so a known hook command with a
+  new URL in it counts too. Needs 14 days of history (ADR 0016).
+tags:
+  - attack.persistence
+  - attack.defense_evasion
+  - attack.t1546
+  - attack.t1562
+  - owasp_agentic.asi04
+  - owasp_agentic.asi05
+correlation:
+  type: temporal
+  rules:
+    - first_seen_hook_command
+    - blocked_not_by_user
+  group-by:
+    - session_id
+  timespan: 1h
+falsepositives:
+  - A hook the user just added, in a session where the guard blocked something unrelated
+level: medium
+x-retrohound:
+  lane: hunt
+---
+title: Helper, the first run of a hook command in all history
+id: d4ecdd80-659b-4cf2-969a-1a06d9bfe44c
+name: first_seen_hook_command
+author: Raman Kumar
+description: Silenced step of control_plane_new_hook_blocked and control_plane_new_hook_egress.
+logsource:
+  product: ai_coding_agent
+  category: process_creation
+detection:
+  selection:
+    tool_name|startswith: 'hook:'
+    first_seen_global: true
+  condition: selection
+level: informational
+x-retrohound:
+  requires:
+    - first_seen
+---
+title: Helper, a call blocked by anything but the user
+id: c5653280-4bdb-4a53-b00b-2c46dd190ad6
+name: blocked_not_by_user
+author: Raman Kumar
+description: Silenced step of control_plane_new_hook_blocked. Runs on every category, since any call can be blocked.
+logsource:
+  product: ai_coding_agent
+detection:
+  selection:
+    outcome: blocked
+  filter_user:
+    denial_kind:
+      - user-rejected
+      - interrupted
+  condition: selection and not filter_user
+level: informational

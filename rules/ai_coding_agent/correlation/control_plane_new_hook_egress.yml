@@ -1,0 +1,30 @@
+title: Hook command never seen before, and network egress in the same session
+id: 7479b2b3-d533-4c30-88e2-1295a0140709
+name: control_plane_new_hook_egress
+author: Raman Kumar
+status: experimental
+description: >-
+  Within one session and one hour, in either order, a hook ran a command never seen in all indexed history and a
+  network egress call happened (step two of secrets_read_then_egress, loopback excluded). A hook command that is itself
+  a curl to a remote host is one event filling both steps. First-seen holds for any kind an event carries (see
+  control_plane_new_hook_blocked). Needs 14 days of history (ADR 0016).
+tags:
+  - attack.persistence
+  - attack.exfiltration
+  - attack.t1546
+  - attack.t1041
+  - owasp_agentic.asi04
+  - owasp_agentic.asi05
+correlation:
+  type: temporal
+  rules:
+    - first_seen_hook_command
+    - secrets_egress_call
+  group-by:
+    - session_id
+  timespan: 1h
+falsepositives:
+  - A notification or telemetry hook the user just added, in a session that also fetches or pushes
+level: medium
+x-retrohound:
+  lane: hunt

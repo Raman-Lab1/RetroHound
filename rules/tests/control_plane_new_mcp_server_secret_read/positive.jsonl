@@ -1,0 +1,3 @@
+{"session_id":"s0","category":"mcp","tool_name":"mcp__notes__list","mcp_server":"notes","mcp_tool":"list","ts":"2025-12-10T00:00:00.000Z"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env"}
+{"category":"mcp","tool_name":"mcp__helper__save","mcp_server":"helper","mcp_tool":"save"}
