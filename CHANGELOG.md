@@ -30,8 +30,23 @@ and versions follow [Semantic Versioning](https://semver.org/).
   to, scored by finding count, with the rules behind each technique in its comment.
 - Footprint: a configured Claude Code plugin also counts the calls on its own MCP servers (`plugin_<plugin>_<server>`),
   each call once next to its attributed calls and its skills' calls.
+- Derived fields `first_seen_project` and `first_seen_global` (ADR 0016): true on the earliest event carrying a
+  domain, MCP server, hook command or skill/plugin, computed by `scan` (and `rules test`) before rules run, never
+  stored. Events in the first 14 days of the data never count. Rules reading them declare
+  `x-retrohound: {requires: [first_seen]}` and stay in the hunt lane.
+- Six hunt rules on them: a new MCP server with a secret read or egress, a new hook command with a blocked call or
+  egress, a domain new to the project after a secret read, a new skill or plugin then its MCP call.
+- `git-secrets`: secrets an agent saw (by fingerprint) that are in the local git history of the projects it worked
+  in; exit 1 when any is. Reads `git log` only, never fetches, never prints a value.
+- `docs/owasp-asi.md`: the rules behind each OWASP Top 10 for Agentic Applications risk, kept in sync by a test.
+- Integrations, not published anywhere: Wazuh rules, Splunk `props.conf`, a Velociraptor artifact, a GitHub Action
+  (`action.yml`) and a Homebrew formula template; see `docs/integrations.md`.
 
 ### Changed
+- `ndjson-ocsf`: each evidence carries `ai_agent` (OCSF 1.9.0) and, for MCP calls, `api.service.name` /
+  `api.operation`. `unmapped.retrohound.ai_agent` is gone: read `evidences[].ai_agent`. The `ai_operation` profile
+  is not declared: OCSF does not allow it on Detection Finding.
+- `scan --agent all` indexes every agent before evaluating any, so cross-agent context is complete.
 - Agent-config rules (`files_mcp_server_added`, `control_plane_agent_config_*`) also cover Codex (`.codex/config.toml`
   `[mcp_servers]`, `[hooks]` and `base_url`, `.codex/hooks.json`) and Antigravity (`.gemini/config/mcp_config.json`,
   `hooks.json`, project `.agents/`) config files.
