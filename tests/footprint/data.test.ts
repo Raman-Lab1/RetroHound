@@ -159,10 +159,10 @@ describe("compareConfig", () => {
 
   test("each configured item with its use, never-seen ones at 0, and nothing unlisted when all is configured", () => {
     const c = configured([{ items: [item("mcp_server", "idle"), item("mcp_server", "srv"), item("hook", "node hook.js"), item("mcp_server", "srv", "codex"),
-      item("mcp_server", "srv", "claude_code", "project", "/home/x/acme/.mcp.json")], files: 2,
+      item("hook", "x.sh", "codex"), item("mcp_server", "srv", "claude_code", "project", "/home/x/acme/.mcp.json")], files: 2,
       skipped: [{ path: "/home/x/.claude.json", reason: "larger than 1048576 bytes" }] }])!;
     expect(c.items.map((i) => [i.agent, i.kind, i.name, i.events, i.observable])).toEqual([["claude_code", "hook", "node hook.js", 1, true],
-      ["claude_code", "mcp_server", "srv", 1, true], ["claude_code", "mcp_server", "idle", 0, true], ["codex", "mcp_server", "srv", 0, false]]);
+      ["claude_code", "mcp_server", "srv", 1, true], ["claude_code", "mcp_server", "idle", 0, true], ["codex", "hook", "x.sh", 0, false], ["codex", "mcp_server", "srv", 0, true]]);
     expect(c.items[2]!.last_ts).toBeUndefined();
     expect(c.items[1]).toMatchObject({ scopes: ["project", "user"], files: 2, source: "/home/x/.claude.json" }); // one row, two scopes
     expect(c.unlisted).toEqual([]);

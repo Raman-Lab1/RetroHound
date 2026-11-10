@@ -170,13 +170,14 @@ The same fields and categories are filled from each agent's own log (`docs/forma
 
 | | Codex CLI | Antigravity CLI |
 |---|---|---|
-| `tool_name` | `Bash`, `PowerShell` or `cmd` (by the shell that ran), `WebFetch`, `WebSearch`, `Agent`, `guardian_review` | its own names: `run_command`, `read_file`, `write_file`, `edit_file`, `search_web`, `invoke_subagent`, `ask_question` |
+| `tool_name` | `Bash`, `PowerShell` or `cmd` (by the shell that ran), `WebFetch`, `WebSearch`, `Agent`, `guardian_review`, `mcp__<server>__<tool>` | its own names: `run_command`, `read_file`, `write_file`, `edit_file`, `search_web`, `invoke_subagent`, `ask_question` |
 | `process_creation` | every shell command, `command_line` = the script passed to the shell | `run_command` |
 | `file_access` / `file_event` | none yet: Codex 0.167 reads and writes files through shell commands, so only the shell branches of file rules fire | `read_file` → `file_access`; `write_file`, `edit_file` → `file_event` |
 | `outcome: blocked` | an auto-review (guardian) verdict other than `allow` | never (the CLI's approvals are not logged) |
 | sub-agents | `agent_id` = the agent path, `session_id` = the root thread | `agent_id` = the child conversation, `session_id` = the root conversation |
 
 Rules keyed on Claude-only shapes do not fire on these agents: hook events (`tool_name: hook:*`), `Skill`,
-`instruction_load`, `config_change` / `permission_mode`, and the `mcp` category. Filter a rule to one agent with
+`instruction_load`, `config_change` / `permission_mode`, and on Antigravity the `mcp` category (Codex MCP calls are
+`mcp` events with `mcp_server` and `mcp_tool`, as for Claude Code). Filter a rule to one agent with
 `logsource.service`.
 

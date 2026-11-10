@@ -57,6 +57,7 @@ text is not a stable structure. The structured record of what ran is `event_msg.
 | `item.type` | Count (main thread) | Fields seen | RetroHound event |
 |---|---|---|---|
 | `CommandExecution` | 11 | `command` (argv: on Windows `[pwsh.exe, -Command, <script>]`), `cwd` (**`file:///C:/...` URI**), `parsed_cmd[]` (`{type: unknown|read|listFiles|search, cmd}`), `exit_code` (int; `-1` when the process could not start), `status` (`completed`, `failed`), `aggregated_output` (truncated, R2), `duration {secs, nanos}`, `source` (`unified_exec_startup`), `process_id` (absent on spawn failure) | `process_creation`; `command_line` from `parsed_cmd[].cmd` (else the last argv element); `outcome` success/error |
+| `McpToolCall` | 11 (later look, 48 rollouts) | `server`, `tool`, `arguments` (object), `status` (`completed`, `failed`), `result {content[] {type: text, text}, isError}`, `duration {secs, nanos}` | `mcp` (or `web_request` with a URL argument) |
 | `Extension` (`kind: web.search`) | 1 | `query`, `action {type: openPage, url}` (or a search), `results[] {domain, title, ref_id, snippet}` | `web_request` (`url`, `domain`) |
 | `SubAgentActivity` | 2 | `kind` (`started`, `completed`), `agent_thread_id`, `agent_path`, `model`, `reasoning_effort` | links parent and child thread |
 | `UserMessage` | 1 | `content[] {type: text, text}` | `user_prompt` (`text_excerpt` masked) |
@@ -108,11 +109,11 @@ Code (ADR 0006, 0007).
 
 ## Open questions (need more runs)
 
-- Shape of `apply_patch` / file-change items in 0.167, MCP tool calls, and `.jsonl.zst` files (after 7 days).
+- Shape of `apply_patch` / file-change items in 0.167, and `.jsonl.zst` files (after 7 days).
 - Whether a denied escalation writes anything when the user picks "No" in the approval prompt (this run had none).
 - The Codex Desktop "legacy" imports of Claude Code sessions must be skipped to avoid double counting.
 
-## Collector mapping (`codex/v3`, src/collectors/codex)
+## Collector mapping (`codex/v4`, src/collectors/codex)
 
 Checked on the 4 local rollouts: 522 lines, 0 malformed, 0 crashes, 2 root sessions (sub-agent and guardian threads
 grouped under their root). Counts only; no real text is reproduced here or in the tests. v2 on the same files: the same
@@ -129,7 +130,11 @@ grouped under their root). Counts only; no real text is reproduced here or in th
 - **Items:** `CommandExecution` -> `process_creation`, `tool_name` PowerShell (pwsh/powershell), `cmd`, else Bash;
   `command_line` = the script after `-Command`/`-c`/`-lc`/`/c`, else argv joined; outcome from `status` and `exit_code`;
   `aggregated_output` -> `tool_response`. `Extension` web.search -> `web_request` as `WebFetch` (openPage url) or
-  `tool_call` `WebSearch`. `UserMessage` -> `user_prompt` (`prompt_source` typed, or system in a sub-agent).
+  `tool_call` `WebSearch`. `McpToolCall` (v4) -> `tool_name` `mcp__<server>__<tool>` (the name Codex hooks use), `mcp_server` and
+  `mcp_tool` taken as given (not split from the name), `tool_input` = `arguments`, `tool_response` = the result text;
+  `mcp`, or `web_request` when an argument is a URL (as for Claude Code); outcome `error` when `status` is `failed` or
+  `result.isError`, `success` when `completed`. Seen: 7 completed / not error, 4 failed / `isError`; no `error` key.
+  `UserMessage` -> `user_prompt` (`prompt_source` typed, or system in a sub-agent).
   `AgentMessage` -> `assistant_message`. `SubAgentActivity` `started` -> `tool_call` `Agent`. Reasoning, `completed`
   sub-agent items and other `response_item` lines produce nothing.
 - **Interrupts (v2):** follows Claude's interrupted tool_result (`outcome: blocked`, `denial_kind: interrupted`). In
@@ -172,7 +177,7 @@ skills (`plugins/cache/<marketplace>/<plugin>/<version>/`: config does not say w
 (`projects.<path>.trust_level`), so an untrusted project's files are listed too. TOML is a line scan, not a parser:
 inline tables, dotted keys outside a header and multi-line hook commands are not read (the last are reported skipped).
 
-**Join with the index: unverified.** The collector (`codex/v3`) fills no `mcp_server`, `attribution` or `hook:` event
-for Codex (0 rows in the local index). The forms above follow R2: rollout `McpToolCall.server` and hook tool names
-`mcp__<server>__<tool>` carry the configured server name. Locally the one `McpToolCall` in 39 rollouts names a server
-that no config file sets up (a built-in), so no configured name could be matched yet.
+**Join with the index.** MCP servers: checked. Since `codex/v4` the rollout's `McpToolCall.server` fills `mcp_server`,
+and locally it matched 1 of 4 configured servers by name; one more server in use is a built-in no config file sets up.
+Hooks, skills and plugins: unverified. The collector fills no `attribution` or `hook:` event for Codex, so the page
+says their use is not recorded.

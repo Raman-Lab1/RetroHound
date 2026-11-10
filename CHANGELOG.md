@@ -14,6 +14,9 @@ and versions follow [Semantic Versioning](https://semver.org/).
 - Footprint report: configured versus used. The agents' config files (MCP servers, hooks, skills, plugins; user,
   project, local and managed scopes) are read for names and hook commands only, and set against what transcripts show
   was used: never-used items are flagged, and used items that no config file sets up now are listed.
+- Codex collector (`codex/v4`): MCP tool calls are indexed as `mcp` events (`mcp__<server>__<tool>`, `mcp_server`,
+  `mcp_tool`, arguments, result, outcome), so MCP rules fire on Codex and the footprint shows which Codex MCP servers
+  were used. Codex rollouts are re-read once.
 
 ### Fixed
 - `incident` and `wrapped` pages: no whole-page mask pass after escaping, which could swallow markup after a short

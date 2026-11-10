@@ -92,6 +92,29 @@ describe("root thread", () => {
   });
 });
 
+describe("MCP tool call", () => {
+  const mcp = (extra: object) => item({ type: "McpToolCall", id: "i1", server: "docs", tool: "find__deep", arguments: { q: "x" }, status: "completed",
+    result: { content: [{ type: "text", text: `found ${KEY}` }], isError: false }, duration: { secs: 0, nanos: 1 }, ...extra });
+  const parse = async (...items: object[]) => (ord = 0, (await parseFile(write("mcp.jsonl", [meta(ROOT), ...items]))).events);
+
+  test("is an mcp event named as the hooks name it, with the exact server and tool and its result", async () => {
+    const [ev] = await parse(mcp({}));
+    expect(ev).toMatchObject({ category: "mcp", tool_name: "mcp__docs__find__deep", mcp_server: "docs", mcp_tool: "find__deep",
+      tool_input: '{"q":"x"}', outcome: "success", tool_response: `found ${KEY}`, result_secret_kinds: ["aws_access_key"] });
+  });
+
+  test("an error result or a failed call is an error; a URL argument makes it a web_request", async () => {
+    const evs = await parse(mcp({ result: { content: [], isError: true } }), mcp({ status: "failed", result: undefined }),
+      mcp({ arguments: { url: "https://example.invalid/a" }, status: "inProgress" }));
+    expect(evs.map((e) => [e.category, e.outcome, e.domain])).toEqual([["mcp", "error", undefined], ["mcp", "error", undefined],
+      ["web_request", "unknown", "example.invalid"]]);
+  });
+
+  test("without a server or tool name there is no event", async () => {
+    expect(await parse(mcp({ server: "" }), mcp({ tool: undefined }))).toEqual([]);
+  });
+});
+
 describe("sub-agent thread", () => {
   const sub = () => {
     ord = 0;
@@ -261,6 +284,6 @@ describe("discover", () => {
   });
 
   test("collector shape", () => {
-    expect([codex.agent, codex.parserVersion]).toEqual(["codex", "codex/v3"]);
+    expect([codex.agent, codex.parserVersion]).toEqual(["codex", "codex/v4"]);
   });
 });
