@@ -133,12 +133,26 @@ describe("toAttackLayer", () => {
       { techniqueID: "T1552.001", score: 2, comment: "secret_read_then_egress (2)", enabled: true },
     ]);
     expect(layer.gradient).toMatchObject({ minValue: 0, maxValue: 2 });
-    expect(layer.description).toContain("3 findings in 1 sessions");
+    expect(layer.description).toContain("3 findings across 1 scanned sessions");
     expect(layer.description).toContain("1 findings come from rules with no ATT&CK technique");
   });
 
+  test("a parent tagged by another rule keeps its own entry, summed by the Navigator; counts are per rule id", () => {
+    const r = report([finding(), finding({ id: "f2", rule_id: "r2" }), finding({ id: "f3", rule_id: "r3" }), finding({ id: "f4", rule_id: "gone" })]);
+    r.rules.push({ id: "r2", name: "secret_read_then_egress", title: "Same name", level: "low", tags: ["attack.t1552"], lane: "hunt" },
+      { id: "r3", title: "Untitled twin", level: "low", tags: ["attack.t1552"], lane: "hunt" });
+    const layer = JSON.parse(toAttackLayer(r));
+    expect(layer.techniques.map((t: { techniqueID: string; score: number; comment: string }) => [t.techniqueID, t.score, t.comment])).toEqual([
+      ["T1041", 1, "secret_read_then_egress (1)"], ["T1552", 2, "Untitled twin (1), secret_read_then_egress (1)"],
+      ["T1552.001", 1, "secret_read_then_egress (1)"]]);
+    expect(layer.layout).toMatchObject({ showAggregateScores: true, aggregateFunction: "sum" });
+    expect(layer.description).toContain("1 findings come from rules with no ATT&CK technique"); // the finding whose rule is gone
+  });
+
   test("no findings is still a valid layer (maxValue above minValue); rule names are masked", () => {
-    expect(JSON.parse(toAttackLayer(report([]))).gradient.maxValue).toBe(1);
+    const empty = JSON.parse(toAttackLayer(report([])));
+    expect(empty).toMatchObject({ techniques: [], gradient: { maxValue: 1 } });
+    expect(empty.description).not.toContain("no ATT&CK technique");
     const r = report();
     r.rules[0]!.name = `rule ${TOKEN}`;
     expect(toAttackLayer(r)).not.toContain(TOKEN);
