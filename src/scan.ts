@@ -4,6 +4,7 @@
 import { createHash } from "node:crypto";
 import { COLLECTORS, type Collector } from "./collectors/index.ts";
 import { evaluate, type Match } from "./engine/evaluate.ts";
+import { FIRST_SEEN_FIELDS, firstSeenOf, setFirstSeen, spansColdStart, type FirstSeen } from "./engine/first-seen.ts";
 import { type Rejection, type Rule } from "./engine/load.ts";
 import { loadSources, ruleSources } from "./cli/rules.ts";
 import { mask } from "./normalize/mask.ts";
@@ -78,9 +79,11 @@ function toFinding(m: Match<RawEvent>): Finding {
   };
 }
 
-/** Parses every file of the given groups and evaluates each session's events together, copies deduped by id. */
-async function evaluateGroups(rules: Rule[], groups: string[][], parse: (p: string) => Promise<RawEvent[] | null>) {
-  const bySession = new Map<string, Map<string, RawEvent>>();
+type Sessions = Map<string, Map<string, RawEvent>>;
+
+/** Parses every file of the given groups into sessions, copies deduped by id. */
+async function collect(groups: string[][], parse: (p: string) => Promise<RawEvent[] | null>): Promise<Sessions> {
+  const bySession: Sessions = new Map();
   for (const paths of groups) {
     for (const path of paths) {
       for (const e of (await parse(path)) ?? []) {
@@ -90,8 +93,18 @@ async function evaluateGroups(rules: Rule[], groups: string[][], parse: (p: stri
       }
     }
   }
-  const findings = [...bySession.values()].flatMap((events) => evaluate(rules, [...events.values()]).map(toFinding));
-  return { sessions: [...bySession.keys()], findings, bySession };
+  return bySession;
+}
+
+/** Runs `fn` with the first-seen pre-pass in place when a rule reads it (ADR 0016), and clears it after. */
+function withFirstSeen<T>(rules: Rule[], prepass: () => FirstSeen, fn: () => T): T {
+  const needed = rules.some((r) => r.kind === "detection" && FIRST_SEEN_FIELDS.some((f) => r.fields.includes(f)));
+  setFirstSeen(needed ? prepass() : undefined);
+  try {
+    return fn();
+  } finally {
+    setFirstSeen();
+  }
 }
 
 const safeParse = (c: Collector, cache?: Map<string, RawEvent[]>, lines?: Lines) => async (path: string): Promise<RawEvent[] | null> => {
@@ -121,15 +134,15 @@ function summarize(events: RawEvent[]): Sess {
 async function scanMemory(jobs: Job[], rules: Rule[]): Promise<View> {
   let failed = 0;
   const lines = noLines();
-  const findings: Finding[] = [];
   const all = new Map<string, RawEvent[]>();
   for (const { c, paths } of jobs) {
     const parse = safeParse(c, undefined, lines);
     const counted = async (p: string) => (await parse(p)) ?? (failed++, null);
-    const r = await evaluateGroups(rules, [...groupPaths(c, paths).values()], counted);
-    findings.push(...r.findings);
-    for (const [id, events] of r.bySession) all.set(id, [...events.values()]);
+    for (const [id, events] of await collect([...groupPaths(c, paths).values()], counted)) all.set(id, [...events.values()]);
   }
+  // Every agent is parsed before any evaluates: first-seen compares across all of them.
+  const findings = withFirstSeen(rules, () => firstSeenOf([...all.values()].flat()), () =>
+    [...all.values()].flatMap((events) => evaluate(rules, events).map(toFinding)));
   const stats = (ids: string[]) => {
     const events = ids.flatMap((id) => all.get(id) ?? []);
     return { blocked: events.filter((e) => e.outcome === "blocked").length, subagent: events.filter((e) => e.agent_id).length };
@@ -156,13 +169,19 @@ async function scanIndexed(jobs: Job[], store: Store, rules: Rule[], hash: strin
   const full = store.lastRuleRun()?.rule_set_hash !== hash;
   const lines = noLines(); // only files the indexer parses this run; re-reads for evaluation are not counted twice
   const files = { indexed: 0, skipped: 0, gone: 0, failed: 0 };
+  const dirty: { c: Collector; sessions: Sessions }[] = [];
   for (const { c, paths } of jobs) {
-    const index = await indexAgent(c, store, rules, paths, full, lines);
+    const { index, sessions } = await indexAgent(c, store, paths, full, lines);
+    dirty.push({ c, sessions });
     files.indexed += index.indexed;
     files.skipped += index.skipped;
     files.gone += index.gone;
     files.failed += index.failed.length;
   }
+  // Every agent is indexed before any evaluates, so the first-seen query sees all of this scan's events (ADR 0016).
+  withFirstSeen(rules, () => indexedFirstSeen(store), () => {
+    for (const { c, sessions } of dirty) evaluateAgent(c, store, rules, sessions, full);
+  });
   const events = store.listSessions().reduce((n, s) => n + s.event_count, 0);
   store.recordRuleRun({ rule_set_hash: hash, started_at: started, finished_at: new Date().toISOString(), events, findings: store.listFindings().length });
   const agents = new Set(jobs.map((j) => j.c.agent as string)); // one DB holds every agent
@@ -177,7 +196,14 @@ async function scanIndexed(jobs: Job[], store: Store, rules: Rule[], hash: strin
   };
 }
 
-async function indexAgent(c: Collector, store: Store, rules: Rule[], paths: string[], full: boolean, lines: Lines) {
+/** All false until the index spans the cold-start window (ADR 0016). */
+function indexedFirstSeen(store: Store): FirstSeen {
+  const spans = spansColdStart(store.listSessions().flatMap((s) => [s.first_ts, s.last_ts]));
+  return spans ? store.firstSeen() : { project: new Set(), global: new Set() };
+}
+
+/** Indexes one agent's files and parses the sessions to re-evaluate: those with a touched file, or all on `full`. */
+async function indexAgent(c: Collector, store: Store, paths: string[], full: boolean, lines: Lines) {
   const touched = new Set<string>();
   const cache = new Map<string, RawEvent[]>();
   const parse = async (path: string) => {
@@ -189,16 +215,20 @@ async function indexAgent(c: Collector, store: Store, rules: Rule[], paths: stri
   };
   const index = await indexFiles(store, paths, parse, c.parserVersion);
   const dirty = [...groupPaths(c, paths).values()].filter((g) => full || g.some((p) => touched.has(p)));
-  const { sessions, findings } = await evaluateGroups(rules, dirty, safeParse(c, cache));
+  const sessions = await collect(dirty, safeParse(c, cache));
   cache.clear();
-  store.replaceFindings(sessions, findings);
+  return { index, sessions };
+}
+
+function evaluateAgent(c: Collector, store: Store, rules: Rule[], sessions: Sessions, full: boolean): void {
+  const findings = [...sessions.values()].flatMap((events) => evaluate(rules, [...events.values()]).map(toFinding));
+  store.replaceFindings([...sessions.keys()], findings);
   if (full) {
     // Sessions whose transcripts are gone can only be re-read from masked rows (0006, 0008): keep their old evidence.
     for (const s of store.listSessions().filter((s) => s.agent === c.agent && s.archived)) {
       store.insertFindings(evaluate(rules, store.sessionEvents(s.session_id)).map((m) => toFinding(m as Match<RawEvent>)));
     }
   }
-  return index;
 }
 
 export const reportRule = (r: Rule): ReportRule => ({

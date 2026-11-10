@@ -3,6 +3,7 @@
 import { parseAllDocuments } from "yaml";
 import { CATEGORIES, LEVELS, type Category, type Level } from "../normalize/types.ts";
 import { compileCondition } from "./condition.ts";
+import { FIRST_SEEN_FIELDS } from "./first-seen.ts";
 import { linkCorrelations, parseCorrelation, type CorrelationRule } from "./correlate.ts";
 import { allOf, anyOf, compileItem, RuleError, type Pred } from "./modifiers.ts";
 
@@ -61,6 +62,7 @@ function optString(doc: Doc, key: string): string | undefined {
 }
 
 const CORRELATION_X = new Set(["max_events_between", "differ_by"]); // checked in correlate.ts
+const REQUIRES = new Set(["first_seen"]); // detections only: what the rule needs that the live hook cannot give (0016)
 
 /** The metadata shared by detections and correlations, including the strict `x-retrohound` block. */
 function parseMeta(doc: Doc, where: Where, correlation: boolean): RuleMeta {
@@ -70,10 +72,17 @@ function parseMeta(doc: Doc, where: Where, correlation: boolean): RuleMeta {
   if (!LEVELS.includes(level as Level)) throw new RuleError("bad-metadata", `unknown level '${String(level)}'`);
   const x = doc["x-retrohound"] ?? {};
   if (!isMap(x)) throw new RuleError("bad-x-retrohound", "x-retrohound must be a map");
-  const unknown = Object.keys(x).find((k) => k !== "lane" && !(correlation && CORRELATION_X.has(k)));
+  const unknown = Object.keys(x).find((k) => k !== "lane" && !(correlation ? CORRELATION_X.has(k) : k === "requires"));
   if (unknown) throw new RuleError("bad-x-retrohound", `x-retrohound.${unknown} is not valid here`);
   const lane = x.lane ?? "hunt";
   if (lane !== "hunt" && lane !== "enforce") throw new RuleError("bad-x-retrohound", `unknown lane '${String(lane)}'`);
+  const requires = x.requires ?? [];
+  if (!Array.isArray(requires) || !requires.every((r) => REQUIRES.has(r))) {
+    throw new RuleError("bad-x-retrohound", `x-retrohound.requires is a list of: ${[...REQUIRES].join(", ")}`);
+  }
+  if (requires.includes("first_seen") && lane === "enforce") {
+    throw new RuleError("first-seen-enforce", "a rule that requires first_seen is hunt-only: the live hook has no index");
+  }
   const id = optString(doc, "id");
   const name = optString(doc, "name");
   return {
@@ -126,6 +135,11 @@ function compileDetection(doc: Doc, where: Where): DetectionRule {
   const used = new Set<string>();
   const selections = new Map(Object.entries(named).map(([id, body]) => [id, compileSelection(id, body, used)]));
   const matches = anyOf(conditions.map((c: string) => compileCondition(c, selections)));
+  const requires = ((doc["x-retrohound"] as Doc | undefined)?.requires ?? []) as string[]; // checked in parseMeta
+  const firstSeen = FIRST_SEEN_FIELDS.find((f) => used.has(f));
+  if (firstSeen && !requires.includes("first_seen")) {
+    throw new RuleError("first-seen-not-required", `${firstSeen} needs x-retrohound.requires: [first_seen]`);
+  }
   return { ...meta, kind: "detection", ...logsource, fields: [...used], matches };
 }
 

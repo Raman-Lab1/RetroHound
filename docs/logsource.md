@@ -93,8 +93,8 @@ Any other unknown field name is a load error, not a silent non-match.
 
 ### Derived fields
 
-Computed by the engine from stored fields, never stored, so they work the same for `scan`, DB rows and the live hook.
-None can be a correlation `group-by` key.
+Computed by the engine, never stored. All but the two `first_seen_*` fields come from the event's own stored fields, so
+they work the same for `scan`, DB rows and the live hook. None can be a correlation `group-by` key.
 
 `target_outside_project` (boolean, `true`/`false` only, no modifiers): true when `target_path` and `project_path`
 are both set and the target is provably not under the project root (`/proj-evil` is outside `/proj`). Shell events have
@@ -130,6 +130,29 @@ command); quote characters are dropped from words, so `"$P"` quoting does not hi
   name run (`a.exe`) counts, as on Windows, so `wget …/jq && jq` would too. Long options other than `--output`,
   `--output-document` and `--remote-name` are read as taking no value.
 
+`first_seen_project`, `first_seen_global` (booleans, `true`/`false` only, no modifiers; ADR 0016): true when the event
+is the earliest `(ts, id)` event carrying a value of one of these kinds, among every event the scan sees (the whole
+index, or the in-memory events with `--no-index`), across sessions and agents:
+
+| kind | value |
+|---|---|
+| domain | `domain`, case-folded |
+| MCP server | `mcp_server` |
+| hook command | `command_line`, when `tool_name` starts with `hook:` |
+| skill or plugin | `attribution`, when it starts with `skill:` or `plugin:` (not `mcp:`) |
+
+`first_seen_project` keys on `(project_path, kind, value)` (no `project_path` is one project of its own),
+`first_seen_global` on `(kind, value)`. An event carrying several kinds is true when it is first for any of them, so
+filter on the kind too (`category: web_request` or `domain|exists: true` for domains). Use the global scope for hooks
+and MCP servers, and the project scope for domains.
+
+- Cold start: both are false until the data spans 14 days from the earliest to the latest `ts`.
+- A rule that reads either must declare `x-retrohound: { requires: [first_seen] }` (`first-seen-not-required`
+  otherwise) and must be lane `hunt` (`first-seen-enforce`): the live hook has no index. `rules test` runs no pre-pass,
+  so both read false there.
+- Findings are as of the scan that evaluated the session: an older transcript found later does not change an untouched
+  session's findings until the rule set changes. Indexed values are masked, in-memory ones are not.
+
 ## Correlation
 
 Supported types: `event_count`, `temporal_ordered`, `temporal` (ADR 0004). `generate` defaults to false: a rule that
@@ -144,6 +167,8 @@ only a non-generating correlation references emits nothing alone (`rules list` m
 - `x-retrohound.differ_by: [field, ...]` (`temporal_ordered` only, stored fields): each later step's event must differ
   from the first step's in every listed field (null and missing are one value), so "blocked, then done with another
   kind of tool" is `differ_by: [category]`. A Sigma backend without it matches the same tool too.
+- `x-retrohound.requires: [first_seen]` belongs on the detection rules a correlation references, not on the
+  correlation (`bad-x-retrohound` there). It is the only known value; anything else rejects the rule.
 - `event_count`: at most one finding per session per rule. `temporal_ordered`: order of `rules:`, non-strict, so one
   event can satisfy consecutive steps; one finding per first-step event.
 - A missing or bad `ts` sorts first and never fits a window, so clock skew between streams can hide a match.

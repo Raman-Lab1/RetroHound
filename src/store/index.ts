@@ -179,6 +179,18 @@ export function openStore(path: string = defaultDbPath()) {
       VALUES (?, ?, ?, ?, ?)`),
     lastRuleRun: db.prepare(`SELECT rule_set_hash, started_at, finished_at, events, findings
       FROM rule_runs ORDER BY id DESC LIMIT 1`),
+    // ADR 0016: the earliest (ts, id) event per (kind, value) and per (project, kind, value). The keys must match
+    // engine/first-seen.ts, which does the same over in-memory events for --no-index.
+    firstSeen: db.prepare(`WITH k AS (
+        SELECT id, ts, coalesce(project_path, '') AS p, 'domain' AS kind, lower(domain) AS v FROM events WHERE domain <> ''
+        UNION ALL SELECT id, ts, coalesce(project_path, ''), 'mcp', mcp_server FROM events WHERE mcp_server <> ''
+        UNION ALL SELECT id, ts, coalesce(project_path, ''), 'hook', command_line FROM events
+          WHERE substr(tool_name, 1, 5) = 'hook:' AND command_line <> ''
+        UNION ALL SELECT id, ts, coalesce(project_path, ''), 'skill', attribution FROM events
+          WHERE substr(attribution, 1, 6) = 'skill:' OR substr(attribution, 1, 7) = 'plugin:'
+      ), r AS (SELECT id, row_number() OVER (PARTITION BY kind, v ORDER BY ts, id) AS g,
+          row_number() OVER (PARTITION BY p, kind, v ORDER BY ts, id) AS pr FROM k)
+      SELECT id, g = 1 AS global, pr = 1 AS project FROM r WHERE g = 1 OR pr = 1`),
   };
 
   function refreshSessions(ids: Iterable<string>): void {
@@ -310,6 +322,16 @@ export function openStore(path: string = defaultDbPath()) {
 
     recordRuleRun(run: RuleRun): void {
       q.insertRuleRun.run(run.rule_set_hash, run.started_at, run.finished_at, run.events, run.findings);
+    },
+
+    /** Ids of the events that first carried a domain, MCP server, hook command or skill/plugin (ADR 0016). */
+    firstSeen(): { project: Set<string>; global: Set<string> } {
+      const fs = { project: new Set<string>(), global: new Set<string>() };
+      for (const row of q.firstSeen.all()) {
+        if (row.global) fs.global.add(row.id as string);
+        if (row.project) fs.project.add(row.id as string);
+      }
+      return fs;
     },
 
     lastRuleRun(): RuleRun | undefined {
