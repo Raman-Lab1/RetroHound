@@ -105,3 +105,24 @@ collection (ADR 0006, 0007).
 
 - Behaviour when the CLI's permission prompt is rejected, MCP tool calls, browser tool steps, `status` values other
   than `DONE`, and how long `brain/` directories are kept.
+
+## Configuration surface (`src/footprint/config-antigravity.ts`, footprint "configured versus used")
+
+Checked 2026-11-10 on macOS by key names only, against the [MCP](https://antigravity.google/docs/mcp),
+[hooks](https://antigravity.google/docs/hooks) and [skills](https://antigravity.google/docs/skills) docs.
+
+| What | Location (scope) | Key path | Item `name` | Seen here |
+|---|---|---|---|---|
+| MCP server | `~/.gemini/config/mcp_config.json` (user), `<project>/.agents/mcp_config.json` (project), `~/.gemini/config/plugins/<p>/mcp_config.json` (plugin) | `mcpServers.<name>`; `command` = stdio, `serverUrl`/`url` = HTTP; `disabled: true` drops it | `<name>` | user file exists, empty (0 bytes): read as nothing configured |
+| Hook | `~/.gemini/config/hooks.json` (user), `<project>/.agents/hooks.json` (project) | `<group>.<Event>[]`: `PreToolUse`/`PostToolUse` entries `{matcher, hooks[].command}`, other events handlers `{command}` directly; `<group>.enabled: false` drops the group | the command (masked), `detail` `hook:<Event>` | docs only |
+| Plugin | `~/.gemini/config/plugins/<folder>/` (user) | folder name | `<folder>` | docs only |
+| Skill | `~/.gemini/config/skills/`, `~/.gemini/skills/`, `~/.gemini/antigravity-cli/skills/` (user), `<project>/.agents/skills/`, `<project>/.agent/skills/` (project), `<plugin>/skills/` (plugin); each `<dir>/SKILL.md` | frontmatter `name`, defaults to the folder | `name`, else `<dir>` | `~/.gemini/skills` (symlinked folders, skipped as outside the directory), project |
+
+Not read: env, args, headers, URLs; `~/.gemini/antigravity-cli/settings.json` (the hooks doc says it is not loaded for
+hooks); built-in skills (`antigravity-cli/builtin/skills`); a plugin's own hooks file (path not documented);
+`.agents/skills` in parent folders.
+
+**Join with the index: unverified.** The collector (`antigravity/v3`) fills no `mcp_server`, `attribution` or
+`hook:` event, and the local index holds no Antigravity sessions. Per the MCP doc an eager tool is called as
+`mcp_<server>_<tool>` and a lazy one through `call_mcp_tool {ServerName, ToolName}`: either way `<server>` is the
+`mcpServers` key, which is the item name.
