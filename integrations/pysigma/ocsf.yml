@@ -26,8 +26,6 @@ transformations:
           - seq
           - category
           - tool_name
-          - mcp_server
-          - mcp_tool
           - outcome
           - parent_tool_use_id
           - permission_mode
@@ -50,8 +48,10 @@ transformations:
     type: field_name_mapping
     mapping:
       id: finding_info.related_events.uid
-      agent: unmapped.retrohound.agent
-      agent_version: unmapped.retrohound.ai_agent.version
+      agent: evidences.ai_agent.name
+      agent_version: evidences.ai_agent.version
+      mcp_server: evidences.api.service.name
+      mcp_tool: evidences.api.operation
       session_id: metadata.correlation_uid
       parent_session_id: unmapped.retrohound.parent_session_id
       agent_id: unmapped.retrohound.agent_id
