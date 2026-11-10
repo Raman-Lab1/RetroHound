@@ -53,7 +53,7 @@ function workspaceGlobs(root: string): string[] {
 }
 
 /** Hook commands of a settings.json become `hook:<Event>` process_creation events, as the live parser emits them. */
-function hookCommands(text: string): [string, string][] {
+export function hookCommands(text: string): [string, string][] {
   try {
     const hooks = (JSON.parse(text) as { hooks?: Record<string, unknown> }).hooks ?? {};
     return Object.entries(hooks).flatMap(([name, groups]) =>

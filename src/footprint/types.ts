@@ -64,6 +64,33 @@ export type FindingRow = {
   message: string;
 };
 
+/** One thing an agent's config files set up, read when the report is built (src/footprint/config-*.ts), never stored. */
+export type ConfigItem = {
+  agent: string; // claude_code | codex | antigravity: the index's `agent` column
+  kind: "mcp_server" | "hook" | "skill" | "plugin";
+  // In the index's own form, so it joins with what transcripts show: the `mcp_server` column value; the hook's
+  // `command_line`; for skill/plugin the part after `skill:` / `plugin:` in `attribution`.
+  name: string;
+  scope: string; // user | project | local | managed | plugin
+  source: string; // the file it was read from
+  detail?: string; // hook: `hook:<Event>`; mcp_server: transport (stdio, http, sse) when given
+};
+
+/** What one agent's reader found. Names and hook commands only: env, headers, args and URLs are never read out. */
+export type ConfigRead = { items: ConfigItem[]; files: number; skipped: { path: string; reason: string }[] };
+
+/** home: the user's home dir; projects: project paths from the index (only those still on disk are read). */
+export type ConfigReader = (o: { home: string; projects: string[]; env?: Record<string, string | undefined> }) => ConfigRead;
+
+/** Configured versus observed: each item with how often transcripts show it, and what transcripts show that no
+ * config file read now sets up (removed since, or set up somewhere RetroHound does not read). */
+export type ConfigFootprint = {
+  items: (ConfigItem & { events: number; sessions: number; last_ts?: string })[]; // events 0: never seen used
+  unlisted: { agent: string; kind: ConfigItem["kind"]; name: string; events: number; sessions: number; last_ts: string }[];
+  files: number;
+  skipped: number;
+};
+
 export type Footprint = {
   generated_at: string;
   tool_version: string;
@@ -95,5 +122,6 @@ export type Footprint = {
   modes: { mode: string; events: number; sessions: number; sub_agent: number }[]; // permission_mode, "-" when unset
   blocked: { kinds: { name: string; count: number }[]; categories: { name: string; count: number }[] };
   findings: FindingRow[]; // highest level first, then newest
+  configured?: ConfigFootprint; // absent when the caller read no config
   omitted: { sessions: number; findings: number; domains: number; secrets: number; tools: number };
 };
