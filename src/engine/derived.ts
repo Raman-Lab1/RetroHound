@@ -17,11 +17,29 @@ function ansiC(body: string): string {
  * `command_line` with shell quoting removed: ANSI-C `$'…'` strings decoded, `$"…"` read as `"…"`, `'` and `"` dropped,
  * `\` dropped before a word character, and runs of spaces and tabs collapsed to one space.
  */
-export const unquote = (s: string): string =>
-  s
-    .replace(/\$'((?:[^'\\]|\\[\s\S])*)'/g, (_, b: string) => ansiC(b))
-    .replace(/\$?"|'|\\(?=\w)/g, "")
-    .replace(/[ \t]{2,}/g, " ");
+export function unquote(s: string): string {
+  let out = "";
+  let q = ""; // "" outside quotes, `'` single-quoted, `"` double-quoted
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]!;
+    if (c === "\\" && q !== "'" && i + 1 < s.length) {
+      const n = s[i + 1]!;
+      if (/\w/.test(n)) continue; // `\c` reads as `c`
+      out += n === '"' || n === "'" ? "\\" : "\\" + n; // an escaped quote neither opens nor closes
+      i++;
+    } else if (c === "$" && !q && s[i + 1] === "'") {
+      let j = i + 2; // ANSI-C string: only starts outside quotes
+      while (j < s.length && s[j] !== "'") j += s[j] === "\\" ? 2 : 1;
+      out += ansiC(s.slice(i + 2, j)).replace(/['"]|\\(?=\w)/g, ""); // decoded quotes drop like any other
+      i = j;
+    } else if (c === "$" && !q && s[i + 1] === '"') {
+      continue; // `$"…"` reads as `"…"`
+    } else if ((c === "'" || c === '"') && (!q || q === c)) {
+      q = q ? "" : c;
+    } else out += c;
+  }
+  return out.replace(/[ \t]{2,}/g, " ");
+}
 
 let lastEv: Row | null = null;
 let lastVal: string | undefined;
