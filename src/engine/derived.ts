@@ -2,8 +2,26 @@
 // event it sees, the live hook included, so each is one linear pass: no regex that can backtrack over the whole line.
 type Row = Record<string, unknown>;
 
-/** `command_line` with shell quoting removed: `'` and `"` dropped, and `\` dropped before a word character. */
-export const unquote = (s: string): string => s.replace(/['"]|\\(?=\w)/g, "");
+const ESC: Record<string, string> = { n: "\n", t: "\t", r: "\r", a: "\x07", b: "\b", e: "\x1b", E: "\x1b", f: "\f", v: "\v" };
+
+/** The text of one bash ANSI-C `$'…'` string: `\xHH`, `\NNN` octal, `\uHHHH`, `\UHHHHHHHH`, `\n \t \\ \'` decoded. */
+function ansiC(body: string): string {
+  return body.replace(/\\(?:x([\dA-Fa-f]{1,2})|([0-7]{1,3})|u([\dA-Fa-f]{1,4})|U([\dA-Fa-f]{1,8})|([\s\S]))/g, (m, x, o, u, U, c) => {
+    if (c !== undefined) return ESC[c] ?? ("\\'\"?".includes(c) ? c : m);
+    const n = x ? parseInt(x, 16) : o ? parseInt(o, 8) & 255 : parseInt(u ?? U, 16);
+    return n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : "";
+  });
+}
+
+/**
+ * `command_line` with shell quoting removed: ANSI-C `$'…'` strings decoded, `$"…"` read as `"…"`, `'` and `"` dropped,
+ * `\` dropped before a word character, and runs of spaces and tabs collapsed to one space.
+ */
+export const unquote = (s: string): string =>
+  s
+    .replace(/\$'((?:[^'\\]|\\[\s\S])*)'/g, (_, b: string) => ansiC(b))
+    .replace(/\$?"|'|\\(?=\w)/g, "")
+    .replace(/[ \t]{2,}/g, " ");
 
 let lastEv: Row | null = null;
 let lastVal: string | undefined;

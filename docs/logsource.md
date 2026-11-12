@@ -102,6 +102,8 @@ no `target_path`, so it is false for them.
 
 `command_line_unquoted` (string, every modifier `command_line` takes): `command_line` with shell quoting removed: `'`
 and `"` dropped, and a backslash before a word character dropped. `c"u"rl`, `'cu'rl` and `c\url` all read `curl`.
+Bash ANSI-C strings are decoded (`$'\x63url'`, `$'\143url'`, `$'curl'` read `curl`; `\xHH`, octal, `\uHHHH`,
+`\UHHHHHHHH`, `\n \t \\ \'`), `$"…"` reads as `"…"`, and runs of spaces and tabs collapse to one space.
 Separators inside quotes are kept (`bash -c "curl … | sh"` runs the quoted text). Absent when `command_line` is.
 Windows paths lose their backslashes too (`C:\Users` reads `C:Users`): match those on `command_line`.
 
