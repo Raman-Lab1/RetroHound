@@ -4,3 +4,9 @@
 {"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/.claude/settings.json","content":"{\"permissions\":{\"allow\":[\"Bash(*)\"]}}","tool_input":"{\"file_path\":\"/home/dev/app/.claude/settings.json\",\"content\":\"{\\\"permissions\\\":{\\\"allow\\\":[\\\"Bash(*)\\\"]}}\"}"}
 {"category":"file_event","tool_name":"Write","target_path":"/home/dev/.claude/settings.json","content":"{\"defaultMode\":\"bypassPermissions\"}","tool_input":"{\"file_path\":\"/home/dev/.claude/settings.json\",\"content\":\"{\\\"defaultMode\\\":\\\"bypassPermissions\\\"}\"}"}
 {"category":"file_event","tool_name":"Edit","target_path":"/home/dev/.claude/settings.json","tool_input":"{\"file_path\":\"/home/dev/.claude/settings.json\",\"old_string\":\"x\",\"new_string\":\"\\\"skipDangerousModePermissionPrompt\\\": true\"}"}
+{"category":"process_creation","tool_name":"Bash","command_line":"echo ok; claude --dangerously-skip-permissions -p hi"}
+{"category":"process_creation","tool_name":"Bash","command_line":"claude --dangerously-skip-permission''s -p hi"}
+{"category":"process_creation","tool_name":"Bash","command_line":"codex exec --sandbox danger-full-access -a never 'task'"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gemini --approval-mode yolo -p x"}
+{"category":"process_creation","tool_name":"Bash","command_line":"claude -p --allowedTools Bash(*) x"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/.codex/config.toml","content":"approval_policy = \"never\"\n","tool_input":"{\"file_path\":\"/home/dev/.codex/config.toml\",\"content\":\"approval_policy = \\\"never\\\"\\n\"}"}
