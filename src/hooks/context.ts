@@ -8,6 +8,7 @@ export const IN_HOOKS = "x-retrohound-in-hooks-block";
 const CONFIG = /(?:^|\/)(?:\.claude\/settings(?:\.local)?\.json|\.gemini\/settings\.json|\.codex\/config\.toml)$/i;
 const JSON_KEYS = /"(?:hooks|statusLine|apiKeyHelper|awsAuthRefresh|awsCredentialExport|otelHeadersHelper)"\s*:\s*/gi;
 const TOML_HEAD = /^[ \t]*\[\[?[ \t]*([^\]\n]*?)[ \t]*\]/gm;
+const TOML_HOOKS_KEY = /^[ \t]*(?:"hooks"|'hooks'|hooks)[ \t]*[.=]/gim; // root/inline/dotted spellings of the hooks table
 const TOML_NOTIFY = /^[ \t]*["']?notify["']?[ \t]*=/gim;
 const MAX = 1024 * 1024;
 
@@ -34,8 +35,15 @@ export function hookSpans(text: string, toml: boolean): [number, number][] {
     for (const m of text.matchAll(JSON_KEYS)) out.push([m.index!, valueEnd(text, m.index! + m[0].length)]);
     return out;
   }
+  // triple-quoted strings blanked (same length) so a header-like line inside one is not a header
+  text = text.replace(/"""[\s\S]*?"""|'''[\s\S]*?'''/g, (m) => m.replace(/[^\n]/g, " "));
   const heads = [...text.matchAll(TOML_HEAD)];
-  heads.forEach((h, k) => { if (/^hooks(?:[.\s]|$)/i.test(h[1]!)) out.push([h.index!, heads[k + 1]?.index ?? text.length]); });
+  heads.forEach((h, k) => { if (/^(?:"hooks"|'hooks'|hooks)(?:[.\s]|$)/i.test(h[1]!)) out.push([h.index!, heads[k + 1]?.index ?? text.length]); });
+  for (const m of text.matchAll(TOML_HOOKS_KEY)) {
+    const eq = text.indexOf("=", m.index!), at = eq < 0 ? text.length : eq + 1;
+    const v = /^[ \t]*[[{]/.exec(text.slice(at, at + 20));
+    out.push([m.index!, v ? valueEnd(text, at + v[0].length - 1) : (text.indexOf("\n", at) + 1 || text.length)]);
+  }
   for (const m of text.matchAll(TOML_NOTIFY)) { // any table: over-marking only blocks an edit that touches a notify key
     const at = m.index! + m[0].length;
     const arr = /^[ \t]*\[/.exec(text.slice(at, at + 20));

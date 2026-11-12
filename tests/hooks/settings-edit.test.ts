@@ -42,6 +42,17 @@ describe("old_string inside a hook section", () => {
     expect(edit(t, "/opt/n.sh").rule).toBe("control_plane_agent_config_risky_write");
     expect(edit(t, 'note = "npm test"').rule).toBeUndefined();
   });
+  test("TOML: quoted header, inline table, dotted key, and header text inside a multi-line string", () => {
+    const hit = "control_plane_agent_config_risky_write";
+    const cases: [string, string][] = [
+      ["q", '["hooks"]\npre = "npm test"\n'],
+      ["i", 'hooks = {pre = "npm test"}\n'],
+      ["d", 'hooks.pre = "npm test"\n'],
+      ["m", '[hooks]\nnote = """\n[x]\n"""\npre = "npm test"\n'],
+    ];
+    for (const [k, body] of cases) expect(edit(put(`t${k}/.codex/config.toml`, body), "npm test").rule).toBe(hit);
+    expect(edit(put("tn/.codex/config.toml", '[other]\nhooked = "npm test"\n'), "npm test").rule).toBeUndefined();
+  });
   test("a missing or oversized file, or another path, changes nothing", () => {
     expect(edit(join(dir, "none/.claude/settings.json"), "npm test").rule).toBeUndefined();
     const big = put("d/.claude/settings.json", `{"hooks": {"a": "npm test"}}` + " ".repeat(1024 * 1024));
