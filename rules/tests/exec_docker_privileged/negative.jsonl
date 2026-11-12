@@ -1,3 +1,6 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"docker run --rm -v $(pwd):/app node:20 npm test"}
 {"category":"process_creation","tool_name":"Bash","command_line":"docker ps"}
 {"category":"process_creation","tool_name":"Bash","command_line":"docker build -t x ."}
+{"category":"process_creation","tool_name":"Bash","command_line":"docker run --rm --mount type=bind,src=/home/x/app,dst=/app node:20 npm test"}
+{"category":"process_creation","tool_name":"Bash","command_line":"docker container ls"}
+{"category":"process_creation","tool_name":"Bash","command_line":"docker create --name x alpine"}

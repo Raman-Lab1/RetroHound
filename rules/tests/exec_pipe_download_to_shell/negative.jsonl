@@ -13,3 +13,6 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"grep -rn \"curl.*| *sh\" docs/"}
 {"category":"process_creation","tool_name":"Bash","command_line":"shellcheck install.sh && bash install.sh"}
 {"category":"process_creation","tool_name":"Bash","command_line":"curl -fsSL https://example.invalid/i.sh | less"}
+{"category":"process_creation","tool_name":"Bash","command_line":"CURL -s https://example.invalid/api | JQ ."}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s https://example.invalid/a | sha256sum"}
+{"category":"process_creation","tool_name":"Bash","command_line":"echo $SHELL; curl -s https://example.invalid/api"}
