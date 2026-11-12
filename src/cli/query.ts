@@ -1,6 +1,7 @@
 // `retrohound query "<SQL>"`: read-only SQL over the index (ADR 0002). The handle is opened read-only, so a write
 // fails inside SQLite rather than by filtering text; every string is masked again on the way out (0007).
 import { mask } from "../normalize/mask.ts";
+import { term } from "../outputs/table.ts";
 import { defaultDbPath, openReadOnly } from "../store/index.ts";
 import type { Row } from "../store/sqlite.ts";
 import { oneOf, UsageError, type IO, type Registrar } from "./io.ts";
@@ -23,10 +24,10 @@ function runQuery(sql: string, format: string, dbPath: string, io: IO): number {
   }
   if (fmt === "json") return io.out(JSON.stringify(rows, null, 2) + "\n"), 0;
   const cols = [...new Set(rows.flatMap((r) => Object.keys(r)))];
-  const text = (r: Record<string, unknown>, c: string) => String(r[c] ?? "NULL").replace(/\s+/g, " ");
+  const text = (r: Record<string, unknown>, c: string) => term(String(r[c] ?? "NULL").replace(/\s+/g, " ")); // no terminal escapes from the index
   const width = cols.map((c) => Math.min(60, Math.max(c.length, ...rows.map((r) => text(r, c).length))));
   const fit = (s: string, i: number) => (s.length > width[i]! ? s.slice(0, width[i]! - 1) + "…" : s.padEnd(width[i]!));
-  io.out([cols.map(fit).join("  "), ...rows.map((r) => cols.map((c, i) => fit(text(r, c), i)).join("  ")), `(${rows.length} rows)`].join("\n") + "\n");
+  io.out([cols.map((c, i) => fit(term(c), i)).join("  "), ...rows.map((r) => cols.map((c, i) => fit(text(r, c), i)).join("  ")), `(${rows.length} rows)`].join("\n") + "\n");
   return 0;
 }
 
