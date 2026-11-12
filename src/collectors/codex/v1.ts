@@ -4,7 +4,7 @@
 import { createHash } from "node:crypto";
 import { normalizeSlashes } from "../../normalize/paths.ts";
 import type { ParsedFile, RawEvent } from "../../normalize/types.ts";
-import { cwdOf, mapItem, shellFields, textOf, type Fields } from "./map.ts";
+import { argvOf, cwdOf, mapItem, shellFields, textOf, type Fields } from "./map.ts";
 import { defaultZstd, firstLine, readRollout, type Zstd } from "./read.ts";
 
 type Line = Record<string, any>;
@@ -148,8 +148,7 @@ export async function parseFileWith(path: string, zstd: Zstd | null): Promise<Pa
       abort(str(p.turn_id), str(p.reason) ?? "interrupted");
     } else if (o.type === "response_item" && st.legacy && p.type === "function_call" && LEGACY_SHELL.has(p.name)) {
       const a = parseLine(String(p.arguments ?? "")) ?? {};
-      const c = a.command ?? a.cmd;
-      track(o, lineNo, p, emit(o, lineNo, 0, { ...shellFields(Array.isArray(c) ? c.map(String) : typeof c === "string" ? [c] : []), outcome: "unknown" }));
+      track(o, lineNo, p, emit(o, lineNo, 0, { ...shellFields(argvOf(a.command ?? a.cmd)), outcome: "unknown" }));
     } else if (o.type === "response_item") track(o, lineNo, p);
   };
 
@@ -164,14 +163,18 @@ export async function parseFileWith(path: string, zstd: Zstd | null): Promise<Pa
       stats.malformed++;
       continue;
     }
-    st.ts = str(o.timestamp) ?? st.ts;
-    if (o.type === "session_meta") {
-      if (!seenMeta) meta(o.payload ?? {}); // a forked sub-agent file repeats the parent's header: only the first counts
-      continue;
+    try {
+      st.ts = str(o.timestamp) ?? st.ts;
+      if (o.type === "session_meta") {
+        if (!seenMeta) meta(o.payload ?? {}); // a forked sub-agent file repeats the parent's header: only the first counts
+        continue;
+      }
+      if (typeof o.ordinal === "number" && o.ordinal < st.start) continue; // copied parent history
+      if (!IGNORED.has(o.type)) unknown.set(String(o.type), (unknown.get(String(o.type)) ?? 0) + 1);
+      handle(o, lineNo);
+    } catch {
+      stats.malformed++; // e.g. nesting deep enough to overflow the stack: only this line is lost
     }
-    if (typeof o.ordinal === "number" && o.ordinal < st.start) continue; // copied parent history
-    if (!IGNORED.has(o.type)) unknown.set(String(o.type), (unknown.get(String(o.type)) ?? 0) + 1);
-    handle(o, lineNo);
   }
   stats.unknown_types = Object.fromEntries(unknown);
   return { events, stats, sha256: rollout.raw ? createHash("sha256").update(rollout.raw).digest("hex") : undefined };

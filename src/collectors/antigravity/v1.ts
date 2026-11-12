@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { secretFingerprints, secretKinds } from "../../normalize/mask.ts";
 import { normalizeSlashes } from "../../normalize/paths.ts";
 import type { ParsedFile, RawEvent } from "../../normalize/types.ts";
-import { type ToolFields, mapToolUse } from "../claude-code/v1.ts";
+import { type ToolFields, mapToolUse, toJson } from "../claude-code/v1.ts";
 import { conversations, locate, rootOf } from "./discover.ts";
 
 type Line = Record<string, any>;
@@ -32,7 +32,7 @@ export function mapCall(name: string, a: Line, cwd?: string): ToolFields | undef
     case "read_file": case "view_file": return mapToolUse("Read", { file_path: path }, cwd);
     case "write_file": case "write_to_file": return mapToolUse("Write", { file_path: path, content: a.Content ?? a.CodeContent }, cwd);
     case "edit_file": case "replace_file_content": return mapToolUse("Edit", { file_path: path, new_string: a.Replacement ?? a.ReplacementContent }, cwd);
-    case "multi_replace_file_content": return mapToolUse("Edit", { file_path: path, new_string: JSON.stringify(a.ReplacementChunks ?? []) }, cwd);
+    case "multi_replace_file_content": return mapToolUse("Edit", { file_path: path, new_string: toJson(a.ReplacementChunks ?? []) }, cwd);
     case "read_url_content": return mapToolUse("WebFetch", { url: a.Url });
     case "search_web": {
       const q = str(a.query);
@@ -70,7 +70,7 @@ export async function parseFile(path: string): Promise<ParsedFile & { sha256?: s
   const count = (k: string) => unknown.set(k, (unknown.get(k) ?? 0) + 1);
   let pending: RawEvent[] = []; // calls awaiting their GENERIC result, in order
 
-  bytes.toString("utf8").split("\n").forEach((raw, i) => {
+  const parseLine = (raw: string, i: number) => {
     if (!raw.trim()) return;
     stats.lines++;
     let o: Line;
@@ -107,7 +107,7 @@ export async function parseFile(path: string): Promise<ParsedFile & { sha256?: s
           const args: Line = c.args !== null && typeof c.args === "object" ? c.args : {};
           const fields = mapCall(name, args, project);
           if (!fields) count(`tool:${name}`);
-          const ev = emit({ category: "tool_call", ...fields, tool_name: name, tool_input: JSON.stringify(args), outcome: "unknown" });
+          const ev = emit({ category: "tool_call", ...fields, tool_name: name, tool_input: toJson(args), outcome: "unknown" });
           addSecrets(ev);
           pending.push(ev);
         }
@@ -126,6 +126,13 @@ export async function parseFile(path: string): Promise<ParsedFile & { sha256?: s
         break; // the parent's notice that opens a sub-agent conversation
       default:
         count(String(o.type));
+    }
+  };
+  bytes.toString("utf8").split("\n").forEach((raw, i) => {
+    try {
+      parseLine(raw, i);
+    } catch {
+      stats.malformed++; // e.g. nesting deep enough to overflow the stack: only this line is lost
     }
   });
   stats.unknown_types = Object.fromEntries(unknown);

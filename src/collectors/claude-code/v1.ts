@@ -35,8 +35,12 @@ const MAX_HEREDOCS = 64; // beyond this a command stays whole: visible to rules,
 // `(?!\w)`: a tag that shrinks on backtracking would rescan an unterminated body once per character of the tag.
 const HEREDOC = /(?<!<)<<-?\s*(['"]?)(\w+)(?!\w)\1([^\n]*)\n(?:([\s\S]*?)\n)??[ \t]*\2(?=[\s);&|]|$)/g;
 // Commands that only store their stdin. Any other reader (a shell, python, node, ssh, sudo, a script...) may run it.
-const DATA_READER = /^(?:\/\S*\/)?(?:cat|tee)(?=[\s<>]|$)|^git\s+(?:commit|tag)\b|^gh\s+(?:pr|issue|release)\b/;
-const ASSIGNMENTS = /^\s*(?:\w+=\S*\s+)*/;
+// Only the system cat/tee: `/tmp/x/cat` may be anything.
+const DATA_READER = /^(?:\/(?:usr\/)?bin\/)?(?:cat|tee)(?=[\s<>]|$)|^git\s+(?:commit|tag)\b|^gh\s+(?:pr|issue|release)\b/;
+// `X=1 tee` is still tee; `PATH=/tmp/x cat` (or a preload) may not be, so those prefixes are kept and fail DATA_READER.
+const ASSIGNMENTS = /^\s*(?:(?!(?:\w*PATH|LD_\w*|DYLD_\w*)=)\w+=\S*\s+)*/;
+// `cat() { sh; }; cat <<E` runs the body: a reader redefined anywhere outside stored bodies is not trusted.
+const REDEFINED = /\b(?:cat|tee|git|gh)\s*\(\s*\)|\bfunction\s+(?:cat|tee|git|gh)\b|\b(?:alias|enable)\s|\bhash\s+-p/;
 const PIPED_ON = /(?<!\|)\|(?!\|)|[<>]\(/; // `cat <<E | sh`, `cat <<E > >(sh)`
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
@@ -70,6 +74,7 @@ function splitHeredocs(cmd: string): [string, string | undefined] {
     if (body) bodies.push(body);
     return `<<${tag}${rest}`;
   });
+  if (REDEFINED.test(line)) return [cmd, undefined];
   return [line, bodies.length ? bodies.join("\n") : undefined];
 }
 
@@ -108,14 +113,24 @@ function addSecrets(ev: Partial<RawEvent>): void {
 }
 
 function fileWriteBody(i: Line): string | undefined {
-  const edits = Array.isArray(i.edits) ? i.edits.map((e: Line) => e?.new_string ?? "").join("\n") : undefined;
+  // strings only: join() stringifies nested arrays recursively, and a deep one overflows the stack
+  const edits = Array.isArray(i.edits) ? i.edits.map((e: Line) => str(e?.new_string) ?? "").join("\n") : undefined;
   return str(i.content ?? i.new_string ?? i.new_source ?? edits);
+}
+
+/** JSON text, or undefined for a value nested too deep to serialize (JSON.parse accepts far deeper input). */
+export function toJson(v: unknown): string | undefined {
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return undefined;
+  }
 }
 
 /** Maps one tool call to event fields, including secret detection. Shared with the v0.2 hook (0009). */
 export function mapToolUse(name: string, input: unknown, cwd?: string): ToolFields {
   const i: Line = input !== null && typeof input === "object" ? input : {};
-  const ev: ToolFields = { category: "tool_call", tool_name: name, tool_input: JSON.stringify(input ?? {}) };
+  const ev: ToolFields = { category: "tool_call", tool_name: name, tool_input: toJson(input ?? {}) };
   const path = str(i.file_path) ?? str(i.notebook_path) ?? str(i.path);
   if (path) ev.target_path = resolvePath(path, cwd);
   const mcp = MCP_NAME.exec(name);
@@ -126,7 +141,7 @@ export function mapToolUse(name: string, input: unknown, cwd?: string): ToolFiel
       [ev.command_line, ev.content] = splitHeredocs(i.command);
       ev.url = shellUrl(ev.command_line);
     }
-  } else if (name === "Read") {
+  } else if (name === "Read" || (name === "Grep" && path)) { // Grep returns the lines of the file it names
     ev.category = "file_access";
   } else if (FILE_WRITES.has(name)) {
     ev.category = "file_event";
@@ -363,7 +378,11 @@ export async function parseFile(path: string): Promise<ParsedFile & { sha256?: s
       carry.agent_version = str(l.version) ?? carry.agent_version;
       carry.entrypoint = str(l.entrypoint) ?? carry.entrypoint;
       carry.permission_mode = str(l.permissionMode) ?? carry.permission_mode;
-      handle(l, lineNo, line);
+      try {
+        handle(l, lineNo, line);
+      } catch {
+        stats.malformed++; // e.g. nesting deep enough to overflow the stack: only this line is lost
+      }
     }
     read = true;
   } catch {

@@ -41,7 +41,7 @@ export function shellFields(argv: string[], cwd?: string): Fields {
   return ev;
 }
 
-const argvOf = (c: unknown): string[] =>
+export const argvOf = (c: unknown): string[] =>
   Array.isArray(c) ? c.filter((a): a is string => typeof a === "string") : typeof c === "string" ? [c] : [];
 
 function commandFields(item: Line): Fields {
