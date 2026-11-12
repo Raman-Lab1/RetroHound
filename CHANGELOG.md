@@ -102,8 +102,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 - Masking covers PGP private key blocks, Google, npm and Hugging Face tokens, Basic and other Authorization schemes
   (also URL-encoded), `curl -u`, `mysql -p`, `--password`, `DB_PASS`/`MYSQL_PWD` and JSON-escaped password fields;
   JSON reports mask object keys too.
-- Table, preflight and incident output show control characters from transcripts and repos as `\xNN`, so terminal
-  escapes and CI workflow commands in collected data do not take effect.
+- Table, `show`, `query`, preflight and incident output show control characters from transcripts and repos as `\xNN`,
+  so terminal escapes and CI workflow commands in collected data do not take effect.
 - ECS and OCSF exports always carry a valid ISO 8601 timestamp; a non-ISO one is rewritten or replaced by the scan
   end, the original kept in `retrohound.raw_ts`.
 - The default incident folder stays in the current directory whatever the session id holds; the wrapped card ships the

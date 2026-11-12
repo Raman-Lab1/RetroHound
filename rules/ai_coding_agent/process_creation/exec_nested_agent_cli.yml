@@ -6,8 +6,8 @@ status: experimental
 description: >
   A shell command runs claude, codex, gemini or antigravity with its settings or home moved (--settings,
   --setting-sources, CLAUDE_CONFIG_DIR, CODEX_HOME). The child can then run without a user-scope RetroHound hook and
-  its transcript can land outside the default scan roots. Install the hook at managed scope as well to cover such
-  children. A plain headless run (-p, exec) is the hunt rule exec_nested_agent_cli_headless.
+  its transcript can land outside the default scan roots. A hook entry in the agent's managed settings still covers
+  such children. A plain headless run (-p, exec) is the hunt rule exec_nested_agent_cli_headless.
 level: medium
 tags: [attack.defense_evasion, attack.t1562, owasp_agentic.asi03, owasp_agentic.asi07]
 falsepositives:

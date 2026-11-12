@@ -51,6 +51,10 @@ user can open it with `sqlite3`; `query` being read-only (0002) only keeps Retro
   `delete` of an event, and then remove the row). So `verify --head` lists what was added since that head, by table
   and operation. RetroHound deletes events only in a parser-version rebuild, so an `events delete` with no upgrade in
   between is a lead, not noise.
+- **Rewrites:** an attacker can update an existing row in place and re-chain it. `verify --head` counts such writes
+  as `rewrite`, apart from new rows, but a normal rescan that resolves an outcome is a rewrite too, and the row
+  hashes do not show which columns changed: a rewrite of an old event whose transcript did not change is a lead.
+  `sessions` is not chained; `verify` recomputes it from the events and fails on a deleted or edited row.
 - **Out of scope:** what happened before RetroHound read a transcript (an edit to the transcript itself is indexed
   as what the file said); `last_seen`; the whole file being deleted. `purge` deletes everything by design, and a
   recorded head with no database proves only that a database existed.
