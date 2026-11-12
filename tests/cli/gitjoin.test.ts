@@ -1,7 +1,7 @@
 // git-secrets over an index built by a real scan and throwaway local repos. Placeholder keys only.
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { IO } from "../../src/cli/io.ts";
@@ -91,4 +91,30 @@ test("the repo's own config does not change what git log prints", async () => {
   expect(hits[0]![0]).toMatch(/^[0-9a-f]{12}$/);
   expect(hits[0]![1]).toBe("config.env");
   expect(hits[0]![2]).toMatch(/^\d{4}-\d\d-\d\dT/);
+});
+
+test("a submodule's diff.external or textconv never runs, whatever diff.submodule says", async () => {
+  const sub = join(base, "sub-src");
+  repo(sub, "A=1\n");
+  const outer = join(base, "with-sub");
+  repo(outer, `AWS_ACCESS_KEY_ID=${KEY}\n`);
+  const git = (dir: string, ...a: string[]) => execFileSync("git", ["-C", dir, "-c", "protocol.file.allow=always", ...a], { stdio: "ignore" });
+  git(outer, "submodule", "add", "-q", sub, "sm");
+  git(outer, "commit", "-q", "-m", "add sm");
+  const sm = join(outer, "sm");
+  writeFileSync(join(sm, ".gitattributes"), "* diff=evil\n");
+  writeFileSync(join(sm, "b.txt"), "B=2\n");
+  git(sm, "add", ".");
+  git(sm, "commit", "-q", "-m", "bump");
+  git(outer, "commit", "-q", "-am", "bump sm");
+  const marker = join(base, "submodule-marker");
+  const script = join(base, "marker.sh");
+  writeFileSync(script, `#!/bin/sh\necho ran >> '${marker}'\n`, { mode: 0o755 });
+  git(outer, "config", "diff.submodule", "diff");
+  git(sm, "config", "diff.external", script);
+  git(sm, "config", "diff.evil.textconv", script);
+  const files: string[] = [];
+  expect(await scanHistory(outer, new Set(secretFingerprints(KEY)), (_fp, _c, file) => files.push(file))).toBe(true);
+  expect(files).toEqual(["config.env"]);
+  expect(existsSync(marker)).toBe(false);
 });
