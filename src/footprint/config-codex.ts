@@ -7,7 +7,7 @@ import { join, sep } from "node:path";
 import { hookCommands, MAX_FILE_BYTES } from "../collectors/repo/collect.ts";
 import { settingsPath } from "../hooks/install.ts";
 import { mask } from "../normalize/mask.ts";
-import { type ConfigItem, type ConfigRead, type ConfigReader, entryHash, MAX_CONFIG_ITEMS } from "./types.ts";
+import { type ConfigItem, type ConfigRead, type ConfigReader, entryHash, LINKED, linkedKind, MAX_CONFIG_ITEMS } from "./types.ts";
 
 export const MAX_PROJECTS = 200; // project paths read per agent: each costs a few stat calls; the index can hold thousands
 const MAX_ENTRIES = 500; // skill or plugin folders read per directory
@@ -27,14 +27,17 @@ export function collector(agent: string) {
     out.items.push({ agent, kind: i.kind, name: mask(i.name), scope: i.scope, source: mask(i.source), ...(i.detail ? { detail: mask(i.detail) } : {}), hash: entryHash(entry) });
   };
   /** Text of `path` if it is a file inside `root` once symlinks are resolved and not oversized; absent -> undefined. */
-  const read = (root: string, path: string): string | undefined => {
+  const read = (root: string, path: string, scope: string): string | undefined => {
     let real: string, base: string;
     try {
       [real, base] = [realpathSync(path), realpathSync(root)];
     } catch {
       return undefined; // absent: the normal case
     }
-    if (real !== base && !real.startsWith(base + sep)) return skip(path, "symlink outside the directory");
+    if (real !== base && !real.startsWith(base + sep)) {
+      add({ kind: linkedKind(path), name: path, scope, source: path, detail: LINKED }, real);
+      return skip(path, LINKED);
+    }
     try {
       const st = statSync(real);
       if (!st.isFile()) return undefined;
@@ -60,7 +63,7 @@ export function collector(agent: string) {
   /** `<dir>/<folder>/SKILL.md`, one level. Name: the frontmatter `name`, else the folder (Codex and Antigravity docs). */
   const skills = (dir: string, scope: string, root = dir) => {
     for (const f of folders(dir)) {
-      const text = read(root, join(dir, f, "SKILL.md"));
+      const text = read(root, join(dir, f, "SKILL.md"), scope);
       if (text === undefined) continue;
       const front = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? "";
       const name = /^name:[ \t]*["']?([^"'\r\n]+?)["']?[ \t]*$/m.exec(front)?.[1] ?? f;
@@ -101,6 +104,25 @@ function tomlString(v: string): string | undefined {
   }
 }
 
+/** The multi-line string delimiter still open at the end of `line`, given the one open at its start. Comments and
+ * single-line strings are skipped, so `x = "a" # '''` opens nothing. ponytail: a `\"""` inside a basic one is not seen. */
+function openAfter(line: string, open: string | undefined): string | undefined {
+  const re = /"""|'''|"(?:[^"\\]|\\.)*"|'[^']*'|#/g;
+  if (open) {
+    const end = line.indexOf(open);
+    if (end < 0) return open;
+    re.lastIndex = end + 3;
+  }
+  for (let m; (m = re.exec(line));) {
+    if (m[0] === "#") return undefined;
+    if (m[0] !== '"""' && m[0] !== "'''") continue;
+    const end = line.indexOf(m[0], re.lastIndex);
+    if (end < 0) return m[0];
+    re.lastIndex = end + 3;
+  }
+  return undefined;
+}
+
 // ponytail: a line scan, not a TOML parser. It sees table headers ([mcp_servers.<name>], [plugins."<id>"],
 // [[hooks.<Event>.hooks]]), key NAMES inside them, `enabled = false`, and single-line hook `command` strings. Not seen:
 // inline tables (`mcp_servers = { ... }`), dotted keys outside a header, multi-line hook commands (reported as skipped).
@@ -111,11 +133,11 @@ function scanToml(text: string, source: string, scope: string, c: ReturnType<typ
   let item: Omit<ConfigItem, "agent" | "hash"> | undefined; // the server or plugin of the current table, added at its end
   let body: string[] = []; // its key = value lines, for the hash
   let enabled = true;
-  let multi = false; // inside a multi-line string: no header or key there is real
+  let multi: string | undefined; // the open multi-line string's delimiter: no header or key inside it is real
   const flush = () => void (item && enabled && c.add(item, body));
   for (const line of text.split(/\r?\n/)) {
     const wasMulti = multi;
-    if ((line.match(/"""|'''/g)?.length ?? 0) % 2) multi = !multi;
+    multi = openAfter(line, multi);
     if (wasMulti) continue;
     const header = /^\s*\[\[?([^\]]+)\]\]?\s*(?:#.*)?$/.exec(line);
     if (header) {
@@ -134,7 +156,12 @@ function scanToml(text: string, source: string, scope: string, c: ReturnType<typ
     if (!kv) continue;
     const [, key, value = ""] = kv;
     body.push(line.trim());
-    if (item && key === "enabled") enabled = !value.startsWith("false");
+    // notify = ["cmd", "arg"]: a command Codex runs after every turn
+    if (!table.length && key === "notify") {
+      const argv = /^\[(.*)\]\s*(?:#.*)?$/.exec(value)?.[1];
+      if (argv === undefined) c.skip(source, "notify not a single-line array");
+      else c.add({ kind: "hook", name: [...argv.matchAll(/"(?:[^"\\]|\\.)*"|'[^']*'/g)].map((m) => tomlString(m[0]) ?? m[0]).join(" "), scope, source, detail: "notify" });
+    } else if (item && key === "enabled") enabled = !value.startsWith("false");
     else if (item?.kind === "mcp_server" && (key === "command" || key === "url")) item.detail = key === "command" ? "stdio" : "http";
     else if (table[0] === "hooks" && table[2] === "hooks" && table.length === 3 && key === "command") {
       const cmd = tomlString(value);
@@ -143,17 +170,18 @@ function scanToml(text: string, source: string, scope: string, c: ReturnType<typ
     }
   }
   flush();
+  if (multi) c.skip(source, "a multi-line string is not closed; what follows it is not read");
 }
 
 export const readCodexConfig: ConfigReader = ({ home, projects, env = {} }) => {
   const c = collector("codex");
   const codexHome = env.CODEX_HOME || join(home, ".codex");
   const config = (root: string, file: string, scope: string) => {
-    const text = c.read(root, file);
+    const text = c.read(root, file, scope);
     if (text !== undefined) scanToml(text, file, scope, c);
   };
   const hooks = (root: string, file: string, scope: string) => {
-    const text = c.read(root, file);
+    const text = c.read(root, file, scope);
     if (text === undefined) return;
     try {
       JSON.parse(text);
