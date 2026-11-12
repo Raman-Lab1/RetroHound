@@ -5,6 +5,12 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Releases are staged on npm (`npm stage publish`) and go public only after a maintainer approves them with 2FA.
+- The GitHub Action and the CI and release workflows pin `actions/checkout`, `actions/setup-node` and
+  `oven-sh/setup-bun` by commit SHA.
+- The Homebrew formula and the Velociraptor artifact carry the SHA-256 of the 0.3.0 tarball.
+
 ## [0.3.0] - 2026-11-12
 
 ### Added

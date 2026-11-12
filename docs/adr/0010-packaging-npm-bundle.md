@@ -26,7 +26,8 @@ with dependencies inlined. Standalone `bun build --compile` binaries are 89–11
   committed.
 - Publishing happens only from `.github/workflows/release.yml` on a `v*` tag, with npm trusted publishing (OIDC,
   automatic provenance). The workflow type-checks, runs the tests and checks that the tag matches `package.json`
-  first.
+  first. It stages the version (`npm stage publish`); a maintainer approves it with 2FA before it is public.
+  Actions are pinned by commit SHA.
 
 ## Consequences
 - The bundled rules ship as plain YAML inside the package. No third-party rule corpus is bundled.
