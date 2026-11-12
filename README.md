@@ -83,6 +83,11 @@ retrohound hook install --mode block             # when you trust it; `retrohoun
 If `hook install` refuses because a directory on the path to Node is writable by others (common with Homebrew),
 see [Hook install safety](#hook-install-safety).
 
+An agent can start another agent with its settings moved (`--setting-sources`, `--settings`, `CLAUDE_CONFIG_DIR`,
+`CODEX_HOME`), which skips a user-scope hook; the enforce rule `exec_nested_agent_cli` stops that in `--mode block`.
+To cover such children anyway, also put the hook entry in the agent's managed settings (by hand or through MDM;
+`hook install` writes user, project or local scope).
+
 ## What it catches
 
 48 Sigma rules on an `ai_coding_agent` logsource ([rules/ai_coding_agent](rules/ai_coding_agent)), for example:
