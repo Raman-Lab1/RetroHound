@@ -11,7 +11,7 @@ export function maskDeep(v: unknown, strip = false): unknown {
   if (Array.isArray(v)) return v.map((x) => maskDeep(x, strip));
   if (v && typeof v === "object") {
     const entries = Object.entries(v).filter(([k]) => !(strip && MATCH_ONLY.has(k)));
-    return Object.fromEntries(entries.map(([k, x]) => [k, maskDeep(x, strip)]));
+    return Object.fromEntries(entries.map(([k, x]) => [mask(k), maskDeep(x, strip)])); // keys too: unknown_types is raw `type`
   }
   return v;
 }

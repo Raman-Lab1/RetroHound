@@ -1,5 +1,5 @@
 // `retrohound wrapped`: the shareable card, built from the index only (no transcript re-read).
-import { createHash } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { existsSync, writeFileSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { basename } from "node:path";
@@ -16,10 +16,23 @@ type Flags = { since: string; anonymize?: boolean; out: string; db: string; rule
 const rank = (l: Level) => LEVELS.indexOf(l);
 const top = (m: Map<string, number>, n: number) => [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, n);
 const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
-const hash = (s: string) => `anon-${createHash("sha256").update(s).digest("hex").slice(0, 6)}`;
+// Directory names under a home that say nothing about who or which client; every other one is hashed.
+const KEEP = new Set(["desktop", "documents", "downloads", "library", "applications", "appdata", "projects", "code", "dev",
+  "work", "workspace", "repos", "git", "src", "lib", "test", "tests", "docs", "bin", "dist", "build", "node_modules",
+  // credential files with no extension: the reads an investigator most needs to see
+  "credentials", "config", "known_hosts", "authorized_keys", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"]);
+const UNDER_HOME = /([\\/](?:Users|home)|(?<![\w~])~|\$\{?HOME\}?|%USERPROFILE%)([\\/][^\s"'`<>|;&(),=:]*)/gi;
 
-/** Project names, the user name and the encoded project dir (ADR 0014) replaced by stable hashes, longest first. */
+/** Project names, the user name, the encoded project dir (ADR 0014) and other dirs under a home replaced by hashes,
+ * longest first. Keyed with a random key per call, so ids are stable in one pack or card but cannot be confirmed with
+ * a word list or linked across shares. */
 export function anonymizer(events: Pick<AgentEvent, "raw_ref">[], projects: string[]): (s: string) => string {
+  const key = randomBytes(32);
+  const hash = (s: string) => `anon-${createHmac("sha256", key).update(s.toLowerCase()).digest("hex").slice(0, 12)}`;
+  // a dotfile or a name with an extension (.env, x.ts) is kept: generic, and what an investigator needs
+  const part = (c: string) => (c.includes(".") || c.startsWith("anon-") || KEEP.has(c.toLowerCase()) ? c : hash(c));
+  const dirs = (s: string) => s.replace(UNDER_HOME, (_m, head: string, rest: string) =>
+    head + rest.split(/([\\/]+)/).map((c, i) => (i % 2 || !c ? c : part(c))).join(""));
   const tokens = new Set<string>([basename(homedir()), userInfo().username]);
   for (const p of projects) {
     tokens.add(p);
@@ -33,7 +46,7 @@ export function anonymizer(events: Pick<AgentEvent, "raw_ref">[], projects: stri
   }
   const list = [...tokens].filter((t) => t.length >= 3).sort((a, b) => b.length - a.length);
   const re = list.length ? new RegExp(list.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "gi") : undefined;
-  return (s) => (re ? s.replace(re, (m) => hash(m.toLowerCase())) : s);
+  return (s) => dirs(re ? s.replace(re, hash) : s);
 }
 
 function riskiest(findings: Finding[]): { session: string; findings: number; level: Level } | undefined {
@@ -100,7 +113,7 @@ function wrapped(f: Flags, io: IO): number {
 export const registerWrapped: Registrar = (program, run, io) => {
   program.command("wrapped").description("Write a shareable, self-contained HTML report card from the index")
     .option("--since <when>", "window: 30d, 12h or a date", "365d")
-    .option("--anonymize", "hash project names, user name and project dirs")
+    .option("--anonymize", "hash project names, user names and dirs under a home (hosts and repo names stay)")
     .option("--out <file>", "output file (.html, or .svg for a 1200x630 share card)", "wrapped.html")
     .option("--db <path>", "index database", defaultDbPath())
     .option("--rules <dir>", "rules directory, for rule names", DEFAULT_RULES_DIR)
