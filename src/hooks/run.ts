@@ -31,17 +31,23 @@ const attack = (r: DetectionRule) => r.tags.find((t) => /^attack\.t\d/i.test(t))
 // Built in, not a rule file: a forged cache or an edited rules dir loads no rules, so rule files cannot guard themselves.
 const TAMPER = { kind: "detection", id: "retrohound_hook_tamper", name: "retrohound_hook_tamper", title: "Write to RetroHound's own state or rules",
   level: "critical", lane: "enforce", tags: ["attack.t1562.001"], falsepositives: [], path: "(built in)", doc: 0, silenced: false, fields: [], matches: () => false } satisfies DetectionRule;
-const STATE = /\/\.retrohound(?:[/\s"';|&)]|$)/; // ~/.retrohound: ignore.yml, rules caches, hook log
+// macOS and Windows volumes are case-insensitive by default: ~/.RetroHound is ~/.retrohound there.
+const FOLD = process.platform === "darwin" || process.platform === "win32";
+const STATE = new RegExp(String.raw`/\.retrohound(?:[/\s"';|&)]|$)`, FOLD ? "i" : ""); // ~/.retrohound: ignore.yml, rules caches, hook log
+const low = (s: string) => (FOLD ? s.toLowerCase() : s);
 // ponytail: literal text only; a write through a variable, a script file or a relative path is not seen. It stops the
 // obvious one-liner, not code that already runs as you (that can always switch a same-user hook off).
 const WRITES = />|\b(?:tee|cp|mv|rm|ln|install|touch|truncate|dd|chmod|sed\s+-i|perl|python3?|node|bun|deno|ruby)\b/;
-const inside = (p: string, d: string) => p === d || p.startsWith(d.replace(/\/+$/, "") + "/");
+function inside(path: string, dir: string): boolean {
+  const p = low(path), d = low(dir).replace(/\/+$/, "");
+  return p === d || p.startsWith(d + "/");
+}
 
 /** A write to ~/.retrohound or to a protected path (the rules dirs): it could switch enforcement off. */
 export function tampers(e: RawEvent, protect: string[]): boolean {
   if (e.category === "file_event") return !!e.target_path && (STATE.test(e.target_path) || protect.some((d) => inside(e.target_path!, d)));
   const c = e.category === "process_creation" ? e.command_line : undefined;
-  return !!c && WRITES.test(c) && (STATE.test(c) || protect.some((d) => c.includes(d)));
+  return !!c && WRITES.test(c) && (STATE.test(c) || protect.some((d) => low(c).includes(low(d))));
 }
 
 /** The most severe enforce-lane rule the call trips, or none. Throws on a payload that is not a PreToolUse object. */

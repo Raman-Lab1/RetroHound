@@ -53,6 +53,16 @@ describe("tamper guard", () => {
     expect(tamper(pay("Edit", { file_path: join(rulesDir, "a.yml"), old_string: "lane: enforce", new_string: "lane: hunt" }))).toBe("retrohound_hook_tamper");
     expect(tamper(bash(`sed -i '' s/enforce/hunt/ ${rulesDir}/a.yml`))).toBe("retrohound_hook_tamper");
   });
+  test("on a case-insensitive platform a change of case does not get past it", () => {
+    if (process.platform !== "darwin" && process.platform !== "win32") return; // case-sensitive: .RetroHound is another dir
+    const up = rulesDir.replace(/rules$/, "RULES");
+    expect(tamper(pay("Write", { file_path: join(home, ".RetroHound", "ignore.yml"), content: "x" }))).toBe("retrohound_hook_tamper");
+    expect(tamper(pay("Write", { file_path: join(home, ".RETROHOUND", "rules-cache-000000000000.json"), content: "{}" }))).toBe("retrohound_hook_tamper");
+    expect(tamper(bash("printf x > ~/.RetroHound/ignore.yml"))).toBe("retrohound_hook_tamper");
+    expect(tamper(pay("Edit", { file_path: join(up, "a.yml"), old_string: "lane: enforce", new_string: "lane: hunt" }))).toBe("retrohound_hook_tamper");
+    expect(tamper(bash(`sed -i '' s/enforce/hunt/ ${up}/a.yml`))).toBe("retrohound_hook_tamper");
+    expect(tamper(pay("Write", { file_path: "/home/x/acme/.RetroHound-ignore.yml", content: "[]" }))).toBeUndefined();
+  });
   test("reads, and a repo's own .retrohound-ignore.yml, are not tampering", () => {
     expect(tamper(bash("tail -n 5 ~/.retrohound/hook-log.jsonl"))).toBeUndefined();
     expect(tamper(pay("Write", { file_path: "/home/x/acme/.retrohound-ignore.yml", content: "[]" }))).toBeUndefined();
