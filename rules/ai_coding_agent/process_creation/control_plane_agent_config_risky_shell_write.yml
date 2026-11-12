@@ -9,8 +9,9 @@ description: >-
   under a hidden directory (JSON or Codex `[mcp_servers]` TOML), or a command-running key (statusLine, awsAuthRefresh,
   awsCredentialExport, otelHeadersHelper, Codex `notify`) or disableAllHooks. Also any command that puts one of these
   files in place, moves or removes it (cp, ln, rsync, install, ditto into it; mv, rm, unlink, truncate, shred; dd of=;
-  a checkout or restore of the config directory; a python, node, perl, ruby, bun or deno one-liner that copies, writes or
-  removes it), since the hook cannot see the content of a file staged elsewhere. This is the persistence shape of supply-chain droppers and of CVE-2026-21852 style base-URL
+  a checkout or restore of the config directory; find -delete; a python, node, perl, ruby, bun or deno one-liner that copies,
+  writes or removes it), any overwrite of one (`>`, tee, sponge), and an in-place sed or perl edit of a hooks-bearing file
+  that names the hook or its mode or deletes lines, since the hook cannot see the content of a file staged elsewhere. This is the persistence shape of supply-chain droppers and of CVE-2026-21852 style base-URL
   redirects. Write/Edit are control_plane_agent_config_risky_write.
 tags:
   - attack.persistence
@@ -59,10 +60,10 @@ detection:
         - awscredentialexport
         - otelheadershelper
         - disableallhooks
-        - 'notify ='
-        - 'notify='
         - retrohound
     - tool_input|contains: *risky
+    - command_line|re|i: &notify '(?:^|[^\w.])\\{0,3}[\x22\x27]?notify\\{0,3}[\x22\x27]?(?:\s|\\t){0,8}='
+    - tool_input|re|i: *notify
     - command_line|re|i: '\\u00(?:2[0-57-9a-f]|3[0-9abdf]|[4-7][0-9a-f])'
     - command_line|re|i: '(?:mcp_servers)[^\[]{0,400}command\s{0,3}=\s{0,3}\[?\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
     - tool_input|re|i: '(?:mcp_servers)[^\[]{0,400}command\s{0,3}=\s{0,3}\[?\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
@@ -71,11 +72,21 @@ detection:
   # neutral first. Unquoted, so quoting does not split the path.
   selection_place:
     - command_line_unquoted|re|i: '(?:^|[\s;&|(`])(?:rm|unlink|shred|truncate|mv)\s[^;&|\n]{0,300}(?:(?:\.claude[/\\]?settings(?:\.local)?\.json|\.mcp\.json|\.claude\.json|\.gemini[/\\]?settings\.json|\.cursor[/\\]?mcp\.json|\.continue[/\\]?config\.json|\.windsurf[/\\]?mcp\.json|claude_desktop_config\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|(?:\.gemini[/\\]?config|\.agents)[/\\]?(?:mcp_config|hooks)\.json)|[\s/~](?:\.claude|\.codex|\.gemini|\.agents)[/\\]?(?:$|[\s;&|)]))'
-    - command_line_unquoted|re|i: '(?:^|[\s;&|(`])(?:cp|ln|rsync|install|ditto)\s[^;&|\n]{0,300}(?:\.claude[/\\]?settings(?:\.local)?\.json|\.mcp\.json|\.claude\.json|\.gemini[/\\]?settings\.json|\.cursor[/\\]?mcp\.json|\.continue[/\\]?config\.json|\.windsurf[/\\]?mcp\.json|claude_desktop_config\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|(?:\.gemini[/\\]?config|\.agents)[/\\]?(?:mcp_config|hooks)\.json)\s{0,3}(?:$|[;&|\n)])'
+    - command_line_unquoted|re|i: '(?:^|[\s;&|(`])(?:cp|ln|rsync|install|ditto)\s[^;&|\n]{0,300}(?:\.claude[/\\]?settings(?:\.local)?\.json|\.mcp\.json|\.claude\.json|\.gemini[/\\]?settings\.json|\.cursor[/\\]?mcp\.json|\.continue[/\\]?config\.json|\.windsurf[/\\]?mcp\.json|claude_desktop_config\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|(?:\.gemini[/\\]?config|\.agents)[/\\]?(?:mcp_config|hooks)\.json)\s{0,3}(?:$|[;&|\n)<>]|\d>)'
     - command_line_unquoted|re|i: '\bof=[^\s;&|]{0,200}(?:\.claude[/\\]?settings(?:\.local)?\.json|\.mcp\.json|\.claude\.json|\.gemini[/\\]?settings\.json|\.cursor[/\\]?mcp\.json|\.continue[/\\]?config\.json|\.windsurf[/\\]?mcp\.json|claude_desktop_config\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|(?:\.gemini[/\\]?config|\.agents)[/\\]?(?:mcp_config|hooks)\.json)'
     - command_line_unquoted|re|i: '\bgit\s(?:[^;&|\n]{0,300}\s)?(?:checkout|restore)\s[^;&|\n]{0,300}[\s/](?:\.claude|\.codex|\.gemini|\.agents|\.cursor|\.windsurf|\.continue|\.mcp\.json)(?:[/\s]|$)'
-    - command_line_unquoted|re|i: '(?:^|[\s;&|(`])(?:python[0-9.]{0,5}|node|perl|ruby|bun|deno)\s(?:[^\n]{0,2000}(?:\.claude[/\\]?settings(?:\.local)?\.json|\.mcp\.json|\.claude\.json|\.gemini[/\\]?settings\.json|\.cursor[/\\]?mcp\.json|\.continue[/\\]?config\.json|\.windsurf[/\\]?mcp\.json|claude_desktop_config\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|(?:\.gemini[/\\]?config|\.agents)[/\\]?(?:mcp_config|hooks)\.json)[^\n]{0,2000}(?:dump|write|copy|move|rename|replace|remove|unlink|symlink|truncate|pop\(|del\s)|[^\n]{0,2000}(?:dump|write|copy|move|rename|replace|remove|unlink|symlink|truncate|pop\(|del\s)[^\n]{0,2000}(?:\.claude[/\\]?settings(?:\.local)?\.json|\.mcp\.json|\.claude\.json|\.gemini[/\\]?settings\.json|\.cursor[/\\]?mcp\.json|\.continue[/\\]?config\.json|\.windsurf[/\\]?mcp\.json|claude_desktop_config\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|(?:\.gemini[/\\]?config|\.agents)[/\\]?(?:mcp_config|hooks)\.json))'
-  condition: (selection_bash and selection_risky) or selection_place
+    - command_line_unquoted|re|i: '(?:^|[\s;&|(`])(?:python[0-9.]{0,5}|node|perl|ruby|bun|deno)\s(?:[^\n]{0,2000}(?:\.claude[/\\]?settings(?:\.local)?\.json|\.mcp\.json|\.claude\.json|\.gemini[/\\]?settings\.json|\.cursor[/\\]?mcp\.json|\.continue[/\\]?config\.json|\.windsurf[/\\]?mcp\.json|claude_desktop_config\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|(?:\.gemini[/\\]?config|\.agents)[/\\]?(?:mcp_config|hooks)\.json)[^\n]{0,2000}(?:dump|write|copy|cp|move|rename|replace|remove|unlink|link|truncate|pop\(|del\s)|[^\n]{0,2000}(?:dump|write|copy|cp|move|rename|replace|remove|unlink|link|truncate|pop\(|del\s)[^\n]{0,2000}(?:\.claude[/\\]?settings(?:\.local)?\.json|\.mcp\.json|\.claude\.json|\.gemini[/\\]?settings\.json|\.cursor[/\\]?mcp\.json|\.continue[/\\]?config\.json|\.windsurf[/\\]?mcp\.json|claude_desktop_config\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|(?:\.gemini[/\\]?config|\.agents)[/\\]?(?:mcp_config|hooks)\.json))'
+    # Overwriting a config file drops whatever hook or server it held (`: >`, `echo {} >`, `cat staged >`, tee, sponge).
+    - command_line_unquoted|re|i: '(?:(?:^|[^>\d&])>\|?\s{0,3}|(?:^|[\s;&|(`])(?:tee\s{1,3}(?:--?[b-z][\w-]*\s{1,3}){0,3}(?:[^\s;&|<>-][^\s;&|<>]{0,200}\s{1,3}){0,5}|sponge\s{1,3}|(?:set-content|out-file)\s[^;&|\n]{0,300}))[^\s;&|<>]{0,200}(?:\.claude[/\\]?settings(?:\.local)?\.json|\.mcp\.json|\.claude\.json|\.gemini[/\\]?settings\.json|\.cursor[/\\]?mcp\.json|\.continue[/\\]?config\.json|\.windsurf[/\\]?mcp\.json|claude_desktop_config\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|(?:\.gemini[/\\]?config|\.agents)[/\\]?(?:mcp_config|hooks)\.json)'
+    # A config-named file copied or linked into a config directory, or `-t DIR`.
+    - command_line_unquoted|re|i: '(?:^|[\s;&|(`])(?:cp|ln|rsync|install|ditto)\s[^;&|\n]{0,300}(?:settings(?:\.local)?|hooks|mcp(?:_config)?|config)\.(?:json|toml)(?:\s[^;&|\n]{0,300}?)?[\s/~](?:\.claude|\.codex|\.gemini(?:[/\\]config)?|\.agents|\.cursor|\.windsurf|\.continue)[/\\]?\s{0,3}(?:$|[;&|\n)<>]|\d>)'
+    - command_line_unquoted|re|i: '(?:^|[\s;&|(`])(?:cp|ln|install|mv)\s[^;&|\n]{0,300}(?:-t\s{0,3}|--target-directory[=\s])[^\s;&|]{0,200}(?:\.claude|\.codex|\.gemini(?:[/\\]config)?|\.agents|\.cursor|\.windsurf|\.continue)[/\\]?(?:\s|$)'
+    - command_line_unquoted|re|i: '\bfind\s[^;&|\n]{0,300}(?:\.claude|\.codex|\.gemini|\.agents)\b[^;&|\n]{0,300}\s(?:-delete\b|-exec(?:dir)?\s{1,3}(?:rm|unlink|shred|truncate|mv|sed|perl|tee|cp)\b)'
+  # An in-place sed or perl edit of a hooks-bearing file that names the hook, its mode, or deletes lines.
+  selection_inplace:
+    command_line_unquoted|re|i: '(?:^|[\s;&|(`])(?:sed|perl)(?:\s[^;&|\n]{0,300})?\s(?:-[a-z]{0,6}i|--in-place)[^&|\n]{0,600}(?:\.claude[/\\]?settings(?:\.local)?\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|\.gemini[/\\]?settings\.json|(?:\.gemini[/\\]?config|\.agents)[/\\]?hooks\.json)'
+    command_line|re|i: '(?:\b(?:block|confirm|log|hooks?|run|retrohound|pretooluse|sessionstart|command|matcher)\b|--mode|(?:\d|\$|/)\s?d\b)'
+  condition: (selection_bash and selection_risky) or selection_place or selection_inplace
 falsepositives:
   - ruflo and similar tools register hook-handler commands under .claude/helpers on purpose
   - Corporate gateways set ANTHROPIC_BASE_URL in settings (see control_plane_llm_endpoint_command for the allowlist idea)

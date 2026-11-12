@@ -10,3 +10,5 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"gemini --approval-mode yolo -p x"}
 {"category":"process_creation","tool_name":"Bash","command_line":"claude -p --allowedTools Bash(*) x"}
 {"category":"file_event","tool_name":"Write","target_path":"/home/dev/.codex/config.toml","content":"approval_policy = \"never\"\n","tool_input":"{\"file_path\":\"/home/dev/.codex/config.toml\",\"content\":\"approval_policy = \\\"never\\\"\\n\"}"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "cat <(claude --dangerously-skip-permissions -p hi)"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "man -P 'claude --dangerously-skip-permissions -p hi' ls"}

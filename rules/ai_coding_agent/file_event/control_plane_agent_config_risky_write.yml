@@ -57,9 +57,10 @@ detection:
         - awscredentialexport
         - otelheadershelper
         - disableallhooks
-        - 'notify ='
-        - 'notify='
     - tool_input|contains: *risky
+    # Codex `notify` in any TOML spelling: extra spaces or a tab before `=`, a quoted key.
+    - content|re|i: &notify '(?:^|[^\w.])\\{0,3}[\x22\x27]?notify\\{0,3}[\x22\x27]?(?:\s|\\t){0,8}='
+    - tool_input|re|i: *notify
     - content|re|i: &hidden_mcp '(?:mcpservers)[^}]{0,400}command\\{0,2}"\s{0,3}:\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
     - tool_input|re|i: *hidden_mcp
     # A JSON or TOML \u escape of printable ASCII spells a key or value the consumer decodes (`hooks`); the

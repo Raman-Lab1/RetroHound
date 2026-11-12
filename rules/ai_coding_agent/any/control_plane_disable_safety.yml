@@ -56,12 +56,13 @@ detection:
     - category: file_event
       target_path|contains: *settings
       tool_input|re|i: *unsafe_re
-  # A lone echo, grep, rg, cat or man: nothing after it may start another command, a redirect or a substitution.
+  # A lone echo, grep or cat: nothing after it may start another command, a redirect or a substitution (`$(`, `<(`).
+  # man and rg are left out: man's `-P` pager and rg's `--pre` run a command.
   filter_discuss:
-    command_line|re|i: '^\s{0,5}(?:echo|grep|rg|cat|man)\s(?:[^;&|\n\r`>$]|\$[^(;&|\n\r`>$])*$'
+    command_line|re|i: '^\s{0,5}(?:echo|grep|cat)\s(?:[^;&|\n\r`<>$]|\$[^(;&|\n\r`<>$])*$'
   condition: (selection_flag or selection_flag_re or selection_write) and not filter_discuss
 falsepositives:
-  - Documentation or tests that mention the flag in an echo or grep (filtered when the whole command is one echo, grep, rg, cat or man)
+  - Documentation or tests that mention the flag in an echo or grep (filtered when the whole command is one echo, grep or cat)
   - A wildcard in a deny or ask list (`["*"]`, `Bash(*)`) also matches; the rule cannot tell the list apart
   - A sandboxed throwaway container where bypass mode is deliberate
 level: high

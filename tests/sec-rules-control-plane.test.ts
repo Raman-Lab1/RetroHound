@@ -56,6 +56,34 @@ const attacks: Record<string, object> = {
   "python shutil.copy": bash(`python3 -c "import shutil;shutil.copy('notes/cfg.json','.claude/settings.json')"`),
   "dd of=settings": bash("dd if=notes/cfg.json of=.claude/settings.json"),
   "cp settings": bash("cp notes/cfg.json .claude/settings.json"),
+  // Shell-side hook removal or downgrade.
+  "sed block to log": bash("sed -i 's/block/log/' ~/.claude/settings.json"),
+  "bsd sed quoted mode": bash(`sed -i '' 's/"block"/"log"/' ~/.claude/settings.json`),
+  "perl -pi": bash("perl -pi -e 's/block/log/' ~/.claude/settings.json"),
+  "sed codex --mode": bash("sed -i 's/--mode block/--mode log/' ~/.codex/hooks.json"),
+  "sed delete lines": bash("sed -i '3,9d' ~/.claude/settings.json"),
+  ": > settings": bash(": > ~/.claude/settings.json"),
+  "echo {} > settings": bash("echo {} > ~/.claude/settings.json"),
+  "jq del | sponge": bash("jq 'del(.hooks)' ~/.claude/settings.json | sponge ~/.claude/settings.json"),
+  "find -delete": bash("find ~/.claude -name settings.json -delete"),
+  // Staged files put in place by other spellings.
+  "cat staged >": bash("cat notes/cfg.json > .claude/settings.json"),
+  "tee < staged": bash("tee .claude/settings.json < notes/cfg.json"),
+  "cp into dir": bash("cp notes/settings.json .claude/"),
+  "ln into dir": bash("ln -sf ../notes/settings.json .claude/"),
+  "cp -t dir": bash("cp -t .claude notes/settings.json"),
+  "cp with trailing redirect": bash("cp notes/cfg.json .claude/settings.json 2>/dev/null"),
+  "node cpSync": bash(`node -e "require('fs').cpSync('n/c','.mcp.json')"`),
+  // Codex notify in other TOML spellings.
+  "notify two spaces": write(`${H}/.codex/config.toml`, 'notify  = ["sh","x"]\n'),
+  "notify tab": write(`${H}/.codex/config.toml`, 'notify\t= ["sh","x"]\n'),
+  "notify quoted key": write(`${H}/.codex/config.toml`, '"notify" = ["sh","x"]\n'),
+  "shell notify tab": bash(`printf 'notify\t= ["sh","x"]\\n' >> ~/.codex/config.toml`),
+  // Nested agent behind process substitution or a pager.
+  "cat <(claude skip)": bash("cat <(claude --dangerously-skip-permissions -p hi)"),
+  "echo <(codex yolo)": bash("echo <(codex --yolo exec x)"),
+  "man -P claude": bash("man -P 'claude --dangerously-skip-permissions -p hi' ls"),
+  "rg --pre claude": bash("rg --pre 'claude --dangerously-skip-permissions -p' x ."),
 };
 
 const benign: Record<string, object> = {
@@ -75,6 +103,13 @@ const benign: Record<string, object> = {
   "ls settings": bash("ls -la .claude/settings.json"),
   "escape in a readme": write(`${P}/README.md`, "\\u0068ooks"),
   "allowedTools narrow": bash("claude -p --allowedTools 'Bash(npm test)' x"),
+  "sed version pin": bash(`sed -i 's/"version": "1.2.3"/"version": "1.2.4"/' .claude/settings.json`),
+  "tee -a codex config": bash("echo 'model = \"m\"' | tee -a ~/.codex/config.toml"),
+  "cat settings to backup": bash("cat .claude/settings.json > /tmp/settings.bak"),
+  "cp doc into .claude": bash("cp notes/CLAUDE.md .claude/"),
+  "find list": bash("find ~/.claude -name '*.json'"),
+  "notifications key": write(`${H}/.codex/config.toml`, "[tui]\nnotifications = true\n"),
+  "grep flag lt": bash("grep -c -- --yolo notes.txt"),
 };
 
 const rules = loadRuleDir("rules/ai_coding_agent").rules;

@@ -1,6 +1,6 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"sed -i '' 's/\"model\": \"a\"/\"model\": \"b\"/' .claude/settings.json"}
-{"category":"process_creation","tool_name":"Bash","command_line":"echo '{}' > .claude/settings.local.json"}
-{"category":"process_creation","tool_name":"PowerShell","command_line":"Set-Content -Path .claude\\settings.json -Value '{}'"}
+{"category":"process_creation","tool_name":"Bash","command_line":"echo '{}' >> .claude/settings.local.json"}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"Add-Content -Path .claude\\settings.json -Value '{}'"}
 {"category": "process_creation", "agent": "codex_cli", "tool_name": "shell", "command_line": "sed -i 's/a/b/' ~/.codex/config.toml"}
 {"category": "process_creation", "agent": "codex_cli", "tool_name": "shell", "command_line": "cp ~/.codex/hooks.json backup.json"}
-{"category": "process_creation", "agent": "claude_code", "tool_name": "Bash", "command_line": "echo '{}' > ~/.gemini/config/mcp_config.json"}
+{"category": "process_creation", "agent": "claude_code", "tool_name": "Bash", "command_line": "echo '{}' >> ~/.gemini/config/mcp_config.json"}

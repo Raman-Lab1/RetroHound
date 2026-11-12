@@ -6,3 +6,4 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"codex exec --sandbox workspace-write 'task'"}
 {"category":"file_event","tool_name":"Write","target_path":"/home/dev/.codex/config.toml","content":"sandbox_mode = \"workspace-write\"\napproval_policy = \"on-request\"\n","tool_input":"{\"file_path\":\"/home/dev/.codex/config.toml\",\"content\":\"sandbox_mode = \\\"workspace-write\\\"\\napproval_policy = \\\"on-request\\\"\\n\"}"}
 {"category":"process_creation","tool_name":"Bash","command_line":"claude -p --allowedTools 'Bash(npm test)' x"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "cat docs/flags.md"}

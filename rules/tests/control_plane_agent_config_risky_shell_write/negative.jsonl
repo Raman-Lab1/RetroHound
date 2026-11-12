@@ -6,3 +6,8 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"python3 -c 'import json;print(json.load(open(\".claude/settings.json\")))'"}
 {"category":"process_creation","tool_name":"Bash","command_line":"git checkout main -- src/app.ts"}
 {"category":"process_creation","tool_name":"Bash","command_line":"rm -rf node_modules/.cache"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "sed -i 's/\"version\": \"1.2.3\"/\"version\": \"1.2.4\"/' .claude/settings.json"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "echo 'model = \"m\"' | tee -a ~/.codex/config.toml"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "cat .claude/settings.json > /tmp/settings.bak"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "cp notes/CLAUDE.md .claude/"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "find ~/.claude -name '*.json'"}
