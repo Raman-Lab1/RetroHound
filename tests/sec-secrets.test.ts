@@ -26,6 +26,20 @@ describe("anonymizer", () => {
     expect(fix(out)).toBe(out); // already anonymized parts stay
   });
 
+  test("keeps credential file names under dot-dirs: the reads the pack exists to show", () => {
+    const out = anonymizer([], projects)("cat /Users/jdoe/.ssh/id_ed25519 ~/.aws/credentials ~/.kube/config ~/.ssh/known_hosts");
+    for (const p of [".ssh/id_ed25519", ".aws/credentials", ".kube/config", ".ssh/known_hosts"]) expect(out).toContain(p);
+  });
+
+  test("hashes dirs under $HOME, ${HOME} and %USERPROFILE% too", () => {
+    const fix = anonymizer([], projects);
+    for (const home of ["$HOME/", "${HOME}/", "%USERPROFILE%\\"]) {
+      const out = fix(`cat ${home}clients/client-bigbank/.env`);
+      expect(out).not.toContain("client-bigbank");
+      expect(out).toContain(home);
+    }
+  });
+
   test("ids are stable in one pack but keyed per pack, so a word list cannot confirm them", () => {
     const a = anonymizer([], projects), b = anonymizer([], projects);
     expect(a("/Users/jdoe/x")).toBe(a("/Users/JDOE/x"));

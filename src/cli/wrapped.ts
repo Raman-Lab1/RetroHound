@@ -18,8 +18,10 @@ const top = (m: Map<string, number>, n: number) => [...m].sort((a, b) => b[1] - 
 const bump = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
 // Directory names under a home that say nothing about who or which client; every other one is hashed.
 const KEEP = new Set(["desktop", "documents", "downloads", "library", "applications", "appdata", "projects", "code", "dev",
-  "work", "workspace", "repos", "git", "src", "lib", "test", "tests", "docs", "bin", "dist", "build", "node_modules"]);
-const UNDER_HOME = /([\\/](?:Users|home)|(?<![\w~])~)([\\/][^\s"'`<>|;&(),=:]*)/gi;
+  "work", "workspace", "repos", "git", "src", "lib", "test", "tests", "docs", "bin", "dist", "build", "node_modules",
+  // credential files with no extension: the reads an investigator most needs to see
+  "credentials", "config", "known_hosts", "authorized_keys", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"]);
+const UNDER_HOME = /([\\/](?:Users|home)|(?<![\w~])~|\$\{?HOME\}?|%USERPROFILE%)([\\/][^\s"'`<>|;&(),=:]*)/gi;
 
 /** Project names, the user name, the encoded project dir (ADR 0014) and other dirs under a home replaced by hashes,
  * longest first. Keyed with a random key per call, so ids are stable in one pack or card but cannot be confirmed with
