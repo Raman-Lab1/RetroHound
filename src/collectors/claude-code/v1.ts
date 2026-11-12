@@ -18,7 +18,8 @@ const SHELL_TOOLS = new Set(["Bash", "PowerShell", "Monitor"]); // Monitor's `co
 const FILE_WRITES = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 const MCP_NAME = /^mcp__(.+)__(.+)$/; // server names can contain `_`, so split on the last `__`
 const URL_LIKE = /^[a-z][a-z0-9+.-]*:\/\//i;
-const SHELL_URL = /\b(?:https?|wss?|s?ftp|ssh|git):\/\/[^\s"'`<>|;)\\]+/i;
+const SHELL_URL = /\b(?:https?|wss?|s?ftp|ssh|git):\/\/[^\s"'`<>|;)\\]+/gi;
+const LOOPBACK = /^(?:localhost|127(?:\.\d+){3}|0\.0\.0\.0|\[::1?\])$/;
 const UNRESOLVABLE = /^(?:[A-Za-z]:|[$%~\\])/; // relative to something other than the cwd, or already absolute
 // Run after normalizeSlashes, which leaves a leading // only on UNC paths.
 const ROOT = /^(?:[A-Za-z]:\/|\/\/[^/]+\/[^/]+\/?|\/(?!\/))/;
@@ -95,7 +96,11 @@ function domainOf(url: string): string | undefined {
   }
 }
 
-const shellUrl = (cmd: string) => cmd.match(SHELL_URL)?.[0]?.replace(/[.,]+$/, "");
+/** The first URL that leaves the machine, else the first: a loopback URL first must not hide the host after it. */
+function shellUrl(cmd: string): string | undefined {
+  const urls = [...cmd.matchAll(SHELL_URL)].map((m) => m[0].replace(/[.,]+$/, ""));
+  return urls.find((u) => !LOOPBACK.test(domainOf(u) ?? "")) ?? urls[0];
+}
 
 /** Resolves `.` and `..` lexically. A root absorbs extra `..`; going above `~` is unknowable, so that path stays. */
 function resolveDots(p: string): string {
