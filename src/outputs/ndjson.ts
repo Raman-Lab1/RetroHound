@@ -70,8 +70,11 @@ function ecsEvent(e: AgentEvent) {
   };
 }
 
-/** A transcript timestamp that is not a date becomes the scan's end: a SIEM rejects an alert whose @timestamp or time is not one. */
-const dateOr = (ts: string, fallback: string) => (Number.isNaN(Date.parse(ts)) ? fallback : ts);
+/** A transcript timestamp that is not ISO 8601 with a zone is rewritten as one (the scan's end when it is not a date at all):
+ * a SIEM rejects an alert whose @timestamp is "January 1, 2024" even though Date.parse reads it. */
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/;
+const dateOr = (ts: string, fallback: string) =>
+  ISO.test(ts) && !Number.isNaN(Date.parse(ts)) ? ts : Number.isNaN(Date.parse(ts)) ? fallback : new Date(ts).toISOString();
 
 function ecsLine(f: Finding, rule: ReportRule | undefined, report: ScanReport) {
   const [p, ...rest] = f.events;

@@ -73,6 +73,13 @@ describe("ndjson exports", () => {
     expect(ocsf.time).toBe(Date.parse("2026-11-07T10:00:03Z"));
     expect(ocsf.finding_info.first_seen_time).toBe(ocsf.time);
   });
+  test("a parseable timestamp that is not ISO 8601 is rewritten as ISO, the raw one kept", () => {
+    for (const raw of ["January 1, 2024 UTC", "2024/01/01 00:00:00Z"]) {
+      const ecs = JSON.parse(toNdjson(report([finding({ ts: raw, events: [ev({ ts: raw })] })]), "ecs"));
+      expect(ecs["@timestamp"]).toBe("2024-01-01T00:00:00.000Z");
+      expect(ecs.retrohound.raw_ts).toBe(raw);
+    }
+  });
   test("a valid timestamp is passed through unchanged", () => {
     const ecs = JSON.parse(toNdjson(report(), "ecs"));
     expect(ecs["@timestamp"]).toBe("2026-09-14T10:00:00Z");
