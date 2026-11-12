@@ -20,6 +20,16 @@ test("hosts, remotes and domains are hashed; loopback stays", () => {
   expect(fix.host("evil.corp-client.test")).not.toContain("corp-client");
 });
 
+test("bare scp/rsync hosts and ssh -J/-l/-o values are hashed", () => {
+  const fix = anonymizer([], []);
+  const out = fix("rsync -av ./ host2:/srv/; scp a.txt host3:/x; ssh -J jump.corp.test target.corp.test; ssh -l bob host.corp.test; " +
+    "ssh -o User=carol -o ProxyJump=hop.corp.test ex.corp.test; scp C:\\a b.txt");
+  for (const leak of ["host2", "host3", "jump.corp", "target.corp", "bob", "host.corp", "carol", "hop.corp", "ex.corp"]) expect(out).not.toContain(leak);
+  expect(out).toContain("/srv/");
+  expect(out).toContain("C:\\a");
+  expect(fix("echo a:b")).toBe("echo a:b");
+});
+
 test("purge --all file list: log and caches only, no symlinks", () => {
   const dir = join(base, "home", ".retrohound");
   mkdirSync(dir, { recursive: true });

@@ -27,6 +27,10 @@ const LOCAL = /^(localhost|127\.\d+\.\d+\.\d+|\[?::1\]?|0\.0\.0\.0)$/i;
 const FORGE = /(github|gitlab|bitbucket|codeberg|sr\.ht)/i;
 const URL_RE = /\b([a-z][a-z0-9+.-]*:\/\/)(?:([^\s/@"'`<>]*)@)?(\[[^\]\s]+\]|[^\s/:?#"'`<>]+)((?::\d+)?)((?:\/[^\s"'`<>;|&()]*)?)/gi;
 const SCP_RE = /\b([\w.-]+@)([\w.-]+):(?!\/\/)([^\s"'`<>;|&()]*)/g;
+// host:path with no user@, only inside scp/rsync arguments (a bare a:b elsewhere is not a host)
+const BARE_RE = /\b(scp|rsync)\b([^;|&\n]*)/g;
+const BARE_ARG = /(^|\s)(?![\w]:[\\/])([A-Za-z0-9][\w.-]*):(?!\/\/)(?=[^\s"'`<>;|&()]*)([^\s"'`<>;|&()]*)/g;
+const OPT_RE = /(-[lJWo])(\s*)(\S+)/g;
 const SSH_RE = /\b(ssh|sftp)((?:\s+-[iplJoFLRDEeBbcmWwOSQ]\s*\S+|\s+-[A-Za-z]+)*)\s+(?:([\w.-]+)@)?([\w.-]+)/g;
 
 /** Project names, the user name, the encoded project dir (ADR 0014) and other dirs under a home replaced by hashes,
@@ -55,12 +59,17 @@ export function anonymizer(events: Pick<AgentEvent, "raw_ref">[], projects: stri
   const host = (h: string) => (LOCAL.test(h) || /^anon-\w+\.invalid$/.test(h) ? h : `${hash(h)}.invalid`);
   const repo = (h: string, path: string) => // owner/repo on a git forge says who and what; keep the rest of the path
     FORGE.test(h) ? path.replace(/^(\/?)([^/\s]+)\/([^/\s]+?)(\.git)?(?=$|[/?#])/, (_m, sl, o, r, g) => `${sl}${hash(o)}/${hash(r)}${g ?? ""}`) : path;
+  const hostUser = (v: string) => v.replace(/^(?:([^@\s]+)@)?([^@\s:]+)(.*)$/, (_m, u: string | undefined, h: string, r: string) => `${u === undefined ? "" : `${hash(u)}@`}${host(h)}${r}`);
+  // -l is a login name, -J/-W name hosts, -o carries User/HostName/ProxyJump; other option values stay as they are
+  const optVal = (f: string, v: string) => f === "-l" ? hash(v) : f === "-J" ? v.split(",").map(hostUser).join(",") : f === "-W" ? hostUser(v)
+    : f === "-o" ? v.replace(/^(user)=(.+)$/i, (_m, k: string, x: string) => `${k}=${hash(x)}`).replace(/^(hostname|proxyjump)=(.+)$/i, (_m, k: string, x: string) => `${k}=${x.split(",").map(hostUser).join(",")}`) : v;
   const hosts = (s: string) => s
     .replace(URL_RE, (_m, sch: string, user: string | undefined, h: string, port: string, path: string) =>
       `${sch}${user === undefined ? "" : `${hash(user)}@`}${host(h)}${port}${repo(h, path)}`)
     .replace(SCP_RE, (_m, user: string, h: string, path: string) => `${hash(user.slice(0, -1))}@${host(h)}:${repo(h, path)}`)
+    .replace(BARE_RE, (_m, cmd: string, args: string) => cmd + args.replace(BARE_ARG, (_a, sp: string, h: string, rest: string) => `${sp}${host(h)}:${repo(h, rest)}`))
     .replace(SSH_RE, (_m, cmd: string, opts: string, user: string | undefined, h: string) =>
-      `${cmd}${opts} ${user === undefined ? "" : `${hash(user)}@`}${host(h)}`);
+      `${cmd}${opts.replace(OPT_RE, (_o, f: string, sp: string, v: string) => `${f}${sp}${optVal(f, v)}`)} ${user === undefined ? "" : `${hash(user)}@`}${host(h)}`);
   return Object.assign((s: string) => hosts(dirs(re ? s.replace(re, hash) : s)), { host });
 }
 
