@@ -37,6 +37,7 @@ export function compareEvents(a: Row, b: Row): number {
 
 const UNITS: Record<string, number> = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
 const TYPES = new Set(["event_count", "temporal", "temporal_ordered"]);
+const PROJECT_TIMESPAN_MAX_MS = 3_600_000; // a project-scoped group must not grow over all history
 const KEYS = new Set(["type", "rules", "group-by", "timespan", "condition", "generate"]);
 const COUNT_TESTS: Record<string, (n: number, v: number) => boolean> = {
   gt: (n, v) => n > v,
@@ -70,7 +71,13 @@ function parseGroupBy(raw: unknown): string[] {
   if (!list) throw new RuleError("bad-correlation", "group-by is required");
   const fields = list.map(resolveField);
   if (fields.some(isDerived)) throw new RuleError("bad-correlation", "a computed field cannot be a group-by key");
-  if (!fields.includes("session_id")) throw new RuleError("unsupported-group-by", "group-by must include session_id: a group never spans sessions");
+  if (!fields.includes("session_id") && !fields.includes("project_path")) {
+    throw new RuleError("unsupported-group-by", "group-by must include session_id or project_path");
+  }
+  // A project-scoped group spans sessions, so it is ordered by ts like a session-scope one: no stream identity (ADR 0004).
+  if (!fields.includes("session_id") && fields.includes("agent_id")) {
+    throw new RuleError("unsupported-group-by", "a project_path group without session_id cannot use agent_id");
+  }
   return fields;
 }
 
@@ -105,6 +112,10 @@ export function parseCorrelation(doc: Record<string, unknown>, meta: RuleMeta): 
     throw new RuleError("bad-x-retrohound", "differ_by is a list of stored fields, for temporal_ordered only");
   }
   const groupBy = parseGroupBy(block["group-by"]);
+  const timespanMs = Number(span[1]) * UNITS[span[2]!]!;
+  if (!groupBy.includes("session_id") && timespanMs > PROJECT_TIMESPAN_MAX_MS) {
+    throw new RuleError("project-group-timespan", "a group by project_path without session_id allows a timespan of 1h at most");
+  }
   if (max !== undefined && !groupBy.includes("agent_id")) {
     throw new RuleError("max-events-needs-agent-id", "max_events_between needs agent_id in group-by: seq is not comparable across streams");
   }
@@ -118,7 +129,7 @@ export function parseCorrelation(doc: Record<string, unknown>, meta: RuleMeta): 
     refs,
     rules: [],
     groupBy,
-    timespanMs: Number(span[1]) * UNITS[span[2]!]!,
+    timespanMs,
     maxEventsBetween: max as number | undefined,
     differBy,
     count: type === "event_count" ? parseCount(block.condition) : undefined,
@@ -288,8 +299,10 @@ const RUN = { event_count: eventCount, temporal_ordered: temporalOrdered, tempor
 /** Fires one correlation over the occurrences of the rules it references, which must already be in `hits`. */
 export function runCorrelation(rule: CorrelationRule, hits: Map<Rule, Occurrence[]>): Occurrence[] {
   const groups = new Map<string, Occurrence[][]>();
+  const bySession = rule.groupBy.includes("session_id");
   rule.rules.forEach((ref, step) => {
     for (const occ of hits.get(ref)!) {
+      if (!bySession && !occ.at.project_path) continue; // no project: unrelated sessions must not share a null group
       const key = JSON.stringify(rule.groupBy.map((f) => occ.at[f] ?? null)); // null and missing are one group
       let steps = groups.get(key);
       if (!steps) groups.set(key, (steps = rule.rules.map(() => [])));
