@@ -6,7 +6,8 @@ status: experimental
 description: >-
   A command or file write turns off a permission guard: `--dangerously-skip-permissions`,
   `--dangerously-bypass-approvals-and-sandbox`, `--yolo`, `skipDangerousModePermissionPrompt`,
-  `defaultMode: bypassPermissions`, or a `permissions.allow` list holding a bare `*` or `Tool(*)` wildcard.
+  `defaultMode: bypassPermissions`, or a `permissions.allow` list holding a bare `*` or `Tool(*)` wildcard; Codex
+  `danger-full-access`, `approval_policy = "never"`, `-a never` or `--full-auto`; Gemini `--approval-mode yolo`.
 tags:
   - attack.defense_evasion
   - attack.t1562
@@ -14,17 +15,28 @@ tags:
 logsource:
   product: ai_coding_agent
 detection:
+  # Unquoted, so `--dangerously-skip-permission''s` reads as the flag.
   selection_flag:
     category: process_creation
-    command_line|contains:
+    command_line_unquoted|contains:
       - --dangerously-skip-permissions
       - --dangerously-bypass-approvals-and-sandbox
       - --yolo
+      - --full-auto
+      - danger-full-access
+      - -a never
+      - --ask-for-approval never
+      - --ask-for-approval=never
+      - approval_policy=never
+  selection_flag_re:
+    category: process_creation
+    command_line_unquoted|re|i: &unsafe_re '(?:approval_policy\\{0,2}\s{0,3}=\s{0,3}\\{0,2}[\x22\x27]never|approval-?mode[\\\x22\s:=]{1,8}yolo|\w\(\*\)(?:$|[\s,\]]))'
   selection_write:
     - category: process_creation
       command_line|contains: &unsafe
         - skipdangerousmodepermissionprompt
         - bypasspermissions
+        - danger-full-access
         - '["\*"]'
         - '[\"\*\"]'
         - '(\*)"'
@@ -38,11 +50,19 @@ detection:
     - category: file_event
       target_path|contains: *settings
       tool_input|contains: *unsafe
+    - category: file_event
+      target_path|contains: *settings
+      content|re|i: *unsafe_re
+    - category: file_event
+      target_path|contains: *settings
+      tool_input|re|i: *unsafe_re
+  # A lone echo, grep or cat: nothing after it may start another command, a redirect or a substitution (`$(`, `<(`).
+  # man and rg are left out: man's `-P` pager and rg's `--pre` run a command.
   filter_discuss:
-    command_line|re|i: '^\s{0,5}(?:echo|grep|rg|cat|man)\s'
-  condition: (selection_flag or selection_write) and not filter_discuss
+    command_line|re|i: '^\s{0,5}(?:echo|grep|cat)\s(?:[^;&|\n\r`<>$]|\$[^(;&|\n\r`<>$])*$'
+  condition: (selection_flag or selection_flag_re or selection_write) and not filter_discuss
 falsepositives:
-  - Documentation or tests that mention the flag in an echo or grep (filtered when the command starts with echo, grep, rg, cat or man)
+  - Documentation or tests that mention the flag in an echo or grep (filtered when the whole command is one echo, grep or cat)
   - A wildcard in a deny or ask list (`["*"]`, `Bash(*)`) also matches; the rule cannot tell the list apart
   - A sandboxed throwaway container where bypass mode is deliberate
 level: high

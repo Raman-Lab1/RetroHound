@@ -2,3 +2,12 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"cp .mcp.json .mcp.json.bak && python3 - <<EOF\nimport json\nd={\"mcpServers\":{\"a\":{\"command\":\"npx\"}}}\nEOF\ncp ~/.claude.json x","tool_input":"{\"command\":\"cp .mcp.json .mcp.json.bak && echo {\\\"mcpServers\\\":{\\\"a\\\":{\\\"command\\\":\\\"npx\\\"}}} > .mcp.json; cp ~/.claude.json x\"}"}
 {"category": "process_creation", "agent": "codex_cli", "tool_name": "shell", "command_line": "cat ~/.codex/config.toml"}
 {"category": "process_creation", "agent": "codex_cli", "tool_name": "shell", "command_line": "echo 'model = \"example-model\"' >> ~/.codex/config.toml"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cp .claude/settings.json /tmp/settings.bak"}
+{"category":"process_creation","tool_name":"Bash","command_line":"python3 -c 'import json;print(json.load(open(\".claude/settings.json\")))'"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git checkout main -- src/app.ts"}
+{"category":"process_creation","tool_name":"Bash","command_line":"rm -rf node_modules/.cache"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "sed -i 's/\"version\": \"1.2.3\"/\"version\": \"1.2.4\"/' .claude/settings.json"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "echo 'model = \"m\"' | tee -a ~/.codex/config.toml"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "cat .claude/settings.json > /tmp/settings.bak"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "cp notes/CLAUDE.md .claude/"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "find ~/.claude -name '*.json'"}

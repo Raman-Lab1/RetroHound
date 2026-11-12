@@ -10,3 +10,4 @@
 {"category": "process_creation", "tool_name": "Bash", "command_line": "launchctl setenv ANTHROPIC_BASE_URL http://localhost:4000"}
 {"category": "process_creation", "tool_name": "Bash", "command_line": "tee -a docs/setup.md >/dev/null <<EOF", "content": "export OPENAI_BASE_URL=https://llm-proxy.example.invalid"}
 {"category": "process_creation", "tool_name": "Bash", "command_line": "cd docs && cat > 'notes.md' <<EOF", "content": "export OPENAI_BASE_URL=https://llm-proxy.example.invalid"}
+{"category":"process_creation","tool_name":"Bash","command_line":"export ANTHROPIC_BASE_URL=https://localhost:8443/v1"}
