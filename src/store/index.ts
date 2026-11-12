@@ -1,15 +1,15 @@
 // The index: masked events, sessions, files and findings (ADR 0002, 0006, 0008). Raw events enter only through
 // toStored, so nothing here can write a match-only field. File paths are masked like any other string column (0007).
 import { createHash } from "node:crypto";
-import { chmodSync, closeSync, mkdirSync, openSync } from "node:fs";
+import { chmodSync, closeSync, mkdirSync, openSync, readSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { ConfigItem } from "../footprint/types.ts";
 import { mask } from "../normalize/mask.ts";
 import { LIST_FIELDS, OPTIONAL_STRINGS, toStored } from "../normalize/stored.ts";
 import type { AgentEvent, Finding, RawEvent } from "../normalize/types.ts";
-import { chainWriter } from "./chain.ts";
-import { migrate } from "./schema.ts";
+import { chainWriter, sessionsFromEvents } from "./chain.ts";
+import { migrate, schemaProblem } from "./schema.ts";
 import { open, type Db, type Row, type SqlValue } from "./sqlite.ts";
 
 export type FileRecord = { path: string; size: number; mtime: number; parser_version: string; sha256: string };
@@ -106,12 +106,14 @@ export function findingId(ruleId: string, eventIds: string[]): string {
 // sees it, so it never exists wider than 0600. Only the default directory is tightened after the fact: a --db path may
 // sit in a directory that is not ours. On Windows chmod only toggles the read-only bit, so these calls protect nothing
 // there, and the catch covers filesystems that refuse chmod: neither is a reason to stop a scan.
+// An existing file is tightened only after schemaProblem passed it: another program's database is left as it was.
 function createPrivate(path: string): void {
-  const dir = dirname(path);
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   closeSync(openSync(path, "a", 0o600));
+}
+function restrict(path: string): void {
   try {
-    if (path === defaultDbPath()) chmodSync(dir, 0o700);
+    if (path === defaultDbPath()) chmodSync(dirname(path), 0o700);
     chmodSync(path, 0o600);
   } catch {
     // see above
@@ -123,6 +125,24 @@ export function openReadOnly(path: string = defaultDbPath()): Db {
   return open(path, { readonly: true });
 }
 
+/** For purge: `path` is empty, or a SQLite database with a version and RetroHound's files_indexed table. Weaker than
+ * schemaProblem on purpose: an index that was tampered with must still be deletable. */
+export function looksLikeIndex(path: string): boolean {
+  const header = Buffer.alloc(16);
+  const fd = openSync(path, "r");
+  const n = readSync(fd, header, 0, 16, 0);
+  closeSync(fd);
+  if (n === 0) return true;
+  if (header.toString("latin1") !== "SQLite format 3\0") return false;
+  const db = open(path);
+  try {
+    return Number(db.prepare("PRAGMA user_version").get()?.user_version ?? 0) > 0
+      && Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'files_indexed'").get());
+  } finally {
+    db.close();
+  }
+}
+
 export type Store = ReturnType<typeof openStore>;
 
 /** Opens the index, creating and migrating it as needed. Always `close()`, or Windows keeps the file locked. */
@@ -130,6 +150,9 @@ export function openStore(path: string = defaultDbPath()) {
   createPrivate(path);
   const db = open(path);
   try {
+    const problem = schemaProblem(db); // before the chmod and the WAL switch below change the file
+    if (problem) throw new Error(`${problem}; left unchanged`);
+    restrict(path);
     // WAL + NORMAL: a commit no longer waits for a disk sync (about 40% off a cold scan of 1,000 sessions). A power cut
     // can lose the last commits but not corrupt the file, and the index is rebuilt from transcripts (0008).
     db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL");
@@ -158,11 +181,7 @@ export function openStore(path: string = defaultDbPath()) {
     dropEmptySession: db.prepare(`DELETE FROM sessions
       WHERE session_id = ? AND NOT EXISTS (SELECT 1 FROM events WHERE session_id = ?)`),
     refreshSession: db.prepare(`INSERT INTO sessions (session_id, agent, project_path, first_ts, last_ts, event_count)
-      SELECT session_id, min(agent),
-        (SELECT p.project_path FROM events p WHERE p.session_id = e.session_id AND p.project_path IS NOT NULL
-          ORDER BY p.ts, p.seq LIMIT 1),
-        min(ts), max(ts), count(*)
-      FROM events e WHERE session_id = ? GROUP BY session_id
+      ${sessionsFromEvents("WHERE session_id = ?")}
       ON CONFLICT(session_id) DO UPDATE SET agent = excluded.agent, project_path = excluded.project_path,
         first_ts = excluded.first_ts, last_ts = excluded.last_ts, event_count = excluded.event_count`),
     sessionEvents: db.prepare("SELECT * FROM events WHERE session_id = ? ORDER BY ts, seq, id"),

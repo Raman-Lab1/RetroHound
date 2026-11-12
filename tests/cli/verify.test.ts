@@ -87,8 +87,8 @@ test("a scanned index verifies; a rescan where an outcome becomes known still do
   expect(changed.map((row) => row.outcome)).toEqual(["success"]);
   expect(await verify("--head", first.head.toUpperCase())).toBe(0);
   expect(parsed().head).toBe(second.head);
-  const added = sql("SELECT tbl || ' ' || op AS k, count(*) AS n FROM chain WHERE seq > ? GROUP BY k ORDER BY k", first.entries);
-  expect(out.split("\n")[1]).toBe(`added since the recorded head: ${added.map((r) => `${r.k} ×${r.n}`).join(", ")}`);
+  // Every row written here had an entry at the first head, so each write reads as a rewrite.
+  expect(out.split("\n")[1]).toBe("added since the recorded head: events rewrite ×1, files_indexed rewrite ×1, findings delete ×1, findings rewrite ×1");
   expect(await verify("--head", second.head)).toBe(0);
   expect(out.split("\n")[1]).toBe("added since the recorded head: nothing");
   expect(await verify()).toBe(0);

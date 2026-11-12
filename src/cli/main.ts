@@ -11,7 +11,8 @@ import { toJson } from "../outputs/json.ts";
 import { toNdjson } from "../outputs/ndjson.ts";
 import { toSarif } from "../outputs/sarif.ts";
 import { toTable } from "../outputs/table.ts";
-import { defaultDbPath } from "../store/index.ts";
+import { defaultDbPath, looksLikeIndex } from "../store/index.ts";
+import { defaultLogPath } from "../hooks/run.ts";
 import { oneOf, parseSince, processIO, UsageError, useColor, type IO } from "./io.ts";
 import { registerGitSecrets } from "./gitjoin.ts";
 import { registerHook } from "./hook.ts";
@@ -89,15 +90,19 @@ async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
 function purgeCommand(f: { db?: string; yes?: boolean }, io: IO): number {
   const path = f.db ?? defaultDbPath();
   if (!existsSync(path)) return io.out(`Nothing to delete: ${path} does not exist.\n`), 0;
+  if (!looksLikeIndex(path)) throw new UsageError(`${path} is not a RetroHound index; purge deletes only an index`);
   const page = defaultReportPath(path); // built from the index, so it goes with it; a --report elsewhere is the user's
+  // The hook's own record is not part of the index: say it stays rather than widen what purge deletes.
+  const kept = existsSync(defaultLogPath()) ? `Kept: the hook log ${defaultLogPath()}, which purge does not delete.\n` : "";
   if (!f.yes) {
     io.out(`Would delete the index ${path} (${statSync(path).size} bytes)${existsSync(page) ? ` and its footprint report ${page}` : ""}.\n`);
-    io.out("It may hold the only copy of evidence Claude Code has since deleted. Re-run with --yes to delete it.\n");
+    io.out("It may hold the only copy of evidence Claude Code has since deleted. Re-run with --yes to delete it.\n" + kept);
     return 1;
   }
   for (const suffix of DB_FILES) rmSync(path + suffix, { force: true });
   io.out(`Deleted ${path}\n`);
   if (existsSync(page)) rmSync(page), io.out(`Deleted ${page}\n`);
+  io.out(kept);
   return 0;
 }
 
