@@ -1,0 +1,24 @@
+name: files_git_hook_write
+author: Raman Kumar
+id: 8151d96a-8ed9-4d7d-b0a8-8141e4a837aa
+title: Git hook or command-running git config written
+status: experimental
+description: >
+  The agent writes (Write/Edit) a file under .git/hooks/, or writes .git/config with a key git runs as a command
+  (fsmonitor, hooksPath, pager, sshCommand, a filter's smudge, clean or process, a diff textconv, a [pager] section).
+  The user's next git command runs it outside the agent's approval flow. Shell commands that do the same are
+  exec_git_repo_code_exec.
+level: high
+tags: [attack.persistence, attack.t1546, owasp_agentic.asi05]
+falsepositives:
+  - Installing a project hook the user asked for.
+x-retrohound: { lane: enforce }
+logsource: { product: ai_coding_agent, category: file_event }
+detection:
+  hook:
+    target_path|re: '(?:^|/)\.git/hooks/[^/]{1,200}$'
+  config:
+    target_path|re: '(?:^|/)\.git/config$'
+  config_key:
+    content|re|i: '(?:^|\n)[ \t]{0,20}(?:fsmonitor|hookspath|pager|sshcommand|smudge|clean|process|textconv)[ \t]{0,5}=|\[pager\b'
+  condition: hook or (config and config_key)
