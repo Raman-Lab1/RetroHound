@@ -31,6 +31,20 @@ const DIRS: [string, RegExp][] = [
 export const fwd = (p: string) => p.replaceAll("\\", "/");
 export const inside = (root: string, p: string) => p === root || p.startsWith(root + "/");
 
+/** One glob segment against one name, `*` the only wildcard. No regex: the repo writes both sides, and a backtracking
+ * regex built from `*a*a*a…b` hangs on a long name; this backtracks only to the last `*`, so at most O(len × len). */
+export function globMatch(pat: string, name: string): boolean {
+  let p = 0, i = 0, star = -1, from = 0;
+  while (i < name.length) {
+    if (pat[p] === "*") (star = p++), (from = i);
+    else if (p < pat.length && pat[p] === name[i]) p++, i++;
+    else if (star >= 0) (p = star + 1), (i = ++from);
+    else return false;
+  }
+  while (pat[p] === "*") p++;
+  return p === pat.length;
+}
+
 function event(rel: string, abs: string, category: Category, n: number, ts: string): RawEvent {
   const id = createHash("sha256").update(`${SESSION_ID}\0${rel}\0${n}`).digest("hex").slice(0, 32);
   return { id, schema_version: "0.1", agent: "claude_code", session_id: SESSION_ID, ts, seq: n, category, target_path: abs, raw_ref: { file: rel, line: 1 } };
@@ -74,11 +88,9 @@ export function collectRepo(dir: string, now = new Date()): Collected {
     const full = join(root, rel);
     let st;
     try {
-      st = lstatSync(full);
-      if (st.isSymbolicLink()) {
-        if (!inside(root, fwd(realpathSync(full)))) return skip(rel, "symlink outside the directory");
-        st = statSync(full);
-      }
+      // the real path, not only the last component: a symlinked `.claude` or `.vscode` must not lead out either
+      if (!inside(root, fwd(realpathSync(full)))) return skip(rel, "symlink outside the directory");
+      st = statSync(full);
     } catch {
       return; // absent: the normal case for most of these paths
     }
@@ -104,6 +116,8 @@ export function collectRepo(dir: string, now = new Date()): Collected {
   const walk = (rel: string, keep: RegExp, seen = { n: 0 }) => {
     let entries;
     try {
+      // readdir follows a symlinked walk root (`.claude/skills -> /`), so check where it really is first
+      if (!inside(root, fwd(realpathSync(join(root, rel))))) return skip(rel, "symlink outside the directory");
       entries = readdirSync(join(root, rel), { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
     } catch {
       return;
@@ -128,7 +142,6 @@ export function collectRepo(dir: string, now = new Date()): Collected {
     if (!segs.length) return void (rel && lstatSync(join(root, rel, "package.json"), { throwIfNoEntry: false }) && packages.add(`${rel}/package.json`));
     const [seg, ...rest] = segs as [string, ...string[]];
     if (seg === "**") expand(rel, rest);
-    const re = new RegExp(`^${seg.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replaceAll("*", ".*")}$`);
     let entries;
     if (++listed > MAX_WORKSPACE_DIRS) return;
     try {
@@ -140,7 +153,7 @@ export function collectRepo(dir: string, now = new Date()): Collected {
       if (!e.isDirectory() || SKIP_DIRS.has(e.name)) continue;
       const child = rel ? `${rel}/${e.name}` : e.name;
       if (seg === "**") expand(child, segs);
-      else if (re.test(e.name)) expand(child, rest);
+      else if (globMatch(seg, e.name)) expand(child, rest);
     }
   };
   for (const glob of workspaceGlobs(root)) {
