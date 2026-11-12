@@ -7,3 +7,4 @@
 {"category":"file_access","tool_name":"Read","target_path":"C:/Users/dev/AppData/Local/Google/Chrome/User Data/Default/Cookies"}
 {"category":"file_access","tool_name":"Read","target_path":"/home/dev/.claude/.credentials.json"}
 {"category":"file_access","tool_name":"Grep","target_path":"/home/dev/.claude/.credentials.json"}
+{"category":"file_access","tool_name":"Grep","target_path":"/home/dev/.claude/.credentials.json/*.ts"}
