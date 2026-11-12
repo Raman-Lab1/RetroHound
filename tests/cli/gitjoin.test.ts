@@ -98,7 +98,9 @@ test("a submodule's diff.external or textconv never runs, whatever diff.submodul
   repo(sub, "A=1\n");
   const outer = join(base, "with-sub");
   repo(outer, `AWS_ACCESS_KEY_ID=${KEY}\n`);
-  const git = (dir: string, ...a: string[]) => execFileSync("git", ["-C", dir, "-c", "protocol.file.allow=always", ...a], { stdio: "ignore" });
+  // The submodule's clone gets no user.name/email from repo(), and CI runners have no global identity.
+  const id = ["-c", "user.name=Test", "-c", "user.email=test@example.invalid"];
+  const git = (dir: string, ...a: string[]) => execFileSync("git", ["-C", dir, "-c", "protocol.file.allow=always", ...id, ...a], { stdio: "ignore" });
   git(outer, "submodule", "add", "-q", sub, "sm");
   git(outer, "commit", "-q", "-m", "add sm");
   const sm = join(outer, "sm");
