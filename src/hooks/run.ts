@@ -1,11 +1,11 @@
 // `hook run` (ADR 0009): PreToolUse payload in, permission decision out (per-agent formats in agents.ts). Fail-open by construction: the caller turns
-// any exception into "no decision, exit 0". Only enforce-lane single-event detections decide; it never emits `allow`
+// any exception into "no decision, exit 0". Only enforce-lane single-event detections (and the built-in tamper guard) decide; it never emits `allow`
 // or `updatedInput`, and the log never holds raw tool input (0007).
 import { createHash } from "node:crypto";
 import { appendFileSync, chmodSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { render, supportsAsk, toEvent, type Agent } from "./agents.ts";
+import { render, supportsAsk, toEvents, type Agent } from "./agents.ts";
 import { evaluate } from "../engine/evaluate.ts";
 import { LEVELS } from "../normalize/types.ts";
 import { loadRules, parseSource, type DetectionRule, type ParsedDoc, type Rule } from "../engine/load.ts";
@@ -28,15 +28,37 @@ const isEnforce = (r: Rule): r is DetectionRule => r.kind === "detection" && r.l
 
 const attack = (r: DetectionRule) => r.tags.find((t) => /^attack\.t\d/i.test(t))?.slice(7).toUpperCase();
 
+// Built in, not a rule file: a forged cache or an edited rules dir loads no rules, so rule files cannot guard themselves.
+const TAMPER = { kind: "detection", id: "retrohound_hook_tamper", name: "retrohound_hook_tamper", title: "Write to RetroHound's own state or rules",
+  level: "critical", lane: "enforce", tags: ["attack.t1562.001"], falsepositives: [], path: "(built in)", doc: 0, silenced: false, fields: [], matches: () => false } satisfies DetectionRule;
+// macOS and Windows volumes are case-insensitive by default: ~/.RetroHound is ~/.retrohound there.
+const FOLD = process.platform === "darwin" || process.platform === "win32";
+const STATE = new RegExp(String.raw`/\.retrohound(?:[/\s"';|&)]|$)`, FOLD ? "i" : ""); // ~/.retrohound: ignore.yml, rules caches, hook log
+const low = (s: string) => (FOLD ? s.toLowerCase() : s);
+// ponytail: literal text only; a write through a variable, a script file or a relative path is not seen. It stops the
+// obvious one-liner, not code that already runs as you (that can always switch a same-user hook off).
+const WRITES = />|\b(?:tee|cp|mv|rm|ln|install|touch|truncate|dd|chmod|sed\s+-i|perl|python3?|node|bun|deno|ruby)\b/;
+function inside(path: string, dir: string): boolean {
+  const p = low(path), d = low(dir).replace(/\/+$/, "");
+  return p === d || p.startsWith(d + "/");
+}
+
+/** A write to ~/.retrohound or to a protected path (the rules dirs): it could switch enforcement off. */
+export function tampers(e: RawEvent, protect: string[]): boolean {
+  if (e.category === "file_event") return !!e.target_path && (STATE.test(e.target_path) || protect.some((d) => inside(e.target_path!, d)));
+  const c = e.category === "process_creation" ? e.command_line : undefined;
+  return !!c && WRITES.test(c) && (STATE.test(c) || protect.some((d) => low(c).includes(low(d))));
+}
+
 /** The most severe enforce-lane rule the call trips, or none. Throws on a payload that is not a PreToolUse object. */
-export function decide(stdin: string, rules: Rule[], ignore: Ignore = NO_IGNORE, agent: Agent = "claude_code"): { rule: DetectionRule; event: RawEvent } | undefined {
-  const enforce = rules.filter(isEnforce);
-  const event = toEvent(agent, JSON.parse(stdin));
-  const stored = [toStored(event)]; // the ignore file matches stored (masked) values, as scan does
-  const hits = evaluate(enforce, [event]).map((m) => m.rule as DetectionRule)
-    .filter((r) => !isSuppressed({ rule_id: mask(r.id), events: stored } as unknown as Finding, ignore));
-  hits.sort((a, b) => LEVELS.indexOf(b.level) - LEVELS.indexOf(a.level));
-  return hits[0] ? { rule: hits[0], event } : undefined;
+export function decide(stdin: string, rules: Rule[], ignore: Ignore = NO_IGNORE, agent: Agent = "claude_code", protect: string[] = []): { rule: DetectionRule; event: RawEvent } | undefined {
+  const events = toEvents(agent, JSON.parse(stdin));
+  const guarded = events.find((e) => tampers(e, protect));
+  if (guarded) return { rule: TAMPER, event: guarded }; // never suppressed: the ignore file is one of the guarded files
+  const hits = evaluate(rules.filter(isEnforce), events).map((m) => ({ rule: m.rule as DetectionRule, event: m.events[0]! }))
+    .filter((h) => !isSuppressed({ rule_id: mask(h.rule.id), events: [toStored(h.event)] } as unknown as Finding, ignore)); // stored (masked) values, as scan
+  hits.sort((a, b) => LEVELS.indexOf(b.rule.level) - LEVELS.indexOf(a.rule.level));
+  return hits[0];
 }
 
 export function logTrial(path: string, rec: Record<string, string>): void {
@@ -49,9 +71,10 @@ export function logTrial(path: string, rec: Record<string, string>): void {
   }
 }
 
-export function runHook(stdin: string, mode: Mode, rules: Rule[], logPath = defaultLogPath(), ignore: Ignore = NO_IGNORE, agent: Agent = "claude_code"): HookResult {
+/** `protect`: paths besides ~/.retrohound that no write may reach (the rules dirs). */
+export function runHook(stdin: string, mode: Mode, rules: Rule[], logPath = defaultLogPath(), ignore: Ignore = NO_IGNORE, agent: Agent = "claude_code", protect: string[] = []): HookResult {
   if (mode === "confirm" && !supportsAsk(agent)) throw new Error(`${agent} does not support ask (confirm mode); use --mode log or block`);
-  const hit = decide(stdin, rules, ignore, agent);
+  const hit = decide(stdin, rules, ignore, agent, protect);
   if (!hit) return {};
   const name = hit.rule.name ?? hit.rule.id;
   const would: Decision = mode === "confirm" ? "ask" : "deny";
@@ -103,12 +126,15 @@ function writeCache(path: string, key: string, paths: string[], docs: ParsedDoc[
   }
 }
 
+const ENFORCE = /lane["']?\s*:\s*["']?enforce/; // a superset of what the loader reads as lane enforce: key or value quoted too
+
 /**
  * Like cli/rules.ts loadRuleDir, but parses only files that mention `lane: enforce`: the hook pays for every tool call.
  * The parse (plain data, never compiled rules) is cached under the stat of every rule file (size, mtime, ctime, inode),
  * so a warm call opens no rule file: reading them all was most of the hook's own time. Any edit, add or remove changes
  * the key. Nothing is cached while a file's ctime is under a second old: a second edit in the same timestamp tick could
- * leave size and times unchanged.
+ * leave size and times unchanged. The cache is only as safe as ~/.retrohound: the tamper guard above denies the
+ * obvious writes to it.
  */
 export function loadEnforceRules(dir: string, cachePath?: string, extras: string[] = []): Rule[] {
   const dirs = [dir, ...extras]; // shipped first: on a reused id the extra rule is the one loadRules rejects
@@ -125,7 +151,7 @@ export function loadEnforceRules(dir: string, cachePath?: string, extras: string
   cachePath ??= defaultCachePath(dir, extras);
   const hit = readCache(cachePath, key);
   if (hit) return loadRules(hit.paths.map((path, i) => ({ path, text: "", docs: hit.docs[i] }))).rules;
-  const sources = files.map((path) => ({ path, text: readFileSync(path, "utf8") })).filter((s) => /lane:\s*enforce/.test(s.text));
+  const sources = files.map((path) => ({ path, text: readFileSync(path, "utf8") })).filter((s) => ENFORCE.test(s.text));
   let docs;
   try {
     docs = sources.map((s) => parseSource(s.text));
