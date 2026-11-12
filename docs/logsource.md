@@ -51,7 +51,7 @@ absent, not `[]`, when empty, so `|exists` is true only when something was found
 | `tool_name` | `Bash`, `Edit`, `WebFetch`, `mcp__x__y`, `hook:<Event>`, ... |
 | `command_line` | Shell command. A POSIX heredoc body moves to `content` only when `cat`/`tee`, `git commit\|tag` or `gh pr\|issue\|release` stores it and nothing pipes it on; a body any other command may execute (shells, interpreters, ssh, sudo, scripts) stays. Here-strings (`<<<`) and PowerShell here-strings stay. |
 | `target_path` | File path, absolute when resolvable, `.`/`..` resolved lexically, forward slashes. Shell events have none. |
-| `url`, `domain` | Request URL and its host. |
+| `url`, `domain` | Request URL and its host. A shell command gets one: the first non-loopback URL with a scheme, else the first scheme-less host operand of `curl`, `wget`, `http`, `nc`, `scp`, `rsync` or `ssh` (the `url` then reads `tcp://host`). Known limit: a command with several hosts reports one, so a known domain listed first can hide a later new one. |
 | `mcp_server`, `mcp_tool` | MCP call parts. |
 | `outcome` | `success`, `error`, `blocked`, `unknown` (no result in the file). `blocked` includes user-rejected and interrupted. |
 | `denial_kind` | `automode-blocked`, `permission-rule` (Claude Code blocked it), `user-rejected`, `interrupted`. |
