@@ -176,7 +176,9 @@ export function linkCorrelations(rules: Rule[], index: Map<string, Rule>, onErro
   for (const rule of kept) {
     if (rule.kind !== "correlation") continue;
     for (const ref of rule.rules) {
-      referenced.add(ref);
+      // Only a correlation in the rule's own file silences it: a rule pack loaded beside the shipped rules can add a
+      // correlation over them, but cannot mute them.
+      if (ref.path === rule.path) referenced.add(ref);
       if (rule.generate) generating.add(ref);
     }
   }

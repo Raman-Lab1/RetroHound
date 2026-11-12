@@ -172,7 +172,7 @@ const patternTest = (value: string, shape: Shape, cased: boolean, windash: boole
 
 // A long OR-list of plain literals on one field is one alternation regex per match kind instead of one scan per value.
 // The literals are escaped and (case-insensitive path) already lowercased, and the regex has no `i` flag and runs on the
-// same lowercased text as includes/startsWith/endsWith, so there is no case-folding difference. No `re` checks or 8 KiB cap.
+// same lowercased text as includes/startsWith/endsWith, so there is no case-folding difference. No `re` checks or windows.
 const MIN_MERGE = 4;
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const REGEX_WRAP = { includes: ["", ""], startsWith: ["^", ""], endsWith: ["", "$"] } as const;
@@ -198,39 +198,109 @@ function orTests(plans: Plan[]): StringTest[] {
   return tests;
 }
 
-// Refuses what 0003 bans and what JS would silently read differently from PCRE (`\A` is a plain `A` here).
-function checkRegex(src: string): void {
-  let inClass = false;
-  for (let i = 0; i < src.length; i++) {
-    const c = src[i]!;
-    if (c === "\\") {
-      const n = src[++i] ?? "";
-      if (n === "k" || (!inClass && /[1-9]/.test(n))) throw new RuleError("regex-backreference", `backreference in /${src}/`);
-      if (/[a-zA-Z]/.test(n) && !"dDwWsSbBnrtfvcxu".includes(n)) throw new RuleError("bad-regex", `unsupported escape \\${n} in /${src}/`);
-      if ((n === "u" || n === "x") && src[i + 1] === "{") throw new RuleError("bad-regex", `\\${n}{...} in /${src}/: write a character above U+FFFF as a surrogate pair`);
-    } else if (inClass) {
-      if (c === "]") inClass = false;
-      else if (c === "[" && src[i + 1] === ":") throw new RuleError("bad-regex", `POSIX class in /${src}/`);
-      else if (c >= "\uD800" && c <= "\uDFFF") throw new RuleError("bad-regex", `character above U+FFFF inside [...] in /${src}/: it would match half a character`);
-    } else if (c === "[") inClass = true;
-    else if (c === "(" && /^\(\?<?[=!]/.test(src.slice(i, i + 4))) throw new RuleError("regex-lookaround", `lookaround in /${src}/`);
-  }
+// A quantifier at src[i] as [min, max, length with a lazy `?`], or null. A `{` that is no quantifier is a literal.
+function quantifierAt(src: string, i: number): [number, number, number] | null {
+  const c = src[i];
+  let q: [number, number, number] | null = c === "*" ? [0, Infinity, 1] : c === "+" ? [1, Infinity, 1] : c === "?" ? [0, 1, 1] : null;
+  const m = c === "{" ? /^\{(\d+)(,(\d*))?\}/.exec(src.slice(i, i + 24)) : null;
+  if (m) q = [Number(m[1]), m[2] === undefined ? Number(m[1]) : m[3] ? Number(m[3]) : Infinity, m[0].length];
+  if (q && src[i + q[2]] === "?") q[2]++;
+  return q;
 }
 
-// shortcut: `re` sees only the first 8 KiB of a field, so a match past that is missed (0006 stores up to 32 MB); raise
-// it, or scan the tail too, when a rule needs it. The cap bounds linear and quadratic patterns (`a+b`); an unanchored
-// `.*a.*b` is cubic in V8 (about 1 s at 1 KiB), which only reviewed bundled rules may use.
-const REGEX_MAX_TEXT = 8192;
+// One open group: does it hold an unbounded quantifier, did every finished alternative have an unquantified atom, does
+// the current one.
+type Group = { unbounded: boolean; solid: boolean; branch: boolean };
+const group = (): Group => ({ unbounded: false, solid: true, branch: false });
+
+function checkEscape(src: string, n: string, next: string | undefined, inClass: boolean): void {
+  if (n === "k" || (!inClass && /[1-9]/.test(n))) throw new RuleError("regex-backreference", `backreference in /${src}/`);
+  if (/[a-zA-Z]/.test(n) && !"dDwWsSbBnrtfvcxu".includes(n)) throw new RuleError("bad-regex", `unsupported escape \\${n} in /${src}/`);
+  if ((n === "u" || n === "x") && next === "{") throw new RuleError("bad-regex", `\\${n}{...} in /${src}/: write a character above U+FFFF as a surrogate pair`);
+}
+
+/**
+ * Refuses what 0003 bans, what JS would silently read differently from PCRE (`\A` is a plain `A` here), and a group
+ * repeated without bound whose body is only quantified atoms, one of them unbounded, such as `(\w+\s?)+` or `(a+)+`:
+ * exponential backtracking that no text limit bounds. Returns whether the pattern has an unbounded quantifier.
+ * ponytail: catches the common nested shapes only; `(\w+\w)+` or `(a|a)+` still pass. The full fix is a linear engine.
+ */
+function checkRegex(src: string): boolean {
+  const stack = [group()];
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i]!;
+    let inner: Group | undefined;
+    if (c === "\\") {
+      const n = src[i + 1] ?? "";
+      checkEscape(src, n, src[i + 2], false);
+      i += 2;
+      if (n === "b" || n === "B") continue; // zero-width
+    } else if (c === "[") {
+      for (i++; i < src.length && src[i] !== "]"; i++) {
+        const d = src[i]!;
+        if (d === "\\") checkEscape(src, src[++i] ?? "", src[i + 1], true);
+        else if (d === "[" && src[i + 1] === ":") throw new RuleError("bad-regex", `POSIX class in /${src}/`);
+        else if (d >= "\uD800" && d <= "\uDFFF") throw new RuleError("bad-regex", `character above U+FFFF inside [...] in /${src}/: it would match half a character`);
+      }
+      i++;
+    } else if (c === "(") {
+      if (/^\(\?<?[=!]/.test(src.slice(i, i + 4))) throw new RuleError("regex-lookaround", `lookaround in /${src}/`);
+      i = src[i + 1] !== "?" ? i + 1 : src[i + 2] === "<" ? src.indexOf(">", i) + 1 || src.length : i + 3;
+      stack.push(group());
+      continue;
+    } else if (c === "|" || c === ")") {
+      const g = stack[stack.length - 1]!;
+      g.solid &&= g.branch;
+      g.branch = false;
+      i++;
+      if (c === "|" || stack.length === 1) continue; // an unbalanced `)` is for new RegExp to refuse
+      inner = stack.pop();
+    } else {
+      i++;
+      if (c === "^" || c === "$") continue;
+    }
+    // An atom ends at i: an escape, a class, a character or the group `inner`.
+    const g = stack[stack.length - 1]!;
+    if (inner?.unbounded) g.unbounded = true;
+    const q = quantifierAt(src, i);
+    if (!q) {
+      if (!inner || inner.solid) g.branch = true;
+      continue;
+    }
+    i += q[2];
+    if (q[1] !== Infinity) continue;
+    if (inner?.unbounded && !inner.solid) throw new RuleError("regex-nested-quantifier", `nested unbounded quantifiers in /${src}/ backtrack exponentially`);
+    g.unbounded = true;
+  }
+  return stack[0]!.unbounded;
+}
+
+// A pattern without `*`, `+` or `{n,}` is tested on the whole field: its work is linear in the text (at most its own
+// width per start), so no length of padding hides a match, from scan or from the live hook. An unbounded pattern can be
+// quadratic (`a+b`) or worse, so it sees overlapping 8 KiB windows over the first 256 KiB plus the last window: a match
+// longer than 4 KiB can be missed there, and an anchor or `\b` can match at a window edge.
+// ponytail: an unbounded pattern misses a match in the middle of a field over 256 KiB; write it bounded (`\s{1,9}` for
+// `\s+`) to cover any length, or move to a linear regex engine.
+const REGEX_WINDOW = 8192;
+const REGEX_STEP = REGEX_WINDOW / 2;
+const REGEX_SCAN = 256 * 1024;
 
 function regexTest(value: unknown, flags: string): StringTest {
   if (typeof value !== "string") throw new RuleError("bad-value", "re needs a string pattern");
-  checkRegex(value);
+  const unbounded = checkRegex(value);
+  let re: RegExp;
   try {
-    const re = new RegExp(value, flags);
-    return (s) => re.test(s.length > REGEX_MAX_TEXT ? s.slice(0, REGEX_MAX_TEXT) : s);
+    re = new RegExp(value, flags);
   } catch (e) {
     throw new RuleError("bad-regex", `${(e as Error).message} (inline flags: use |re|i, |re|m, |re|s)`);
   }
+  if (!unbounded) return (s) => re.test(s);
+  return (s) => {
+    if (s.length <= REGEX_WINDOW) return re.test(s);
+    for (let i = 0; i < REGEX_SCAN && i + REGEX_STEP < s.length; i += REGEX_STEP) if (re.test(s.slice(i, i + REGEX_WINDOW))) return true;
+    return s.length > REGEX_SCAN && re.test(s.slice(-REGEX_WINDOW));
+  };
 }
 
 function onField(field: string, cased: boolean, test: StringTest): Pred {
@@ -307,7 +377,7 @@ function parseMods(field: string, mods: string[]): Mods {
   if ((m.exists || m.cmp) && mods.length > 1) throw combo(`${m.cmp || "exists"} stands alone`);
   if (m.flags && !m.re) throw combo("regex flags need re");
   if (m.re && (m.shape !== "exact" || m.cased || m.windash)) throw combo("re takes only all and the flags i, m, s");
-  if (m.fieldref && (m.shape === "contains" || m.cased || m.all || m.windash)) throw combo("fieldref takes only startswith or endswith");
+  if (m.fieldref && (m.shape === "contains" || m.re || m.cased || m.all || m.windash)) throw combo("fieldref takes only startswith or endswith");
   return m;
 }
 

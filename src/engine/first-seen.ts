@@ -19,11 +19,15 @@ export function setFirstSeen(fs: FirstSeen = none()): void {
 
 export const firstSeen = (scope: keyof FirstSeen, ev: Row): boolean => current[scope].has(ev.id as string);
 
-/** The earliest parseable ts plus the cold-start window: an event before it is baseline, never first-seen. */
+// An ISO 8601 date-time. Date.parse alone takes "0" as the year 2000, and "0" or "!" sorts before every real ts: one
+// planted line with such a ts would become the earliest carrier and turn the real first contact into baseline.
+const stamped = (ts: string): boolean => /^\d{4}-\d\d-\d\dT/.test(ts) && !Number.isNaN(Date.parse(ts));
+
+/** The earliest ISO ts plus the cold-start window: an event before it is baseline, never first-seen. */
 export function coldStartCutoff(tss: Iterable<string>): string {
   let min = Infinity;
   for (const ts of tss) {
-    const t = Date.parse(ts); // NaN fails the comparison: a bad ts is skipped
+    const t = stamped(ts) ? Date.parse(ts) : NaN; // NaN fails the comparison: a bad ts is skipped
     if (t < min) min = t;
   }
   return Number.isFinite(min) ? new Date(min + COLD_START_MS).toISOString() : "~"; // "~" sorts after any ts
@@ -55,6 +59,7 @@ export function firstSeenOf(events: Row[]): FirstSeen {
     if (!old || before(ev, old)) m.set(key, ev);
   };
   for (const ev of events) {
+    if (!stamped(str(ev.ts))) continue; // never a carrier, so never baseline for a later event
     for (const k of keys(ev)) {
       keep(global, k, ev);
       keep(project, `${str(ev.project_path)}\0${k}`, ev);
