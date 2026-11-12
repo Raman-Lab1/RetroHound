@@ -1,11 +1,11 @@
 # Formula template for an own tap (docs/integrations.md, Homebrew). Copy to Formula/retrohound.rb in a
-# homebrew-<name> repository and fill in sha256 from the published tarball before the first install.
+# homebrew-<name> repository. On a version bump, update url and sha256 together.
 class Retrohound < Formula
   desc "Audit what your AI coding agent did: Sigma rules over agent transcripts, offline"
   homepage "https://github.com/Raman-Lab1/RetroHound"
   url "https://registry.npmjs.org/retrohound/-/retrohound-0.3.0.tgz"
-  # PLACEHOLDER: replace with `curl -sL <url> | shasum -a 256` of the published tarball.
-  sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+  # SHA-256 of the published tarball: `curl -sL <url> | shasum -a 256`.
+  sha256 "c34f24bd346ab2641ad15745bead24767a1aecb47143393055c896c715ff4ff7"
   license "Apache-2.0"
 
   depends_on "node"
