@@ -37,8 +37,10 @@ export function seenSecrets(dbPath: string, project?: string): { seen: Map<strin
 /** Streams `git log -p --all` of `dir`, calling `found` for every wanted fingerprint in added lines or a commit message.
  * Resolves false when `dir` is not a work tree (or missing), or git is not installed. */
 export async function scanHistory(dir: string, wanted: Set<string>, found: (fp: string, commit: string, file: string, date: string) => void): Promise<boolean> {
-  const git = spawn("git", ["-C", dir, "log", "-p", "--all", "--no-color", "--no-ext-diff", "--no-textconv", "--date=iso-strict",
-    "--pretty=medium", "--no-show-signature", "--src-prefix=a/", "--dst-prefix=b/"], { // the repo's config must not change the format
+  // the repo's config must not change the format or run anything: --submodule=short keeps git from spawning a child
+  // git in a submodule, which would not inherit --no-ext-diff/--no-textconv and would run that submodule's diff drivers
+  const git = spawn("git", ["-C", dir, "-c", "core.fsmonitor=false", "log", "-p", "--all", "--no-color", "--no-ext-diff", "--no-textconv",
+    "--submodule=short", "--date=iso-strict", "--pretty=medium", "--no-show-signature", "--src-prefix=a/", "--dst-prefix=b/"], {
     stdio: ["ignore", "pipe", "ignore"],
     env: { ...process.env, GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0" }, // a partial clone must not fetch blobs
   });
