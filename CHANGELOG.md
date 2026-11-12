@@ -5,6 +5,9 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- The Homebrew formula and the Velociraptor artifact carry the SHA-256 of the 0.3.1 tarball.
+
 ## [0.3.1] - 2026-11-12
 
 ### Added
