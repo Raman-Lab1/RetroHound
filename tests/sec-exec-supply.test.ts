@@ -1,13 +1,15 @@
 // preflight on a hostile checkout: symlinked parent directories stay inside the repo, and a workspace glob cannot
 // hang the expansion. Defanged inputs only (192.0.2.x, example.invalid).
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { parse } from "yaml";
 import { collectRepo, globMatch } from "../src/collectors/repo/collect.ts";
 
 const dirs: string[] = [];
-const tmp = () => (dirs.push(mkdtempSync(join(tmpdir(), "rh-sec-"))), dirs[dirs.length - 1]!);
+const tmp = () => (dirs.push(realpathSync(mkdtempSync(join(tmpdir(), "rh-sec-")))), dirs[dirs.length - 1]!);
 afterEach(() => void dirs.splice(0).forEach((d) => rmSync(d, { recursive: true, force: true })));
 const put = (root: string, files: Record<string, string>) => {
   for (const [rel, text] of Object.entries(files)) {
@@ -65,4 +67,20 @@ test("a backtracking workspace glob against a long directory name finishes at on
   const t = performance.now();
   expect(collectRepo(repo).events.map((e) => e.raw_ref.file)).toEqual(["package.json"]);
   expect(performance.now() - t).toBeLessThan(1000);
+});
+
+test("the GitHub Action runs npm outside the checkout, so the reviewed repo's .npmrc is never read", () => {
+  const action = parse(readFileSync(join(import.meta.dir, "..", "action.yml"), "utf8")) as { runs: { steps: { run?: string }[] } };
+  const run = action.runs.steps.find((s) => s.run)!.run!;
+  const ws = tmp(), temp = tmp(), bin = tmp();
+  put(ws, { ".npmrc": "node-options=--require=./x.cjs\nregistry=http://192.0.2.1/\n" });
+  const log = join(temp, "calls.log");
+  for (const name of ["npm", "npx", "node"]) writeFileSync(join(bin, name), `#!/bin/sh\necho "${name} $PWD $*" >> '${log}'\n`, { mode: 0o755 });
+  writeFileSync(join(temp, "step.sh"), run);
+  const env = { PATH: `${bin}:${process.env.PATH}`, RUNNER_TEMP: temp, GITHUB_OUTPUT: join(temp, "out"), RH_COMMAND: "preflight", RH_FAIL_ON: "high", RH_ARGS: ".", RH_OUTPUT: "" };
+  expect(spawnSync("bash", [join(temp, "step.sh")], { cwd: ws, env }).status).toBe(0);
+  const calls = readFileSync(log, "utf8").trim().split("\n");
+  expect(calls).toHaveLength(2);
+  expect(calls[0]).toStartWith(`npm ${temp} install --prefix ${temp}/retrohound `);
+  expect(calls[1]).toBe(`node ${ws} ${temp}/retrohound/node_modules/retrohound/dist/cli.mjs preflight --fail-on high .`);
 });

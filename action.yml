@@ -28,7 +28,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: actions/setup-node@v5
+    - uses: actions/setup-node@v5 # TODO(owner): pin to a full commit SHA, every consumer runs it
       with:
         node-version: "24"
     - id: run
@@ -46,8 +46,13 @@ runs:
         # word splitting on purpose: args is a list of flags
         # shellcheck disable=SC2086
         set -f; set -- "$@" $RH_ARGS; set +f
+        # npm reads the .npmrc of its working directory, and in the checkout that file is the reviewed repo's
+        # (node-options, registry): install from $RUNNER_TEMP, then run the CLI with plain node in the workspace.
+        rh="$RUNNER_TEMP/retrohound"
+        (cd "$RUNNER_TEMP" && npm install --prefix "$rh" --no-save --no-audit --no-fund --ignore-scripts retrohound@0.2.0 >&2) ||
+          { echo "::error::could not install retrohound"; echo "exit-code=3" >> "$GITHUB_OUTPUT"; exit 3; }
         code=0
-        if [ -n "$RH_OUTPUT" ]; then npx --yes retrohound@0.2.0 "$@" > "$RH_OUTPUT" || code=$?
-        else npx --yes retrohound@0.2.0 "$@" || code=$?; fi
+        if [ -n "$RH_OUTPUT" ]; then node "$rh/node_modules/retrohound/dist/cli.mjs" "$@" > "$RH_OUTPUT" || code=$?
+        else node "$rh/node_modules/retrohound/dist/cli.mjs" "$@" || code=$?; fi
         echo "exit-code=$code" >> "$GITHUB_OUTPUT"
         exit "$code"
