@@ -2,7 +2,7 @@
 // tests drive it without a process. Spec: https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle
 // and .../server/tools (the 2026-07-28 revision is stateless; its clients fall back to `initialize`, handled here).
 import { TOOL_VERSION } from "../version.ts";
-import { TOOLS, ToolError, callTool, type Ctx } from "./tools.ts";
+import { TOOLS, ToolError, UNTRUSTED, callTool, type Ctx } from "./tools.ts";
 
 export const PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"] as const;
 const INFO = { name: "retrohound", version: TOOL_VERSION };
@@ -45,7 +45,7 @@ export function handleLine(line: string, ctx: Ctx): string | undefined {
     case "initialize": {
       const asked = params.protocolVersion;
       const version = (PROTOCOL_VERSIONS as readonly unknown[]).includes(asked) ? asked : PROTOCOL_VERSIONS[0];
-      return ok(id, { protocolVersion: version, capabilities: { tools: {} }, serverInfo: INFO });
+      return ok(id, { protocolVersion: version, capabilities: { tools: {} }, serverInfo: INFO, instructions: UNTRUSTED });
     }
     case "ping":
       return ok(id, {});
