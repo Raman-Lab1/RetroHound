@@ -13,8 +13,8 @@ const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 export const readAntigravityConfig: ConfigReader = ({ home, projects }) => {
   const c = collector("antigravity");
   const gemini = join(home, ".gemini");
-  const json = (root: string, file: string): Json | undefined => {
-    const text = c.read(root, file);
+  const json = (root: string, file: string, scope: string): Json | undefined => {
+    const text = c.read(root, file, scope);
     if (!text?.trim()) return undefined; // absent, or empty as Antigravity first writes mcp_config.json
     try {
       return obj(JSON.parse(text));
@@ -25,7 +25,7 @@ export const readAntigravityConfig: ConfigReader = ({ home, projects }) => {
   // `mcpServers.<name>`: `command` is stdio, `serverUrl`/`url` Streamable HTTP. Only key names are looked at; the
   // values go into the hash only.
   const mcp = (root: string, file: string, scope: string) => {
-    for (const [name, s] of Object.entries(obj(json(root, file)?.mcpServers))) {
+    for (const [name, s] of Object.entries(obj(json(root, file, scope)?.mcpServers))) {
       const v = obj(s);
       if (v.disabled === true) continue;
       const detail = "command" in v ? "stdio" : "serverUrl" in v || "url" in v ? "http" : undefined;
@@ -35,7 +35,7 @@ export const readAntigravityConfig: ConfigReader = ({ home, projects }) => {
   // Top-level keys are named groups (`enabled: false` turns one off). PreToolUse/PostToolUse hold {matcher, hooks: [...]},
   // the other events hold handlers directly; a handler is {type?, command, timeout?}.
   const hooks = (root: string, file: string, scope: string) => {
-    for (const group of Object.values(json(root, file) ?? {})) {
+    for (const group of Object.values(json(root, file, scope) ?? {})) {
       if (obj(group).enabled === false) continue;
       for (const [event, entries] of Object.entries(obj(group))) {
         for (const e of list(entries)) {

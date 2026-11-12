@@ -91,6 +91,7 @@ test("every location and scope, names in the index's form", () => {
     "plugin | demo | local | ",
     "plugin | demo | managed | ",
     "plugin | demo | user | ",
+    `skill | ${join(home, ".claude/skills/evil/SKILL.md")} | user | symlink outside the directory`,
     "skill | alpha-skill | user | ",
     "skill | beta | user | ",
     "skill | demo:review | plugin | ",
@@ -117,7 +118,7 @@ test("a symlink out of the directory, an oversized file and a non-JSON file are 
 
 test("a missing project, a disabled plugin and an older plugin install are not read", () => {
   expect(JSON.stringify(result)).not.toContain(gone);
-  expect(rows.join("\n")).not.toMatch(/ghost|nope|old/);
+  expect(rows.filter((r) => !r.endsWith("symlink outside the directory")).join("\n")).not.toMatch(/ghost|nope|old/);
   expect(result.files).toBe(19); // the oversized file and the symlink are not read; the non-JSON one is
 });
 

@@ -153,7 +153,7 @@ export function renderFootprint(d: Footprint): string {
       [raw(badge(f.level)), f.rule, f.ts, raw(id8(f.session_id)), f.project, f.agent_id ? raw(`sub-agent ${id8(f.agent_id)}`) : "main", f.message]))),
     `<footer>${more ? `<ul>${more}</ul>` : ""}<p>Built offline from the local index. Nothing on this page was fetched or sent.</p></footer>`,
   ].join("\n");
-  const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">`;
+  const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8">${csp}<meta name="viewport" content="width=device-width,initial-scale=1">`
     + `<meta name="color-scheme" content="light dark"><title>RetroHound footprint</title><style>${CSS}</style></head><body>\n${body}\n</body></html>\n`;
 }

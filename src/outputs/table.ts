@@ -5,8 +5,11 @@ import { mask } from "../normalize/mask.ts";
 import type { ScanReport } from "./report.ts";
 
 type Colors = ReturnType<typeof pc.createColors>;
-const short = (id: string) => id.slice(0, 8);
-const agentOf = (e?: AgentEvent) => (e?.agent_id ? `sub-agent ${e.agent_id.slice(0, 8)}` : "main");
+/** A transcript- or repo-controlled value made safe for a terminal or CI log: C0/C1 controls (ESC, BEL, CR, LF, ...)
+ * shown as \\xNN, so no CSI/OSC sequence runs and no `::workflow-command` line starts. Output only: rules see raw values. */
+export const term = (s: string) => s.replace(/[\x00-\x1f\x7f-\x9f]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`);
+const short = (id: string) => term(id.slice(0, 8));
+const agentOf = (e?: AgentEvent) => (e?.agent_id ? `sub-agent ${short(e.agent_id)}` : "main");
 const rank = (l: Level) => LEVELS.indexOf(l);
 const LABEL: Record<Level, string> = { informational: "INFO", low: "LOW", medium: "MED", high: "HIGH", critical: "CRIT" };
 const paint = (c: Colors, l: Level, s: string) =>
@@ -17,7 +20,7 @@ function skippedLines(lines: ScanReport["scan"]["lines"]): string[] {
   const types = Object.entries(lines?.unknown_types ?? {}).sort((a, b) => b[1] - a[1]);
   const unknown = types.reduce((k, [, v]) => k + v, 0);
   if (!lines || (!lines.malformed && !unknown)) return [];
-  const top = types.slice(0, 5).map(([t, v]) => `${t} ${v}`).join(", ") + (types.length > 5 ? ", …" : "");
+  const top = types.slice(0, 5).map(([t, v]) => `${term(t)} ${v}`).join(", ") + (types.length > 5 ? ", …" : "");
   return [`  skipped lines: ${lines.malformed} malformed · ${unknown} of unknown type${unknown ? ` (${top})` : ""}`];
 }
 
@@ -26,14 +29,14 @@ function blockedLines(b: ScanReport["scan"]["blocked_breakdown"]): string[] {
   if (!b) return [];
   const top = (m: Record<string, number>) => {
     const all = Object.entries(m);
-    return all.slice(0, 5).map(([k, v]) => `${k} ${v}`).join(" · ") + (all.length > 5 ? " · …" : "");
+    return all.slice(0, 5).map(([k, v]) => `${term(k)} ${v}`).join(" · ") + (all.length > 5 ? " · …" : "");
   };
-  const kinds = Object.entries(b.kinds).map(([k, { main, sub_agent }]) => `${k} ${main + sub_agent}${sub_agent ? ` (${sub_agent} sub-agent)` : ""}`);
+  const kinds = Object.entries(b.kinds).map(([k, { main, sub_agent }]) => `${term(k)} ${main + sub_agent}${sub_agent ? ` (${sub_agent} sub-agent)` : ""}`);
   return [
     `    by kind: ${kinds.join(" · ")}`,
     ...(b.categories ? [`    by category: ${top(b.categories)}`] : []),
     ...(b.attributions ? [`    by attribution: ${top(b.attributions)}`] : []),
-    `    top projects: ${b.top_projects.slice(0, 3).map((p) => `${p.project_path} ${p.blocked}`).join(" · ")}`,
+    `    top projects: ${b.top_projects.slice(0, 3).map((p) => `${term(p.project_path)} ${p.blocked}`).join(" · ")}`,
   ];
 }
 
@@ -42,7 +45,7 @@ function findingLines(report: ScanReport, c: Colors): string[] {
   const byRule = new Map<string, Finding[]>();
   for (const f of report.findings) byRule.get(f.rule_id)?.push(f) ?? byRule.set(f.rule_id, [f]);
   const groups = [...byRule.values()].sort((a, b) => rank(b[0]!.level) - rank(a[0]!.level));
-  const nameOf = (f: Finding) => rules.get(f.rule_id)?.name ?? f.rule_id;
+  const nameOf = (f: Finding) => term(rules.get(f.rule_id)?.name ?? f.rule_id);
   const width = Math.max(28, ...groups.map((fs) => nameOf(fs[0]!).length + 2));
   return groups.map((fs) => {
     const f = fs[0]!;
@@ -53,7 +56,7 @@ function findingLines(report: ScanReport, c: Colors): string[] {
     const agents = ids.length <= 2 ? ids.join("+") : `${ids.includes("main") ? "main+" : ""}${subs} sub-agents`;
     const where = sessions > 1
       ? `${sessions} sessions`
-      : `${short(f.session_id)}  ${f.ts.slice(0, 10)}  ${f.events[0]?.project_path ?? "-"}  ${rule?.tags[0] ?? ""}`;
+      : `${short(f.session_id)}  ${term(f.ts.slice(0, 10))}  ${term(f.events[0]?.project_path ?? "-")}  ${term(rule?.tags[0] ?? "")}`;
     return `  ${paint(c, f.level, LABEL[f.level].padEnd(4))}  ${nameOf(f).padEnd(width)}${where}  [${agents}]`;
   });
 }
@@ -74,7 +77,7 @@ function rotateLines(report: ScanReport): string[] {
 
 export function toTable(report: ScanReport, opts: { color: boolean }): string {
   const { scan } = report;
-  if (scan.sessions === 0) return mask(`No ${scan.agents ? "agent" : "Claude Code"} sessions found at ${scan.root}\n`);
+  if (scan.sessions === 0) return mask(`No ${scan.agents ? "agent" : "Claude Code"} sessions found at ${term(scan.root)}\n`);
   const c = pc.createColors(opts.color);
   const n = (x: number) => x.toLocaleString("en-US");
   const secs = ((Date.parse(scan.finished_at) - Date.parse(scan.started_at)) / 1000).toFixed(1);

@@ -68,6 +68,6 @@ export function renderWrapped(d: WrappedData): string {
     `<section><h2>Riskiest session</h2><p>${r ? `${h(r.session)} in ${h(r.project)}: ${h(r.findings)} findings, worst ${h(r.level)}` : "none"}</p></section>`,
     `<section><h2>Spiciest command</h2>${sp ? `<code>${h(sp.command)}</code><p>${h(sp.rule)} [${h(sp.level)}]</p>` : "<p>none</p>"}</section>`,
   ].join("");
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>RetroHound Wrapped</title><style>${CSS}</style></head><body><div class="card">${body}</div></body></html>\n`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>RetroHound Wrapped</title><style>${CSS}</style></head><body><div class="card">${body}</div></body></html>\n`;
   return html;
 }

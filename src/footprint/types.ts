@@ -86,6 +86,12 @@ export type ConfigItem = {
 export const entryHash = (entry: unknown) => createHash("sha256").update(mask(JSON.stringify(entry ?? null, (_k, v: unknown) =>
   v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : v))).digest("hex");
 
+/** The kind a config file sets up, by its name. A file the agent would follow a symlink to outside the directory read is
+ * not read, but is listed as one item of this kind, so a planted settings.json or .mcp.json still shows (and shows as new). */
+export const linkedKind = (file: string): ConfigItem["kind"] =>
+  /SKILL\.md$/.test(file) ? "skill" : /mcp[^\\/]*\.json$|\.claude\.json$/.test(file) ? "mcp_server" : /plugins?\.json$/.test(file) ? "plugin" : "hook";
+export const LINKED = "symlink outside the directory";
+
 /** What one agent's reader found. Names and hook commands only: env, headers, args and URLs are never read out, only
  * hashed (masked) into `hash`. */
 export type ConfigRead = { items: ConfigItem[]; files: number; skipped: { path: string; reason: string }[] };

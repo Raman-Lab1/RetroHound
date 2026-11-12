@@ -70,14 +70,22 @@ function ecsEvent(e: AgentEvent) {
   };
 }
 
+/** A transcript timestamp that is not ISO 8601 with a zone is rewritten as one (the scan's end when it is not a date at all):
+ * a SIEM rejects an alert whose @timestamp is "January 1, 2024" even though Date.parse reads it. */
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/;
+const dateOr = (ts: string, fallback: string) =>
+  ISO.test(ts) && !Number.isNaN(Date.parse(ts)) ? ts : Number.isNaN(Date.parse(ts)) ? fallback : new Date(ts).toISOString();
+
 function ecsLine(f: Finding, rule: ReportRule | undefined, report: ScanReport) {
   const [p, ...rest] = f.events;
   const base = p ? ecsEvent(p) : { "@timestamp": f.ts, retrohound: { session_id: f.session_id } };
+  const ts = dateOr(base["@timestamp"], report.scan.finished_at);
   const sev = SEVERITY[f.level];
   const atk = parseTags(rule?.tags ?? []);
   const baseEvent = "event" in base ? base.event : {};
   return {
     ...base,
+    "@timestamp": ts,
     ecs: { version: ECS_VERSION },
     event: {
       ...baseEvent, kind: "alert", module: "retrohound", dataset: "retrohound.finding", id: f.id,
@@ -95,7 +103,7 @@ function ecsLine(f: Finding, rule: ReportRule | undefined, report: ScanReport) {
     tags: atk.other,
     message: f.message,
     retrohound: {
-      ...base.retrohound, finding: { id: f.id, event_ids: [p, ...rest].filter(Boolean).map((e) => e!.id) },
+      ...base.retrohound, ...(ts === base["@timestamp"] ? {} : { raw_ts: base["@timestamp"] }), finding: { id: f.id, event_ids: [p, ...rest].filter(Boolean).map((e) => e!.id) },
     },
   };
 }
@@ -114,7 +122,7 @@ function ocsfLine(f: Finding, rule: ReportRule | undefined, report: ScanReport) 
   const p = f.events[0];
   const atk = parseTags(rule?.tags ?? []);
   const times = f.events.map((e) => Date.parse(e.ts)).filter((t) => !Number.isNaN(t));
-  const time = Date.parse(f.ts);
+  const time = Date.parse(dateOr(f.ts, report.scan.finished_at));
   const attacks = [
     ...atk.tactics.map((n) => ({ tactic: { name: n } })),
     ...atk.techniques.map((t) => ({

@@ -72,6 +72,7 @@ echo multi
       "mcp_server | dotted.name | user | http",
       "mcp_server | projsrv | project | stdio",
       "plugin | tools | user | ",
+      `skill | ${join(proj, ".agents", "skills", "linked", "SKILL.md")} | project | symlink outside the directory`,
       "skill | front-name | user | ",
       "skill | legacy | user | ",
       "skill | quoted | project | ",

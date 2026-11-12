@@ -8,7 +8,7 @@ import { dirname, isAbsolute, join } from "node:path";
 import { fwd, hookCommands, inside, MAX_FILE_BYTES, MAX_FILES } from "../collectors/repo/collect.ts";
 import { settingsPath } from "../hooks/install.ts";
 import { mask } from "../normalize/mask.ts";
-import { type ConfigItem, type ConfigRead, type ConfigReader, entryHash, MAX_CONFIG_ITEMS } from "./types.ts";
+import { type ConfigItem, type ConfigRead, type ConfigReader, entryHash, LINKED, linkedKind, MAX_CONFIG_ITEMS } from "./types.ts";
 
 // ponytail: the index can hold thousands of project paths; the first 200 are read, which bounds a report's disk reads.
 export const MAX_PROJECTS = 200;
@@ -49,14 +49,17 @@ export function readClaude({ home, projects, env = process.env }: Parameters<Con
   };
 
   /** The text of a regular file that resolves inside `root` and fits MAX_FILE_BYTES; a missing file is normal. */
-  const read = (file: string, root: string): string | undefined => {
+  const read = (file: string, root: string, scope: string): string | undefined => {
     let real: string, size: number;
     try {
       real = fwd(realpathSync(file));
       const st = statSync(real);
       if (!st.isFile()) return undefined;
       size = st.size;
-      if (!inside(fwd(realpathSync(root)), real)) return skip(file, "resolves outside the directory");
+      if (!inside(fwd(realpathSync(root)), real)) {
+        add(linkedKind(file), file, scope, file, LINKED, real);
+        return skip(file, "resolves outside the directory");
+      }
     } catch {
       return undefined;
     }
@@ -69,8 +72,8 @@ export function readClaude({ home, projects, env = process.env }: Parameters<Con
       return skip(file, "unreadable");
     }
   };
-  const json = (file: string, root: string): [Json, string] | undefined => {
-    const text = read(file, root);
+  const json = (file: string, root: string, scope: string): [Json, string] | undefined => {
+    const text = read(file, root, scope);
     if (text === undefined) return undefined;
     try {
       const j: unknown = JSON.parse(text);
@@ -102,9 +105,12 @@ export function readClaude({ home, projects, env = process.env }: Parameters<Con
   };
   const enabled = new Set<string>(); // `name@marketplace` ids some settings file turns on
   const settings = (file: string, root: string, scope: string) => {
-    const r = json(file, root);
+    const r = json(file, root, scope);
     if (!r) return;
     hooks(r[1], scope, file);
+    // commands Claude Code runs outside any tool call: the status line on every prompt render, the credential helpers
+    const run = { statusLine: obj(r[0].statusLine).command, ...Object.fromEntries(["apiKeyHelper", "awsAuthRefresh", "awsCredentialExport", "otelHeadersHelper"].map((k) => [k, r[0][k]])) };
+    for (const [k, cmd] of Object.entries(run)) if (typeof cmd === "string" && cmd) add("hook", cmd, scope, file, `setting:${k}`);
     for (const [id, on] of Object.entries(obj(r[0].enabledPlugins))) {
       if (on !== true) continue;
       enabled.add(id);
@@ -117,7 +123,7 @@ export function readClaude({ home, projects, env = process.env }: Parameters<Con
     for (const e of list(dir)) {
       if (!e.isDirectory() && !e.isSymbolicLink()) continue;
       const file = join(dir, e.name, "SKILL.md");
-      const text = read(file, root);
+      const text = read(file, root, scope);
       if (text === undefined) continue;
       const front = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)?.[1] ?? "";
       add("skill", prefix + (/^name:[ \t]*["']?([a-z0-9-]+)["']?[ \t]*\r?$/m.exec(front)?.[1] ?? e.name), scope, file, undefined, text);
@@ -131,14 +137,14 @@ export function readClaude({ home, projects, env = process.env }: Parameters<Con
       return; // removed since it was recorded
     }
     const manifest = join(root, ".claude-plugin", "plugin.json");
-    const m = json(manifest, root)?.[0] ?? {};
+    const m = json(manifest, root, "plugin")?.[0] ?? {};
     const name = typeof m.name === "string" ? m.name : id; // components are namespaced under the manifest name
     const hookFile = (f: string) => {
-      const r = json(f, root);
+      const r = json(f, root, "plugin");
       if (r) hooks(r[1], "plugin", f);
     };
     const mcpFile = (f: string) => {
-      const r = json(f, root);
+      const r = json(f, root, "plugin");
       if (r) servers(r[0].mcpServers ?? r[0], "plugin", f, `plugin_${name}_`);
     };
     hookFile(join(root, "hooks", "hooks.json"));
@@ -159,7 +165,7 @@ export function readClaude({ home, projects, env = process.env }: Parameters<Con
   const cfg = env.CLAUDE_CONFIG_DIR || join(home, ".claude");
   // ~/.claude.json (inside CLAUDE_CONFIG_DIR when set): user servers at the top, local-scope ones per project path.
   const state = env.CLAUDE_CONFIG_DIR ? join(cfg, ".claude.json") : join(home, ".claude.json");
-  const global = json(state, dirname(state))?.[0];
+  const global = json(state, dirname(state), "user")?.[0];
   servers(global?.mcpServers, "user", state);
   settings(settingsPath("user", home, { CLAUDE_CONFIG_DIR: cfg }), cfg, "user");
   skills(join(cfg, "skills"), cfg, "user");
@@ -169,7 +175,7 @@ export function readClaude({ home, projects, env = process.env }: Parameters<Con
     if (e.name.endsWith(".json") && !e.name.startsWith(".")) settings(join(managed, "managed-settings.d", e.name), managed, "managed");
   }
   const fixed = join(managed, "managed-mcp.json");
-  servers(json(fixed, managed)?.[0].mcpServers, "managed", fixed);
+  servers(json(fixed, managed, "managed")?.[0].mcpServers, "managed", fixed);
   skills(join(managed, ".claude", "skills"), managed, "managed");
 
   // home is the user scope, read above; a project path that is gone since it was indexed has nothing to read
@@ -178,7 +184,7 @@ export function readClaude({ home, projects, env = process.env }: Parameters<Con
   for (const p of live.slice(0, MAX_PROJECTS)) {
     servers(obj(obj(global?.projects)[p]).mcpServers, "local", state);
     const mcp = join(p, ".mcp.json");
-    servers(json(mcp, p)?.[0].mcpServers, "project", mcp);
+    servers(json(mcp, p, "project")?.[0].mcpServers, "project", mcp);
     settings(settingsPath("project", p), p, "project");
     settings(settingsPath("local", p), p, "local");
     skills(join(p, ".claude", "skills"), p, "project");
@@ -187,7 +193,7 @@ export function readClaude({ home, projects, env = process.env }: Parameters<Con
   // Last, once every settings file has said which plugins are on. Several installs of one plugin (per scope or
   // project) can hold different versions: the most recently updated one is read.
   const base = join(cfg, "plugins");
-  for (const [id, installs] of Object.entries(obj(json(join(base, "installed_plugins.json"), cfg)?.[0].plugins))) {
+  for (const [id, installs] of Object.entries(obj(json(join(base, "installed_plugins.json"), cfg, "user")?.[0].plugins))) {
     if (!enabled.has(id) || !Array.isArray(installs)) continue;
     const latest = installs.map(obj).sort((a, b) => String(b.lastUpdated ?? "").localeCompare(String(a.lastUpdated ?? "")))[0];
     if (typeof latest?.installPath === "string") plugin(latest.installPath, base, id.replace(/@.*/, ""));
