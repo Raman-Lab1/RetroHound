@@ -1,6 +1,6 @@
 // RetroHound CLI. `main` returns the exit code so tests run in-process: 0 ok, 1 findings at or above
 // --fail-on (or purge refused), 2 bad input, 3 runtime failure.
-import { existsSync, rmSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, rmSync, statSync } from "node:fs";
 import { Command, CommanderError } from "commander";
 import { COLLECTORS } from "../collectors/index.ts";
 import { runScan, type ScanOptions } from "../scan.ts";
@@ -29,7 +29,7 @@ import { registerConvert } from "./convert.ts";
 import { retentionDays, summaryLines } from "./summary.ts";
 import { defaultReportPath, writeFootprint } from "./footprint.ts";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 type ScanFlags = {
   since?: string; agent: string; project?: string; rules: string; extraRules?: string[]; level?: string; format: string;
@@ -87,21 +87,32 @@ async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
   return min !== undefined && report.findings.some((x) => LEVELS.indexOf(x.level) >= min) ? 1 : 0;
 }
 
-function purgeCommand(f: { db?: string; yes?: boolean }, io: IO): number {
+/** The hook log and rules caches in the data dir; only regular files by those names, never a symlink or anything else. */
+export function dataFiles(dir = dirname(defaultLogPath())): string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir).filter((n) => n === "hook-log.jsonl" || /^rules-cache-[0-9a-f]+\.json$/.test(n))
+    .map((n) => join(dir, n)).filter((p) => lstatSync(p).isFile());
+}
+
+function purgeCommand(f: { db?: string; yes?: boolean; all?: boolean }, io: IO): number {
   const path = f.db ?? defaultDbPath();
-  if (!existsSync(path)) return io.out(`Nothing to delete: ${path} does not exist.\n`), 0;
-  if (!looksLikeIndex(path)) throw new UsageError(`${path} is not a RetroHound index; purge deletes only an index`);
+  const have = existsSync(path);
+  if (!have && !(f.all && dataFiles().length)) return io.out(`Nothing to delete: ${path} does not exist.\n`), 0;
+  if (have && !looksLikeIndex(path)) throw new UsageError(`${path} is not a RetroHound index; purge deletes only an index`);
   const page = defaultReportPath(path); // built from the index, so it goes with it; a --report elsewhere is the user's
   // The hook's own record is not part of the index: say it stays rather than widen what purge deletes.
-  const kept = existsSync(defaultLogPath()) ? `Kept: the hook log ${defaultLogPath()}, which purge does not delete.\n` : "";
+  const extra = f.all ? dataFiles() : [];
+  const kept = !f.all && existsSync(defaultLogPath()) ? `Kept: the hook log ${defaultLogPath()}, which purge does not delete.\n` : "";
   if (!f.yes) {
-    io.out(`Would delete the index ${path} (${statSync(path).size} bytes)${existsSync(page) ? ` and its footprint report ${page}` : ""}.\n`);
+    if (have) io.out(`Would delete the index ${path} (${statSync(path).size} bytes)${existsSync(page) ? ` and its footprint report ${page}` : ""}.\n`);
+    if (extra.length) io.out(`--all would also delete: ${extra.join(", ")}\n`);
     io.out("It may hold the only copy of evidence Claude Code has since deleted. Re-run with --yes to delete it.\n" + kept);
     return 1;
   }
-  for (const suffix of DB_FILES) rmSync(path + suffix, { force: true });
-  io.out(`Deleted ${path}\n`);
+  if (have) for (const suffix of DB_FILES) rmSync(path + suffix, { force: true });
+  if (have) io.out(`Deleted ${path}\n`);
   if (existsSync(page)) rmSync(page), io.out(`Deleted ${page}\n`);
+  for (const p of extra) rmSync(p), io.out(`Deleted ${p}\n`);
   io.out(kept);
   return 0;
 }
@@ -147,7 +158,8 @@ export function buildProgram(io: IO, setCode: (n: number) => void): Command {
   program.command("purge").description("Delete the local index database (it may be the only copy of deleted evidence)")
     .option("--db <path>", "index database", defaultDbPath())
     .option("--yes", "actually delete; without it purge only says what it would delete")
-    .action((f: { db?: string; yes?: boolean }) => run(() => purgeCommand(f, io)));
+    .option("--all", "also delete the hook log and rules caches in ~/.retrohound")
+    .action((f: { db?: string; yes?: boolean; all?: boolean }) => run(() => purgeCommand(f, io)));
 
   registerQuery(program, run, io);
   registerShow(program, run, io);
