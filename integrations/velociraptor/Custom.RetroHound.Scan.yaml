@@ -14,10 +14,10 @@ required_permissions:
 
 tools:
   - name: RetroHound
-    # The npm registry tarball for the pinned version and its SHA-256 (shasum -a 256 retrohound-0.3.0.tgz);
+    # The npm registry tarball for the pinned version and its SHA-256 (shasum -a 256 retrohound-0.3.1.tgz);
     # update both on a version bump. Or upload the tarball in the GUI and serve it locally.
-    url: https://registry.npmjs.org/retrohound/-/retrohound-0.3.0.tgz
-    expected_hash: c34f24bd346ab2641ad15745bead24767a1aecb47143393055c896c715ff4ff7
+    url: https://registry.npmjs.org/retrohound/-/retrohound-0.3.1.tgz
+    expected_hash: 0000000000000000000000000000000000000000000000000000000000000000 # PLACEHOLDER until 0.3.1 is on npm
     serve_locally: true
 
 parameters:
