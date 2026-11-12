@@ -8,7 +8,8 @@ description: >-
   control-plane file: .claude/settings.json, .claude/settings.local.json, .mcp.json, ~/.claude.json,
   .gemini/settings.json, .cursor/mcp.json, .continue/config.json, .windsurf/mcp.json, the Claude Desktop config, Codex .codex/config.toml and .codex/hooks.json, or Antigravity
   .gemini/config/{mcp_config,hooks}.json and project .agents/.
-  Write/Edit are control_plane_agent_config_write. Commands that add hooks, SessionStart, a *_BASE_URL, apiKeyHelper
+  Write/Edit are control_plane_agent_config_write. Commands that put a file in place, move or remove it, and commands
+  that add hooks, SessionStart, a *_BASE_URL, apiKeyHelper
   or MCP auto-enable are control_plane_agent_config_risky_shell_write.
 tags:
   - attack.persistence
@@ -50,11 +51,28 @@ detection:
         - '[[hooks'
         - 'base_url ='
         - 'base_url='
+        - statusline
+        - awsauthrefresh
+        - awscredentialexport
+        - otelheadershelper
+        - disableallhooks
+        - 'notify ='
+        - 'notify='
+        - retrohound
     - tool_input|contains: *risky
+    - command_line|re|i: '\\u00(?:2[0-57-9a-f]|3[0-9abdf]|[4-7][0-9a-f])'
     - command_line|re|i: '(?:mcp_servers)[^\[]{0,400}command\s{0,3}=\s{0,3}\[?\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
     - tool_input|re|i: '(?:mcp_servers)[^\[]{0,400}command\s{0,3}=\s{0,3}\[?\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
     - tool_input|re|i: '(?:mcpservers)[^}]{0,400}command\\{0,2}"\s{0,3}:\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
-  condition: selection_bash and not selection_risky
+  # Placing, moving or removing a config file whose content the hook cannot see: the staged file was written somewhere
+  # neutral first. Unquoted, so quoting does not split the path.
+  selection_place:
+    - command_line_unquoted|re|i: '(?:^|[\s;&|(`])(?:rm|unlink|shred|truncate|mv)\s[^;&|\n]{0,300}(?:(?:\.claude[/\\]?settings(?:\.local)?\.json|\.mcp\.json|\.claude\.json|\.gemini[/\\]?settings\.json|\.cursor[/\\]?mcp\.json|\.continue[/\\]?config\.json|\.windsurf[/\\]?mcp\.json|claude_desktop_config\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|(?:\.gemini[/\\]?config|\.agents)[/\\]?(?:mcp_config|hooks)\.json)|[\s/~](?:\.claude|\.codex|\.gemini|\.agents)[/\\]?(?:$|[\s;&|)]))'
+    - command_line_unquoted|re|i: '(?:^|[\s;&|(`])(?:cp|ln|rsync|install|ditto)\s[^;&|\n]{0,300}(?:\.claude[/\\]?settings(?:\.local)?\.json|\.mcp\.json|\.claude\.json|\.gemini[/\\]?settings\.json|\.cursor[/\\]?mcp\.json|\.continue[/\\]?config\.json|\.windsurf[/\\]?mcp\.json|claude_desktop_config\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|(?:\.gemini[/\\]?config|\.agents)[/\\]?(?:mcp_config|hooks)\.json)\s{0,3}(?:$|[;&|\n)])'
+    - command_line_unquoted|re|i: '\bof=[^\s;&|]{0,200}(?:\.claude[/\\]?settings(?:\.local)?\.json|\.mcp\.json|\.claude\.json|\.gemini[/\\]?settings\.json|\.cursor[/\\]?mcp\.json|\.continue[/\\]?config\.json|\.windsurf[/\\]?mcp\.json|claude_desktop_config\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|(?:\.gemini[/\\]?config|\.agents)[/\\]?(?:mcp_config|hooks)\.json)'
+    - command_line_unquoted|re|i: '\bgit\s(?:[^;&|\n]{0,300}\s)?(?:checkout|restore)\s[^;&|\n]{0,300}[\s/](?:\.claude|\.codex|\.gemini|\.agents|\.cursor|\.windsurf|\.continue|\.mcp\.json)(?:[/\s]|$)'
+    - command_line_unquoted|re|i: '(?:^|[\s;&|(`])(?:python[0-9.]{0,5}|node|perl|ruby|bun|deno)\s(?:[^\n]{0,2000}(?:\.claude[/\\]?settings(?:\.local)?\.json|\.mcp\.json|\.claude\.json|\.gemini[/\\]?settings\.json|\.cursor[/\\]?mcp\.json|\.continue[/\\]?config\.json|\.windsurf[/\\]?mcp\.json|claude_desktop_config\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|(?:\.gemini[/\\]?config|\.agents)[/\\]?(?:mcp_config|hooks)\.json)[^\n]{0,2000}(?:dump|write|copy|move|rename|replace|remove|unlink|symlink|truncate|pop\(|del\s)|[^\n]{0,2000}(?:dump|write|copy|move|rename|replace|remove|unlink|symlink|truncate|pop\(|del\s)[^\n]{0,2000}(?:\.claude[/\\]?settings(?:\.local)?\.json|\.mcp\.json|\.claude\.json|\.gemini[/\\]?settings\.json|\.cursor[/\\]?mcp\.json|\.continue[/\\]?config\.json|\.windsurf[/\\]?mcp\.json|claude_desktop_config\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|(?:\.gemini[/\\]?config|\.agents)[/\\]?(?:mcp_config|hooks)\.json))'
+  condition: selection_bash and not selection_risky and not selection_place
 falsepositives:
   - Users and tools such as ruflo legitimately edit these files (a model swap, a version pin)
 level: medium

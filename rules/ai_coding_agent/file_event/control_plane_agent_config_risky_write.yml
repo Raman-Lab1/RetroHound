@@ -6,7 +6,9 @@ status: experimental
 description: >-
   Same files as control_plane_agent_config_write (Write/Edit, apply_patch), but the written content adds `hooks` or SessionStart (also Codex `[hooks]`), an
   `env.*_BASE_URL` or a TOML `base_url =`, `apiKeyHelper`, `enableAllProjectMcpServers` / `enabledMcpjsonServers`, or an MCP server command
-  under a hidden directory (JSON or Codex `[mcp_servers]` TOML). This is the persistence shape of supply-chain droppers (SessionStart hook running a repo-local
+  under a hidden directory (JSON or Codex `[mcp_servers]` TOML). Also the command-running keys statusLine, awsAuthRefresh,
+  awsCredentialExport, otelHeadersHelper and Codex `notify`, disableAllHooks, a `\u` escape of printable ASCII, any write to
+  a hooks-only file, and a Claude settings edit that touches a hook entry (its command, `hook run`, or mode). This is the persistence shape of supply-chain droppers (SessionStart hook running a repo-local
   script) and of CVE-2026-21852 style base-URL redirects. Shell writes are control_plane_agent_config_risky_shell_write.
   A permissions.allow wildcard is reported by control_plane_disable_safety.
 tags:
@@ -50,12 +52,33 @@ detection:
         - '[[hooks'
         - 'base_url ='
         - 'base_url='
+        - statusline
+        - awsauthrefresh
+        - awscredentialexport
+        - otelheadershelper
+        - disableallhooks
+        - 'notify ='
+        - 'notify='
     - tool_input|contains: *risky
     - content|re|i: &hidden_mcp '(?:mcpservers)[^}]{0,400}command\\{0,2}"\s{0,3}:\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
     - tool_input|re|i: *hidden_mcp
+    # A JSON or TOML \u escape of printable ASCII spells a key or value the consumer decodes (`hooks`); the
+    # HTML-safe escapes of & < > are left out.
+    - content|re|i: &escape '\\u00(?:2[0-57-9a-f]|3[0-9abdf]|[4-7][0-9a-f])'
+    - tool_input|re|i: *escape
     - content|re|i: '(?:mcp_servers)[^\[]{0,400}command\s{0,3}=\s{0,3}\[?\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
     - tool_input|re|i: '(?:mcp_servers)[^\[]{0,400}command\s{0,3}=\s{0,3}\[?\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
-  condition: selection_file and selection_risky
+  # Any change to the hooks-only files, and any Write/Edit of Claude settings that touches a hook entry (the command, the
+  # `hook run` marker, the mode): removing or downgrading the hook is as risky as adding one.
+  selection_hooks_file:
+    target_path|endswith:
+      - .codex/hooks.json
+      - .gemini/config/hooks.json
+      - .agents/hooks.json
+  selection_hook_entry:
+    target_path|contains: .claude/settings
+    tool_input|re|i: '(?:retrohound|hook run|--mode|\\{0,2}"(?:hook|run|block|confirm|log|command)\\{0,2}")'
+  condition: selection_file and (selection_risky or selection_hooks_file or selection_hook_entry)
 falsepositives:
   - ruflo and similar tools register hook-handler commands under .claude/helpers on purpose
   - Corporate gateways set ANTHROPIC_BASE_URL in settings (see control_plane_llm_endpoint_override for the allowlist idea)

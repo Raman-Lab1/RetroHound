@@ -6,7 +6,11 @@ status: experimental
 description: >-
   Same files as control_plane_agent_config_shell_write, but the command adds `hooks` or SessionStart (also Codex `[hooks]`), an
   `env.*_BASE_URL` or a TOML `base_url =`, `apiKeyHelper`, `enableAllProjectMcpServers` / `enabledMcpjsonServers`, or an MCP server command
-  under a hidden directory (JSON or Codex `[mcp_servers]` TOML). This is the persistence shape of supply-chain droppers and of CVE-2026-21852 style base-URL
+  under a hidden directory (JSON or Codex `[mcp_servers]` TOML), or a command-running key (statusLine, awsAuthRefresh,
+  awsCredentialExport, otelHeadersHelper, Codex `notify`) or disableAllHooks. Also any command that puts one of these
+  files in place, moves or removes it (cp, ln, rsync, install, ditto into it; mv, rm, unlink, truncate, shred; dd of=;
+  a checkout or restore of the config directory; a python, node, perl, ruby, bun or deno one-liner that copies, writes or
+  removes it), since the hook cannot see the content of a file staged elsewhere. This is the persistence shape of supply-chain droppers and of CVE-2026-21852 style base-URL
   redirects. Write/Edit are control_plane_agent_config_risky_write.
 tags:
   - attack.persistence
@@ -50,11 +54,28 @@ detection:
         - '[[hooks'
         - 'base_url ='
         - 'base_url='
+        - statusline
+        - awsauthrefresh
+        - awscredentialexport
+        - otelheadershelper
+        - disableallhooks
+        - 'notify ='
+        - 'notify='
+        - retrohound
     - tool_input|contains: *risky
+    - command_line|re|i: '\\u00(?:2[0-57-9a-f]|3[0-9abdf]|[4-7][0-9a-f])'
     - command_line|re|i: '(?:mcp_servers)[^\[]{0,400}command\s{0,3}=\s{0,3}\[?\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
     - tool_input|re|i: '(?:mcp_servers)[^\[]{0,400}command\s{0,3}=\s{0,3}\[?\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
     - tool_input|re|i: '(?:mcpservers)[^}]{0,400}command\\{0,2}"\s{0,3}:\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
-  condition: selection_bash and selection_risky
+  # Placing, moving or removing a config file whose content the hook cannot see: the staged file was written somewhere
+  # neutral first. Unquoted, so quoting does not split the path.
+  selection_place:
+    - command_line_unquoted|re|i: '(?:^|[\s;&|(`])(?:rm|unlink|shred|truncate|mv)\s[^;&|\n]{0,300}(?:(?:\.claude[/\\]?settings(?:\.local)?\.json|\.mcp\.json|\.claude\.json|\.gemini[/\\]?settings\.json|\.cursor[/\\]?mcp\.json|\.continue[/\\]?config\.json|\.windsurf[/\\]?mcp\.json|claude_desktop_config\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|(?:\.gemini[/\\]?config|\.agents)[/\\]?(?:mcp_config|hooks)\.json)|[\s/~](?:\.claude|\.codex|\.gemini|\.agents)[/\\]?(?:$|[\s;&|)]))'
+    - command_line_unquoted|re|i: '(?:^|[\s;&|(`])(?:cp|ln|rsync|install|ditto)\s[^;&|\n]{0,300}(?:\.claude[/\\]?settings(?:\.local)?\.json|\.mcp\.json|\.claude\.json|\.gemini[/\\]?settings\.json|\.cursor[/\\]?mcp\.json|\.continue[/\\]?config\.json|\.windsurf[/\\]?mcp\.json|claude_desktop_config\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|(?:\.gemini[/\\]?config|\.agents)[/\\]?(?:mcp_config|hooks)\.json)\s{0,3}(?:$|[;&|\n)])'
+    - command_line_unquoted|re|i: '\bof=[^\s;&|]{0,200}(?:\.claude[/\\]?settings(?:\.local)?\.json|\.mcp\.json|\.claude\.json|\.gemini[/\\]?settings\.json|\.cursor[/\\]?mcp\.json|\.continue[/\\]?config\.json|\.windsurf[/\\]?mcp\.json|claude_desktop_config\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|(?:\.gemini[/\\]?config|\.agents)[/\\]?(?:mcp_config|hooks)\.json)'
+    - command_line_unquoted|re|i: '\bgit\s(?:[^;&|\n]{0,300}\s)?(?:checkout|restore)\s[^;&|\n]{0,300}[\s/](?:\.claude|\.codex|\.gemini|\.agents|\.cursor|\.windsurf|\.continue|\.mcp\.json)(?:[/\s]|$)'
+    - command_line_unquoted|re|i: '(?:^|[\s;&|(`])(?:python[0-9.]{0,5}|node|perl|ruby|bun|deno)\s(?:[^\n]{0,2000}(?:\.claude[/\\]?settings(?:\.local)?\.json|\.mcp\.json|\.claude\.json|\.gemini[/\\]?settings\.json|\.cursor[/\\]?mcp\.json|\.continue[/\\]?config\.json|\.windsurf[/\\]?mcp\.json|claude_desktop_config\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|(?:\.gemini[/\\]?config|\.agents)[/\\]?(?:mcp_config|hooks)\.json)[^\n]{0,2000}(?:dump|write|copy|move|rename|replace|remove|unlink|symlink|truncate|pop\(|del\s)|[^\n]{0,2000}(?:dump|write|copy|move|rename|replace|remove|unlink|symlink|truncate|pop\(|del\s)[^\n]{0,2000}(?:\.claude[/\\]?settings(?:\.local)?\.json|\.mcp\.json|\.claude\.json|\.gemini[/\\]?settings\.json|\.cursor[/\\]?mcp\.json|\.continue[/\\]?config\.json|\.windsurf[/\\]?mcp\.json|claude_desktop_config\.json|\.codex[/\\]?(?:config\.toml|hooks\.json)|(?:\.gemini[/\\]?config|\.agents)[/\\]?(?:mcp_config|hooks)\.json))'
+  condition: (selection_bash and selection_risky) or selection_place
 falsepositives:
   - ruflo and similar tools register hook-handler commands under .claude/helpers on purpose
   - Corporate gateways set ANTHROPIC_BASE_URL in settings (see control_plane_llm_endpoint_command for the allowlist idea)

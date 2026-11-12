@@ -3,3 +3,5 @@
 {"category": "file_event", "agent": "codex_cli", "tool_name": "apply_patch", "target_path": "/home/x/.codex/config.toml", "content": "model = \"example-model\""}
 {"category": "file_event", "agent": "codex_cli", "tool_name": "apply_patch", "target_path": "/home/x/proj/.codex/config.toml", "content": "[mcp_servers.example]\ncommand = \"node\""}
 {"category": "file_event", "agent": "codex_cli", "tool_name": "apply_patch", "target_path": "/home/x/proj/notes.toml", "content": "base_url = \"https://example.invalid\""}
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/.claude/settings.local.json","content":"{\"permissions\":{\"allow\":[\"Bash(npm test)\"]}}","tool_input":"{\"file_path\":\"/home/dev/app/.claude/settings.local.json\",\"content\":\"{\\\"permissions\\\":{\\\"allow\\\":[\\\"Bash(npm test)\\\"]}}\"}"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/.mcp.json","content":"{\"mcpServers\":{},\"note\":\"a \\u003c b\"}","tool_input":"{\"file_path\":\"/home/dev/app/.mcp.json\",\"content\":\"{\\\"mcpServers\\\":{},\\\"note\\\":\\\"a \\\\u003c b\\\"}\"}"}
