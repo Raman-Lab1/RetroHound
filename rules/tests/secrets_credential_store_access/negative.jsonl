@@ -6,3 +6,4 @@
 {"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/docker-compose.yml"}
 {"category":"process_creation","tool_name":"Bash","command_line":"kubectl get pods"}
 {"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/README.md"}
+{"category":"file_access","tool_name":"Grep","target_path":"/home/dev/.claude/settings.json"}

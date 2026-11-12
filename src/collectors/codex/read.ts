@@ -2,17 +2,19 @@
 import { closeSync, openSync, readFileSync, readSync } from "node:fs";
 import * as zlib from "node:zlib";
 
-export type Zstd = (buf: Buffer) => Buffer;
+export type Zstd = (buf: Buffer, opts?: { maxOutputLength?: number }) => Buffer;
 export const NEEDS_ZSTD = "needs Node >= 22.15 to read .jsonl.zst";
 // node:zlib has zstd from Node 22.15 and in Bun 1.4; typings may lag, and older runtimes lack it.
 export const defaultZstd: Zstd | null = (zlib as unknown as { zstdDecompressSync?: Zstd }).zstdDecompressSync ?? null;
+// A few KB of zstd can expand to gigabytes. ponytail: fixed cap; a rollout larger than this is reported failed.
+export const MAX_ZSTD_BYTES = 256 * 1024 * 1024;
 
 /** Raw bytes as on disk (for the file hash) and the decoded text. Throws when a .zst cannot be read here. */
 export function readRollout(path: string, zstd: Zstd | null = defaultZstd): { raw: Buffer; text: string } {
   const raw = readFileSync(path);
   if (!path.endsWith(".zst")) return { raw, text: raw.toString("utf8") };
   if (!zstd) throw new Error(`${NEEDS_ZSTD}: ${path.split(/[\\/]/).pop()}`);
-  return { raw, text: zstd(raw).toString("utf8") };
+  return { raw, text: zstd(raw, { maxOutputLength: MAX_ZSTD_BYTES }).toString("utf8") };
 }
 
 /** The first line only. A plain file is read in chunks (session_meta carries a large system prompt). */

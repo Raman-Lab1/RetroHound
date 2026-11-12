@@ -329,6 +329,6 @@ describe("discover", () => {
   });
 
   test("collector shape", () => {
-    expect([codex.agent, codex.parserVersion]).toEqual(["codex", "codex/v5"]);
+    expect([codex.agent, codex.parserVersion]).toEqual(["codex", "codex/v6"]);
   });
 });

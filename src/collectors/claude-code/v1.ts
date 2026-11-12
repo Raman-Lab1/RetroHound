@@ -18,7 +18,8 @@ const SHELL_TOOLS = new Set(["Bash", "PowerShell", "Monitor"]); // Monitor's `co
 const FILE_WRITES = new Set(["Write", "Edit", "MultiEdit", "NotebookEdit"]);
 const MCP_NAME = /^mcp__(.+)__(.+)$/; // server names can contain `_`, so split on the last `__`
 const URL_LIKE = /^[a-z][a-z0-9+.-]*:\/\//i;
-const SHELL_URL = /\b(?:https?|wss?|s?ftp|ssh|git):\/\/[^\s"'`<>|;)\\]+/i;
+const SHELL_URL = /\b(?:https?|wss?|s?ftp|ssh|git):\/\/[^\s"'`<>|;)\\]+/gi;
+const LOOPBACK = /^(?:localhost|127(?:\.\d+){3}|0\.0\.0\.0|\[::1?\])$/;
 const UNRESOLVABLE = /^(?:[A-Za-z]:|[$%~\\])/; // relative to something other than the cwd, or already absolute
 // Run after normalizeSlashes, which leaves a leading // only on UNC paths.
 const ROOT = /^(?:[A-Za-z]:\/|\/\/[^/]+\/[^/]+\/?|\/(?!\/))/;
@@ -35,8 +36,13 @@ const MAX_HEREDOCS = 64; // beyond this a command stays whole: visible to rules,
 // `(?!\w)`: a tag that shrinks on backtracking would rescan an unterminated body once per character of the tag.
 const HEREDOC = /(?<!<)<<-?\s*(['"]?)(\w+)(?!\w)\1([^\n]*)\n(?:([\s\S]*?)\n)??[ \t]*\2(?=[\s);&|]|$)/g;
 // Commands that only store their stdin. Any other reader (a shell, python, node, ssh, sudo, a script...) may run it.
-const DATA_READER = /^(?:\/\S*\/)?(?:cat|tee)(?=[\s<>]|$)|^git\s+(?:commit|tag)\b|^gh\s+(?:pr|issue|release)\b/;
-const ASSIGNMENTS = /^\s*(?:\w+=\S*\s+)*/;
+// Only the system cat/tee: `/tmp/x/cat` may be anything. `git commit -e` hands the message to an editor, which may be sh.
+const DATA_READER = /^(?:\/(?:usr\/)?bin\/)?(?:cat|tee)(?=[\s<>]|$)|^(?:git\s+(?:commit|tag)|gh\s+(?:pr|issue|release))\b(?!.*\s(?:-[a-zA-Z]*e|--edit))/;
+// Statements allowed before a stored heredoc. An allow-list: a function, alias, eval, PATH change, `hash`, zsh's
+// `functions[cat]=` ... may each make the reader something else, and only these cannot. Anything else keeps the body.
+const SAFE_BEFORE = /^(?:cd|git|gh)(?=\s|$)/;
+// `X=1 tee` is still tee; `PATH=/tmp/x cat`, a preload or an editor may not be, so those are kept and fail DATA_READER.
+const ASSIGNMENTS = /^\s*(?:(?!(?:\w*PATH|LD_\w*|DYLD_\w*|GIT_\w*|\w*EDITOR|VISUAL)=)\w+=\S*\s+)*/;
 const PIPED_ON = /(?<!\|)\|(?!\|)|[<>]\(/; // `cat <<E | sh`, `cat <<E > >(sh)`
 
 const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
@@ -56,20 +62,29 @@ function isData(before: string, after: string): boolean {
   if (PIPED_ON.test(after) || /\\\s*$/.test(after)) return false; // `cat <<E \` continues the header: `| sh` may follow
   // A `<<` in quotes or a comment is no heredoc, so the shell runs the lines below it. Counting quotes is crude, but
   // erring keeps the body in command_line, the safe side.
-  if (/[#']/.test(before) || (before.replaceAll('"$(', "").split('"').length - 1) % 2) return false;
-  const segment = before.split(/\|\||&&|[;&|]/).pop()!;
-  return segment.split(/\$\(|[(`]/).every((cmd) => DATA_READER.test(cmd.replace(ASSIGNMENTS, "")));
+  if (/[#']/.test(before) || (before.replaceAll('"$(', "").replaceAll(')"', "").split('"').length - 1) % 2) return false;
+  const statements = before.split(/\|\||&&|[;&|\n]/);
+  const pieces = (s: string) => s.split(/\$\(|[(`]/).map((cmd) => cmd.replace(ASSIGNMENTS, ""));
+  return pieces(statements.pop()!).every((cmd) => DATA_READER.test(cmd)) &&
+    statements.every((s) => pieces(s).every((cmd) => (cmd = cmd.replace(/^[\s)"]+/, "")) === "" || DATA_READER.test(cmd) || SAFE_BEFORE.test(cmd)));
 }
 
 /** Heredoc bodies that are stored as data move to content; a body anything may execute stays in the command line. */
 function splitHeredocs(cmd: string): [string, string | undefined] {
   if (cmd.split("<<").length > MAX_HEREDOCS) return [cmd, undefined];
   const bodies: string[] = [];
-  const line = cmd.replace(HEREDOC, (m, _q, tag, rest, body = "", at: number) => {
-    if (!isData(cmd.slice(cmd.lastIndexOf("\n", at) + 1, at), rest)) return m;
-    if (body) bodies.push(body);
-    return `<<${tag}${rest}`;
-  });
+  let line = ""; // the command so far, without stored bodies: what the shell runs before this heredoc
+  let last = 0;
+  for (const m of cmd.matchAll(HEREDOC)) {
+    const [whole, , tag, rest = "", body = ""] = m;
+    line += cmd.slice(last, m.index);
+    last = m.index + whole.length;
+    if (isData(line, rest)) {
+      if (body) bodies.push(body);
+      line += `<<${tag}${rest}`;
+    } else line += whole;
+  }
+  line += cmd.slice(last);
   return [line, bodies.length ? bodies.join("\n") : undefined];
 }
 
@@ -81,7 +96,11 @@ function domainOf(url: string): string | undefined {
   }
 }
 
-const shellUrl = (cmd: string) => cmd.match(SHELL_URL)?.[0]?.replace(/[.,]+$/, "");
+/** The first URL that leaves the machine, else the first: a loopback URL first must not hide the host after it. */
+function shellUrl(cmd: string): string | undefined {
+  const urls = [...cmd.matchAll(SHELL_URL)].map((m) => m[0].replace(/[.,]+$/, ""));
+  return urls.find((u) => !LOOPBACK.test(domainOf(u) ?? "")) ?? urls[0];
+}
 
 /** Resolves `.` and `..` lexically. A root absorbs extra `..`; going above `~` is unknowable, so that path stays. */
 function resolveDots(p: string): string {
@@ -108,15 +127,35 @@ function addSecrets(ev: Partial<RawEvent>): void {
 }
 
 function fileWriteBody(i: Line): string | undefined {
-  const edits = Array.isArray(i.edits) ? i.edits.map((e: Line) => e?.new_string ?? "").join("\n") : undefined;
+  // strings only: join() stringifies nested arrays recursively, and a deep one overflows the stack
+  const edits = Array.isArray(i.edits) ? i.edits.map((e: Line) => str(e?.new_string) ?? "").join("\n") : undefined;
   return str(i.content ?? i.new_string ?? i.new_source ?? edits);
+}
+
+const MAX_DEPTH = 64;
+const capDepth = (v: unknown, depth: number): unknown =>
+  v === null || typeof v !== "object" ? v
+    : depth >= MAX_DEPTH ? "[nested too deep]"
+    : Array.isArray(v) ? v.map((x) => capDepth(x, depth + 1))
+    : Object.fromEntries(Object.entries(v).map(([k, x]) => [k, capDepth(x, depth + 1)]));
+
+/** JSON text. JSON.parse accepts input too deep to serialize; its deep parts become a marker, so the rest is kept. */
+export function toJson(v: unknown): string {
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return JSON.stringify(capDepth(v, 0));
+  }
 }
 
 /** Maps one tool call to event fields, including secret detection. Shared with the v0.2 hook (0009). */
 export function mapToolUse(name: string, input: unknown, cwd?: string): ToolFields {
   const i: Line = input !== null && typeof input === "object" ? input : {};
-  const ev: ToolFields = { category: "tool_call", tool_name: name, tool_input: JSON.stringify(input ?? {}) };
-  const path = str(i.file_path) ?? str(i.notebook_path) ?? str(i.path);
+  const ev: ToolFields = { category: "tool_call", tool_name: name, tool_input: toJson(input ?? {}) };
+  // Grep's glob picks the files read, and overrides ignore rules: `{path: dir, glob: ".env"}` reads dir/.env.
+  const glob = name === "Grep" ? str(i.glob) : undefined;
+  const named = str(i.file_path) ?? str(i.notebook_path) ?? str(i.path);
+  const path = glob ? `${named ?? "."}/${glob}` : named;
   if (path) ev.target_path = resolvePath(path, cwd);
   const mcp = MCP_NAME.exec(name);
 
@@ -124,9 +163,9 @@ export function mapToolUse(name: string, input: unknown, cwd?: string): ToolFiel
     ev.category = "process_creation";
     if (typeof i.command === "string") {
       [ev.command_line, ev.content] = splitHeredocs(i.command);
-      ev.url = shellUrl(ev.command_line);
+      ev.url = shellUrl(ev.command_line) ?? (ev.content && shellUrl(ev.content)); // a stored body may still be run
     }
-  } else if (name === "Read") {
+  } else if (name === "Read" || (name === "Grep" && path)) { // Grep returns the lines of the file it names
     ev.category = "file_access";
   } else if (FILE_WRITES.has(name)) {
     ev.category = "file_event";
@@ -363,7 +402,11 @@ export async function parseFile(path: string): Promise<ParsedFile & { sha256?: s
       carry.agent_version = str(l.version) ?? carry.agent_version;
       carry.entrypoint = str(l.entrypoint) ?? carry.entrypoint;
       carry.permission_mode = str(l.permissionMode) ?? carry.permission_mode;
-      handle(l, lineNo, line);
+      try {
+        handle(l, lineNo, line);
+      } catch {
+        stats.malformed++; // e.g. nesting deep enough to overflow the stack: only this line is lost
+      }
     }
     read = true;
   } catch {

@@ -49,7 +49,8 @@ type View = {
 };
 
 type Lines = NonNullable<ScanReport["scan"]["lines"]>;
-const noLines = (): Lines => ({ malformed: 0, unknown_types: {} });
+// No prototype: a line type is transcript text, and `toString` or `__proto__` must count like any other name.
+const noLines = (): Lines => ({ malformed: 0, unknown_types: Object.create(null) });
 function tally(acc: Lines, stats: ParsedFile["stats"]): void {
   acc.malformed += stats.malformed;
   for (const [type, k] of Object.entries(stats.unknown_types)) acc.unknown_types[type] = (acc.unknown_types[type] ?? 0) + k;
