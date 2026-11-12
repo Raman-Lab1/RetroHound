@@ -176,12 +176,13 @@ Flags (from `--help`):
 - `rules list`, `rules show`: `--rules <dir>`. `rules test [dir]`: `--tests <dir>` (default `<dir>/../tests`).
 - `query`: `--format <table|json>`, `--db <path>`.
 - `show`: `--db <path>`, `--rules <dir>`.
-- `wrapped`: `--since <when>` (default `365d`), `--anonymize` (hash project names, user name, project dirs),
+- `wrapped`: `--since <when>` (default `365d`), `--anonymize` (hash project names, user name, project dirs, URL, ssh and git hosts, git owner/repo),
   `--out <file.html|file.svg>` (default `wrapped.html`), `--db <path>`, `--rules <dir>`. `--out card.svg` writes a
   self-contained 1200x630 share card (system fonts, no scripts or external references, secrets masked) that any
   browser shows and any tool can convert to PNG.
-- `purge`: `--db <path>`, `--yes`. Without `--yes` it only says what it would delete. It also deletes the
-  index's footprint report (`index.footprint.html`).
+- `purge`: `--db <path>`, `--yes`, `--all`. Without `--yes` it only says what it would delete. It also deletes the
+  index's footprint report (`index.footprint.html`). `--all` also deletes the hook log and `rules-cache-*.json`
+  in `~/.retrohound` (nothing else, symlinks skipped).
 - `preflight [dir]`: `--rules <dir>`, `--format <table|json>`, `--fail-on <level>`, `--ignore <file>`.
 - `hook install`: `--agent <claude_code|codex|antigravity>`, `--mode <log|confirm|block>`, `--scope <user|project|local>`, `--settings <path>`, `--fail-closed`,
   `--dry-run`, `--allow-unsafe-path`. Start with `--mode log` and read `~/.retrohound/hook-log.jsonl` before blocking
