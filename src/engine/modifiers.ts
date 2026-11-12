@@ -208,10 +208,11 @@ function quantifierAt(src: string, i: number): [number, number, number] | null {
   return q;
 }
 
-// One open group: does it hold an unbounded quantifier, did every finished alternative have an unquantified atom, does
-// the current one.
-type Group = { unbounded: boolean; solid: boolean; branch: boolean };
-const group = (): Group => ({ unbounded: false, solid: true, branch: false });
+// One open group: does it hold an unbounded quantifier, one whose count varies (`+`, `?`, `{1,9}`), did every finished
+// alternative have an unquantified atom, does the current one, how many required (min >= 1) quantified atoms has the
+// current one, did some alternative have no unquantified atom and at most one required one.
+type Group = { unbounded: boolean; varies: boolean; solid: boolean; branch: boolean; req: number; few: boolean };
+const group = (): Group => ({ unbounded: false, varies: false, solid: true, branch: false, req: 0, few: false });
 
 function checkEscape(src: string, n: string, next: string | undefined, inClass: boolean): void {
   if (n === "k" || (!inClass && /[1-9]/.test(n))) throw new RuleError("regex-backreference", `backreference in /${src}/`);
@@ -221,9 +222,11 @@ function checkEscape(src: string, n: string, next: string | undefined, inClass: 
 
 /**
  * Refuses what 0003 bans, what JS would silently read differently from PCRE (`\A` is a plain `A` here), and a group
- * repeated without bound whose body is only quantified atoms, one of them unbounded, such as `(\w+\s?)+` or `(a+)+`:
- * exponential backtracking that no text limit bounds. Returns whether the pattern has an unbounded quantifier.
- * ponytail: catches the common nested shapes only; `(\w+\w)+` or `(a|a)+` still pass. The full fix is a linear engine.
+ * repeated more than once whose body is only quantified atoms, one of them unbounded or only one of them required, such
+ * as `(\w+\s?)+`, `(a+){1,60}` or `(\w{1,9}\s?){1,60}`: exponential backtracking that no text limit bounds. Returns
+ * whether the pattern has an unbounded quantifier.
+ * ponytail: catches the common nested shapes only; `(\w+\w)+`, `(\w{1,9}\w{1,9}){1,60}` or `(a|a)+` still pass. The
+ * full fix is a linear engine.
  */
 function checkRegex(src: string): boolean {
   const stack = [group()];
@@ -251,8 +254,10 @@ function checkRegex(src: string): boolean {
       continue;
     } else if (c === "|" || c === ")") {
       const g = stack[stack.length - 1]!;
+      if (!g.branch && g.req <= 1) g.few = true;
       g.solid &&= g.branch;
       g.branch = false;
+      g.req = 0;
       i++;
       if (c === "|" || stack.length === 1) continue; // an unbalanced `)` is for new RegExp to refuse
       inner = stack.pop();
@@ -263,15 +268,17 @@ function checkRegex(src: string): boolean {
     // An atom ends at i: an escape, a class, a character or the group `inner`.
     const g = stack[stack.length - 1]!;
     if (inner?.unbounded) g.unbounded = true;
+    if (inner?.varies) g.varies = true;
     const q = quantifierAt(src, i);
     if (!q) {
       if (!inner || inner.solid) g.branch = true;
       continue;
     }
     i += q[2];
-    if (q[1] !== Infinity) continue;
-    if (inner?.unbounded && !inner.solid) throw new RuleError("regex-nested-quantifier", `nested unbounded quantifiers in /${src}/ backtrack exponentially`);
-    g.unbounded = true;
+    if (q[1] > 1 && inner?.varies && (inner.few || (inner.unbounded && !inner.solid))) throw new RuleError("regex-nested-quantifier", `nested quantifiers in /${src}/ backtrack exponentially`);
+    if (q[1] > q[0]) g.varies = true;
+    if (q[0] >= 1) g.req++;
+    if (q[1] === Infinity) g.unbounded = true;
   }
   return stack[0]!.unbounded;
 }

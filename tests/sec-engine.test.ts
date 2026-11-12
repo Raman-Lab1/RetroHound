@@ -81,13 +81,13 @@ describe("first-seen ignores carriers without a real timestamp", () => {
 });
 
 describe("regex checks", () => {
-  test("nested unbounded quantifiers are rejected", () => {
-    for (const re of [String.raw`^(\w+\s?)+$`, "(a+)+", "(?:a*b?)*", String.raw`(x|\d+)+`]) {
+  test("nested quantifiers are rejected, also under a bounded outer repeat", () => {
+    for (const re of [String.raw`^(\w+\s?)+$`, "(a+)+", "(?:a*b?)*", String.raw`(x|\d+)+`, String.raw`^(\w+\s?){1,60}$`, String.raw`^(\w+){1,60}$`, String.raw`^(\w{1,9}){2,60}$`, String.raw`^(\w{1,9}\s?){1,60}$`, String.raw`(x|\d{1,3}){1,9}`]) {
       expect(itemReason("command_line|re", `'${re}'`)).toBe("regex-nested-quantifier");
     }
   });
   test("repeated groups with a fixed atom or a bounded body still load", () => {
-    for (const re of [String.raw`(\s+--?[a-z][a-z-]*(=\S+)?)+`, String.raw`(?:\.[\w-]{1,30}){0,3}`, String.raw`(?:[^"\\]|\\.){1024,}`, "(?:ab)+", String.raw`[(+]+\w+`]) {
+    for (const re of [String.raw`(\s+--?[a-z][a-z-]*(=\S+)?)+`, String.raw`(?:\.[\w-]{1,30}){0,3}`, String.raw`(?:[^"\\]|\\.){1024,}`, "(?:ab)+", String.raw`[(+]+\w+`, String.raw`(\d{2}){3}`, String.raw`(\w+)?`, String.raw`(?:\s{1,5}[^\s|;&]{1,200}){0,6}`]) {
       expect(load(ruleYaml(`selection:\n    command_line|re: '${re}'\ncondition: selection`)).rejected).toEqual([]);
     }
   });
