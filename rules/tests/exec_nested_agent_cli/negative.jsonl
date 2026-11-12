@@ -4,3 +4,5 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"ls ~/.claude/projects -p"}
 {"category":"process_creation","tool_name":"Bash","command_line":"grep -rn exec src/codex.ts"}
 {"category":"process_creation","tool_name":"Bash","command_line":"cat claude.md | head -p"}
+{"category":"process_creation","tool_name":"Bash","command_line":"codex exec --sandbox workspace-write 'task'"}
+{"category":"process_creation","tool_name":"Bash","command_line":"claude -p --allowedTools 'Bash(npm test)' x"}

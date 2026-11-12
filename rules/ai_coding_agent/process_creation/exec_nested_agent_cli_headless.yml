@@ -1,0 +1,20 @@
+name: exec_nested_agent_cli_headless
+author: Raman Kumar
+id: fa6af08d-2d4b-4f2b-9c82-91cac9862365
+title: Agent started another agent CLI headless
+status: experimental
+description: >
+  A shell command runs claude, codex, gemini or antigravity non-interactively (-p, --print, --prompt, exec). The
+  child gets its own session id, so session-scoped correlations (secret read then egress) cannot join its events with
+  the parent's. Hunt lane: driving an agent headless is common in scripts and CI.
+level: low
+tags: [attack.defense_evasion, attack.t1562, owasp_agentic.asi07]
+falsepositives:
+  - Scripts or workflows that drive an agent CLI headless on purpose.
+  - Quoted text that shows such a command, for example a commit message or an echo, matches as if it ran.
+x-retrohound: { lane: hunt }
+logsource: { product: ai_coding_agent, category: process_creation }
+detection:
+  headless:
+    command_line_unquoted|re|i: '(?:^|[\s;&|(`/])(?:claude(?:-code)?|codex|gemini|antigravity)(?:\.exe)?\s(?:[^;&|\n]{0,300}\s)?(?:-p|--print|--prompt|exec)(?:[\s=]|$)'
+  condition: headless
