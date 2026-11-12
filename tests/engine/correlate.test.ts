@@ -353,6 +353,21 @@ describe("correlation rejections", () => {
     expect(reason(swap(good, "[session_id, agent_id]", "[agent_id, nope, session_id]"))).toBe("unknown-field");
     expect(reason(swap(good, "    group-by: [session_id, agent_id]\n", ""))).toBe("bad-correlation");
   });
+  test("project-scoped group-by: allowed with a short timespan, no agent_id, no session_id needed", () => {
+    expect(load(base("h", "{ command_line: hit }"), swap(good, "[session_id, agent_id]", "[project_path]")).rejected).toEqual([]);
+    expect(reason(swap(good, "[session_id, agent_id]", "[project_path, agent_id]"))).toBe("unsupported-group-by");
+    expect(reason(swap(good, "[session_id, agent_id]", "[project_path]").replace("10m", "2h"))).toBe("project-group-timespan");
+    expect(reason(swap(good, "[session_id, agent_id]", "[tool_name]"))).toBe("unsupported-group-by");
+  });
+  test("a project-scoped group joins sessions of one project, in ts order, and skips events with no project", () => {
+    const top = "x-retrohound: { differ_by: [session_id] }";
+    const docs = [SECRET_READ, EGRESS, correlation("proj", "temporal_ordered", ["secret_read", "egress"], "", top).replace("[session_id, agent_id]", "[project_path]")];
+    const fire = (r: Partial<RawEvent>, s: Partial<RawEvent>) => run(docs, [read(1, r), send(2, s)]).filter((m) => m.rule.name === "proj").length;
+    expect(fire({ session_id: "a", project_path: "/p" }, { session_id: "b", project_path: "/p" })).toBe(1);
+    expect(fire({ session_id: "a", project_path: "/p" }, { session_id: "a", project_path: "/p" })).toBe(0); // differ_by
+    expect(fire({ session_id: "a", project_path: "/p" }, { session_id: "b", project_path: "/q" })).toBe(0);
+    expect(fire({ session_id: "a", project_path: undefined }, { session_id: "b", project_path: undefined })).toBe(0);
+  });
   test("timespan", () => {
     for (const bad of ["5", "5w", "5M", "0m", "m", "-5m"]) expect(reason(swap(good, "timespan: 10m", `timespan: ${bad}`))).toBe("bad-correlation");
     expect(reason(swap(good, "    timespan: 10m\n", ""))).toBe("bad-correlation");

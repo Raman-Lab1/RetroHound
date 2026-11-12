@@ -1,0 +1,5 @@
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env","session_id":"s1","project_path":"/home/dev/app","ts":"2026-01-01T00:00:00.000Z"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s https://api.example.invalid","session_id":"s1","project_path":"/home/dev/app","ts":"2026-01-01T00:00:30.000Z"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s https://api.example.invalid","session_id":"s2","project_path":"/home/dev/other","ts":"2026-01-01T00:01:00.000Z"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s https://api.example.invalid","session_id":"s3","project_path":"/home/dev/app","ts":"2026-01-01T00:20:00.000Z"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s https://api.example.invalid","session_id":"s4","ts":"2026-01-01T00:02:00.000Z"}
