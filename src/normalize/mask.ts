@@ -34,9 +34,10 @@ const PATTERNS: { name: string; strong: boolean; re: RegExp }[] = [
     strong: false,
     re: /((?:[Aa]uthorization|AUTHORIZATION)(?:\\?["'])?(?:\s*[=:]|%3[Aa])(?:\s|%20)*(?:\\?["'])?[A-Za-z]+(?:\s|%20)+)(?![$<{(…])[A-Za-z0-9._~+/=%-]{8,}/g,
   },
-  // `curl -u user:pw` and `--user=user:pw` (not `docker -u 1000:1000`), `mysql -p<pw>`, `--password <pw>`.
-  { name: "cli_user", strong: false, re: /((?:^|\s)(?:-u|--user)(?:\s+|=)?[^\s:"']+:)(?![$<{(…]|\d+\b)[^\s"']{3,}/g },
-  { name: "mysql_password", strong: false, re: /(?<=\b(?:mysql|mysqldump|mysqladmin|mariadb)\b[^\n|;&]{0,200})(\s-p)(?![$<{(…"'])[^\s"']+/g },
+  // `curl -u user:pw` and `--user=user:pw` (not `docker -u 1000:1000`), `mysql -p<pw>`, `--password <pw>`. A quoted
+  // -u or -p value runs to its closing quote, spaces included.
+  { name: "cli_user", strong: false, re: /((?:^|\s)(?:-u|--user)(?:\s+|=)?["']?[^\s:"']+:)(?![$<{(…]|\d+\b)(?:(?<=["'][^\s:"']{1,200}:)[^"'\n]{3,200}|[^\s"']{3,})/g },
+  { name: "mysql_password", strong: false, re: /(?<=\b(?:mysql|mysqldump|mysqladmin|mariadb)\b[^\n|;&]{0,200})(\s-p["']?)(?![$<{(…"'])(?:(?<=-p["'])[^"'\n]{1,200}|[^\s"']+)/g },
   { name: "password_flag", strong: false, re: /(--password(?:=|\s+)["']?)(?![$<{(…-])[^\s"']{3,}/g },
   // Masks KEY=<value ≥ 8 chars>, also JSON-escaped (`\"password\":\"x\"`), skipping $VAR, <placeholder>, ${VAR},
   // $(cmd) and an already masked value. PASS covers PASSWORD, PASSWD and DB_PASS; `_PWD` is MYSQL_PWD, not $PWD.
