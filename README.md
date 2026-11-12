@@ -333,10 +333,13 @@ read the [code of conduct](CODE_OF_CONDUCT.md), and report vulnerabilities or ru
 ## Roadmap
 
 - v0.2: `hook` (log / confirm / block) with a parsed-rule cache and install path checks, SARIF and NDJSON export,
-  `preflight`, `mcp`, ignore file, `wrapped` SVG card, Codex CLI and Antigravity CLI collectors. Next: `scan --agent all`,
-  Gemini CLI.
+  `preflight`, `mcp`, ignore file, `wrapped` SVG card, Codex CLI and Antigravity CLI collectors.
   Dropped: rule #22 (ssh/scp to an unknown host; no threat needs it and it is noisy).
-- Later: SIEM conversion via pySigma, upstream logsource proposal to SigmaHQ.
+- v0.3: footprint report (configured versus used, config drift), first-seen fields and rules, `scan --agent all`,
+  `rules convert` (pySigma pipelines), `git-secrets`, ATT&CK layer, OCSF agent context, Wazuh / Splunk / Velociraptor
+  packs and a GitHub Action, and a hardening pass over the collectors, live hook, rules, masking and index.
+- Next: opt-in join with host process logs (macOS eslogger, auditd, Sysmon), Gemini CLI.
+- Later: upstream logsource proposal to SigmaHQ.
 
 ## Licence
 
