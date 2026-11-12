@@ -5,7 +5,7 @@
 ```sh
 retrohound incident 1111aaaa                 # a session id prefix
 retrohound incident 507134cd --out ./case-42 # a finding id prefix (from `scan --format json`)
-retrohound incident 1111aaaa --anonymize     # project names, user name and project dirs hashed
+retrohound incident 1111aaaa --anonymize     # project names, user name and project dirs, hosts and git owner/repo hashed
 ```
 
 `<id>` is an unambiguous prefix of a session id or a finding id. A finding selects the session(s) its events belong

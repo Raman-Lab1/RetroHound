@@ -46,3 +46,12 @@ followed by a successful one through another kind of tool) and `exec_mass_delete
 - `seq` counts every event in a stream, messages included, so event-gap limits are tuned on fixtures, not guessed.
 - A missing or malformed `ts` sorts first and never fits a time window, so clock skew between streams can hide a
   cross-stream match.
+
+- Amendment: project-scoped correlations. `group-by` may use `project_path` instead of `session_id` (one of the two is
+  required). A nested agent CLI (`claude -p`, `codex exec`) gets its own `session_id`, so a read in the child and
+  egress in the parent never joined. Such a group spans sessions: it is ordered by `ts` like a session-scope group,
+  must not use `agent_id` (so `max_events_between` is rejected too), and its `timespan` is capped at 1h so a group
+  cannot grow over all history. Events with no `project_path` are skipped, since a null key would join unrelated
+  sessions. `differ_by: [session_id]` limits a rule to cross-session pairs and so avoids repeating the session-scoped
+  rule's hits. The only such rule is `secrets_read_then_egress_project` (medium, hunt lane): joining by directory also
+  matches two unrelated agents in one checkout.

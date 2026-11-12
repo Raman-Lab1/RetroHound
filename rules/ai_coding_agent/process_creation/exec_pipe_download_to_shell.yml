@@ -11,8 +11,8 @@ description: >
   `$(…)` or backticks passed to `sh -c`, `eval` or `python -c`, or a here-string (`bash /dev/stdin <<< …`); or fed to
   iex or [scriptblock]::Create. A path, sudo/doas/env/nohup/timeout/nice/stdbuf/busybox before the shell, upper-case
   names (`CURL … | SH` runs the real binaries on a case-insensitive file system), `${IFS}` for a space, and quote or
-  backslash obfuscation of the names (`c"u"rl`, `c\url`) do not hide it. Known gaps: names built from variables
-  (`$c URL | sh`) or ANSI-C escapes (`$'\x63url'`), aliases and functions, a download to a file run later (see
+  backslash obfuscation of the names (`c"u"rl`, `c\url`, `$'\x63url'`) do not hide it. Known gaps: names built from
+  variables (`$c URL | sh`), aliases and functions, a download to a file run later (see
   exec_download_then_run), and shells reached through xargs or find -exec.
 level: high
 tags: [attack.execution, attack.t1059, attack.t1105, owasp_agentic.asi05]

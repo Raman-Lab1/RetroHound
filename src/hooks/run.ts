@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { appendFileSync, chmodSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { markHooksEdit } from "./context.ts";
 import { render, supportsAsk, toEvents, type Agent } from "./agents.ts";
 import { evaluate } from "../engine/evaluate.ts";
 import { LEVELS } from "../normalize/types.ts";
@@ -52,7 +53,7 @@ export function tampers(e: RawEvent, protect: string[]): boolean {
 
 /** The most severe enforce-lane rule the call trips, or none. Throws on a payload that is not a PreToolUse object. */
 export function decide(stdin: string, rules: Rule[], ignore: Ignore = NO_IGNORE, agent: Agent = "claude_code", protect: string[] = []): { rule: DetectionRule; event: RawEvent } | undefined {
-  const events = toEvents(agent, JSON.parse(stdin));
+  const events = toEvents(agent, JSON.parse(stdin)).map(markHooksEdit);
   const guarded = events.find((e) => tampers(e, protect));
   if (guarded) return { rule: TAMPER, event: guarded }; // never suppressed: the ignore file is one of the guarded files
   const hits = evaluate(rules.filter(isEnforce), events).map((m) => ({ rule: m.rule as DetectionRule, event: m.events[0]! }))

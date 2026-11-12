@@ -75,8 +75,8 @@ Velociraptor tool, unpacks it into a temporary directory, globs every user's `.c
 finding (time, rule, severity 1 to 5, message, session, project, command line, file, URL, techniques, transcript).
 `--no-index` means nothing is written on the endpoint. The endpoint needs Node 22.13 or later (`NodePath`).
 
-Install: Artifacts, Add an artifact, paste the YAML. In Tools, set the `RetroHound` tool's hash, or upload the
-tarball and serve it locally. Collecting needs the `EXECVE` permission.
+Install: Artifacts, Add an artifact, paste the YAML. The `RetroHound` tool carries the tarball's SHA-256 (`expected_hash`); or upload
+the tarball and serve it locally. Collecting needs the `EXECVE` permission.
 
 Verified against: [artifacts](https://docs.velociraptor.app/docs/artifacts/),
 [tools](https://docs.velociraptor.app/docs/artifacts/tools/),
@@ -88,13 +88,13 @@ Verified against: [artifacts](https://docs.velociraptor.app/docs/artifacts/),
 [glob](https://docs.velociraptor.app/vql_reference/popular/glob/),
 [path_join](https://docs.velociraptor.app/vql_reference/basic/path_join/). Not yet run on a live server.
 
-To publish: add `expected_hash` (SHA-256 of the published tarball) to the tool, test on a lab client, then optionally
-submit it to the Velociraptor artifact exchange.
+To publish: test on a lab client, then optionally submit it to the Velociraptor artifact exchange. Update `url` and
+`expected_hash` with each release.
 
 ## GitHub Action
 
 `action.yml` (repository root): a composite action. It installs Node 24 (`actions/setup-node`, which also changes
-`node` for later steps of the job) and runs `npx --yes retrohound@0.3.0` with:
+`node` for later steps of the job) and runs `npx --yes retrohound@0.3.1` with:
 
 | Input | Default | Meaning |
 |---|---|---|
@@ -108,7 +108,7 @@ package from npm; RetroHound makes no network calls itself.
 
 ```yaml
 - uses: actions/checkout@v5
-- uses: Raman-Lab1/RetroHound@v0.3.0
+- uses: Raman-Lab1/RetroHound@v0.3.1
   with:
     command: preflight
 ```
@@ -119,7 +119,7 @@ always works:
 
 ```yaml
 - id: rh
-  uses: Raman-Lab1/RetroHound@v0.3.0
+  uses: Raman-Lab1/RetroHound@v0.3.1
   with:
     command: scan
     args: --root transcripts --format sarif
@@ -136,7 +136,7 @@ Verified against: [metadata syntax](https://docs.github.com/en/actions/reference
 
 To publish: the repo must be public with one `action.yml` at the root (this one); accept the Marketplace Developer
 Agreement, use 2FA, check the name `RetroHound` is free, then draft a release with "Publish this Action to the GitHub
-Marketplace" ticked and a `v0.3.0` tag. Bump the pinned version with each npm release (the test enforces it).
+Marketplace" ticked and a `v0.3.1` tag. Bump the pinned version with each npm release (the test enforces it).
 
 ## Homebrew
 
@@ -147,7 +147,7 @@ checks `--version`, that the bundled rules load, and that `preflight` runs on an
 Verified against: [Language-specific formulae, Node](https://docs.brew.sh/Language-Specific-Formulae),
 [taps](https://docs.brew.sh/How-to-Create-and-Maintain-a-Tap).
 
-To publish: create a public `homebrew-tap` repository, copy the file to `Formula/retrohound.rb`, replace the
-placeholder `sha256` with `curl -sL <url> | shasum -a 256` of the published tarball, run
+To publish: create a public `homebrew-tap` repository, copy the file to `Formula/retrohound.rb` (its `sha256` is
+that of the published tarball, `curl -sL <url> | shasum -a 256`), run
 `brew install --build-from-source ./Formula/retrohound.rb && brew test retrohound && brew audit --strict retrohound`,
 and push. Users run `brew install raman-lab1/tap/retrohound`. Update `url` and `sha256` with each release.

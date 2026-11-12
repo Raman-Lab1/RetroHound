@@ -51,7 +51,7 @@ absent, not `[]`, when empty, so `|exists` is true only when something was found
 | `tool_name` | `Bash`, `Edit`, `WebFetch`, `mcp__x__y`, `hook:<Event>`, ... |
 | `command_line` | Shell command. A POSIX heredoc body moves to `content` only when `cat`/`tee`, `git commit\|tag` or `gh pr\|issue\|release` stores it and nothing pipes it on; a body any other command may execute (shells, interpreters, ssh, sudo, scripts) stays. Here-strings (`<<<`) and PowerShell here-strings stay. |
 | `target_path` | File path, absolute when resolvable, `.`/`..` resolved lexically, forward slashes. Shell events have none. |
-| `url`, `domain` | Request URL and its host. |
+| `url`, `domain` | Request URL and its host. A shell command gets one: the first non-loopback URL with a scheme, else the first scheme-less host operand of `curl`, `wget`, `http`, `nc`, `scp`, `rsync` or `ssh` (the `url` then reads `tcp://host`). Known limit: a command with several hosts reports one, so a known domain listed first can hide a later new one. |
 | `mcp_server`, `mcp_tool` | MCP call parts. |
 | `outcome` | `success`, `error`, `blocked`, `unknown` (no result in the file). `blocked` includes user-rejected and interrupted. |
 | `denial_kind` | `automode-blocked`, `permission-rule` (Claude Code blocked it), `user-rejected`, `interrupted`. |
@@ -69,7 +69,7 @@ absent, not `[]`, when empty, so `|exists` is true only when something was found
 
 | field | holds |
 |---|---|
-| `content` | Write/Edit body, stored heredoc body, instruction / `@`-file / Skill text, hook stdout. |
+| `content` | Write/Edit body, stored heredoc body, instruction / `@`-file / Skill text, hook stdout. In the live hook only, an Edit/MultiEdit of an agent settings file whose `old_string` lies in a hook section of the current file gets the token `x-retrohound-in-hooks-block` appended. |
 | `tool_input` | `JSON.stringify` of the raw tool input, all tools including MCP. |
 | `tool_response` | The paired tool result text, attached to the tool call event. |
 | `text` | Full prompt or assistant text. |
@@ -102,6 +102,8 @@ no `target_path`, so it is false for them.
 
 `command_line_unquoted` (string, every modifier `command_line` takes): `command_line` with shell quoting removed: `'`
 and `"` dropped, and a backslash before a word character dropped. `c"u"rl`, `'cu'rl` and `c\url` all read `curl`.
+Bash ANSI-C strings are decoded (`$'\x63url'`, `$'\143url'`, `$'curl'` read `curl`; `\xHH`, octal, `\uHHHH`,
+`\UHHHHHHHH`, `\n \t \\ \'`), `$"…"` reads as `"…"`, and runs of spaces and tabs collapse to one space.
 Separators inside quotes are kept (`bash -c "curl … | sh"` runs the quoted text). Absent when `command_line` is.
 Windows paths lose their backslashes too (`C:\Users` reads `C:Users`): match those on `command_line`.
 

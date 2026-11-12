@@ -125,7 +125,7 @@ no setup and no hook, and reports:
   RetroHound keeps a masked, append-only index; deleted transcripts stay searchable there.
 - **Secrets, as rule #1.** Secret files read, secrets in tool input, with masked values and fingerprints, not raw text.
 
-Detections are Sigma v2.1 YAML with a proposed `ai_coding_agent` logsource. 59 rules ship today, plus 15 silent helper rules that only feed correlations (`rules/ai_coding_agent`).
+Detections are Sigma v2.1 YAML with a proposed `ai_coding_agent` logsource. 60 rules ship today, plus 15 silent helper rules that only feed correlations (`rules/ai_coding_agent`).
 
 ## What it does not do
 
@@ -176,12 +176,13 @@ Flags (from `--help`):
 - `rules list`, `rules show`: `--rules <dir>`. `rules test [dir]`: `--tests <dir>` (default `<dir>/../tests`).
 - `query`: `--format <table|json>`, `--db <path>`.
 - `show`: `--db <path>`, `--rules <dir>`.
-- `wrapped`: `--since <when>` (default `365d`), `--anonymize` (hash project names, user name, project dirs),
+- `wrapped`: `--since <when>` (default `365d`), `--anonymize` (hash project names, user name, project dirs, URL, ssh and git hosts, git owner/repo),
   `--out <file.html|file.svg>` (default `wrapped.html`), `--db <path>`, `--rules <dir>`. `--out card.svg` writes a
   self-contained 1200x630 share card (system fonts, no scripts or external references, secrets masked) that any
   browser shows and any tool can convert to PNG.
-- `purge`: `--db <path>`, `--yes`. Without `--yes` it only says what it would delete. It also deletes the
-  index's footprint report (`index.footprint.html`).
+- `purge`: `--db <path>`, `--yes`, `--all`. Without `--yes` it only says what it would delete. It also deletes the
+  index's footprint report (`index.footprint.html`). `--all` also deletes the hook log and `rules-cache-*.json`
+  in `~/.retrohound` (nothing else, symlinks skipped).
 - `preflight [dir]`: `--rules <dir>`, `--format <table|json>`, `--fail-on <level>`, `--ignore <file>`.
 - `hook install`: `--agent <claude_code|codex|antigravity>`, `--mode <log|confirm|block>`, `--scope <user|project|local>`, `--settings <path>`, `--fail-closed`,
   `--dry-run`, `--allow-unsafe-path`. Start with `--mode log` and read `~/.retrohound/hook-log.jsonl` before blocking
@@ -294,7 +295,7 @@ index keeps the masked record either way, as long as you scan before the deletio
 ## What it found on my machine
 
 One developer machine (the author's), mostly sessions working on RetroHound itself, so self-referential. 9 sessions,
-3,272 events, 41 findings from 8 of the 38 rules shipped at that time (59 ship now). Counts only; see [docs/perf.md](docs/perf.md) for the review.
+3,272 events, 41 findings from 8 of the 38 rules shipped at that time (60 ship now). Counts only; see [docs/perf.md](docs/perf.md) for the review.
 
 | Rule | Level | Hits | Sessions |
 |---|---|---|---|

