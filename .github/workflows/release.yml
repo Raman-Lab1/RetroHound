@@ -1,6 +1,8 @@
-# Publishes to npm when a v* tag is pushed, through npm trusted publishing (OIDC): no token is stored, and npm shows
-# provenance linking the package to this workflow run. One-time setup on npmjs.com: package > Settings > Trusted
-# publisher > GitHub Actions, repository Raman-Lab1/RetroHound, workflow release.yml. Provenance needs a public
+# Stages a release on npm when a v* tag is pushed, through npm trusted publishing (OIDC): no token is stored, and npm
+# shows provenance linking the package to this workflow run. The staged version is not public until a maintainer
+# approves it with 2FA (`npm stage list retrohound`, then `npm stage approve <id>`), so this workflow alone cannot ship
+# a release. One-time setup on npmjs.com: package > Settings > Trusted publisher > GitHub Actions, repository
+# Raman-Lab1/RetroHound, workflow release.yml; "Allow npm publish" can stay off. Provenance needs a public
 # repository: `--provenance` makes a publish from a private one fail instead of shipping without it.
 name: release
 on:
@@ -15,13 +17,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      # TODO(owner): this job can mint the publish credential (id-token: write); pin each action below to a full
-      # commit SHA (keep the tag as a comment) and consider a protected `release` environment.
-      - uses: actions/checkout@v5
-      - uses: oven-sh/setup-bun@v2
+      # This job can mint the publish credential (id-token: write), so every action is pinned to a commit SHA.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "24"
           registry-url: https://registry.npmjs.org
@@ -31,4 +32,4 @@ jobs:
       - run: bun test
       - name: tag matches package.json version
         run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
-      - run: npm publish --provenance --access public
+      - run: npm stage publish --provenance --access public
