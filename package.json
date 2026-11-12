@@ -1,6 +1,6 @@
 {
   "name": "retrohound",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Audit what your AI coding agent did: Sigma rules over Claude Code, Codex and Antigravity transcripts, local and offline.",
   "type": "module",
   "license": "Apache-2.0",

@@ -5,6 +5,8 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-12
+
 ### Added
 - `rules convert -t <backend> --pipeline ecs|ocsf [rules...]`: converts rules to SIEM queries over the `ndjson-ecs` /
   `ndjson-ocsf` exports with a sigma-cli already on your PATH (nothing is installed or downloaded; without it, exit 2).

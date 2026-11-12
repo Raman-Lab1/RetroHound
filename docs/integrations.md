@@ -94,7 +94,7 @@ submit it to the Velociraptor artifact exchange.
 ## GitHub Action
 
 `action.yml` (repository root): a composite action. It installs Node 24 (`actions/setup-node`, which also changes
-`node` for later steps of the job) and runs `npx --yes retrohound@0.2.0` with:
+`node` for later steps of the job) and runs `npx --yes retrohound@0.3.0` with:
 
 | Input | Default | Meaning |
 |---|---|---|
@@ -108,7 +108,7 @@ package from npm; RetroHound makes no network calls itself.
 
 ```yaml
 - uses: actions/checkout@v5
-- uses: Raman-Lab1/RetroHound@v0.2.0
+- uses: Raman-Lab1/RetroHound@v0.3.0
   with:
     command: preflight
 ```
@@ -119,7 +119,7 @@ always works:
 
 ```yaml
 - id: rh
-  uses: Raman-Lab1/RetroHound@v0.2.0
+  uses: Raman-Lab1/RetroHound@v0.3.0
   with:
     command: scan
     args: --root transcripts --format sarif
@@ -136,7 +136,7 @@ Verified against: [metadata syntax](https://docs.github.com/en/actions/reference
 
 To publish: the repo must be public with one `action.yml` at the root (this one); accept the Marketplace Developer
 Agreement, use 2FA, check the name `RetroHound` is free, then draft a release with "Publish this Action to the GitHub
-Marketplace" ticked and a `v0.2.0` tag. Bump the pinned version with each npm release (the test enforces it).
+Marketplace" ticked and a `v0.3.0` tag. Bump the pinned version with each npm release (the test enforces it).
 
 ## Homebrew
 
