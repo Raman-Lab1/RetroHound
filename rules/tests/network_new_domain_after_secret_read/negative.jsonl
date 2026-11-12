@@ -1,0 +1,9 @@
+{"session_id":"s0","category":"web_request","tool_name":"WebFetch","url":"https://docs.example.invalid/","domain":"docs.example.invalid","ts":"2025-12-10T00:00:00.000Z"}
+{"session_id":"s1","category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env"}
+{"session_id":"s1","category":"web_request","tool_name":"WebFetch","url":"https://docs.example.invalid/a","domain":"docs.example.invalid"}
+{"session_id":"s2","category":"web_request","tool_name":"WebFetch","url":"https://new1.example.invalid/","domain":"new1.example.invalid"}
+{"session_id":"s2","category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env"}
+{"session_id":"s3","category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env.example"}
+{"session_id":"s3","category":"web_request","tool_name":"WebFetch","url":"https://new2.example.invalid/","domain":"new2.example.invalid"}
+{"session_id":"s4","category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env"}
+{"session_id":"s4","category":"process_creation","tool_name":"Bash","command_line":"curl -s http://localhost:8080/health","url":"http://localhost:8080/health","domain":"localhost"}

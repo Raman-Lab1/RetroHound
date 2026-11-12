@@ -1,0 +1,3 @@
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/.envrc.example","content":"export A=1"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/docs/husky.md","content":"npx husky init"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.envrc"}

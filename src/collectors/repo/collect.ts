@@ -11,7 +11,7 @@ import type { Category, RawEvent } from "../../normalize/types.ts";
 export const MAX_FILE_BYTES = 1_048_576;
 export const MAX_PACKAGES = 500; // workspace package.json files per repo
 export const MAX_WORKSPACE_DIRS = 5000; // directories a workspace glob (`**`) may list; a deep tree is reported, not walked
-const MAX_FILES = 400; // per directory walk; a bomb of agent files is reported as skipped, not read
+export const MAX_FILES = 400; // per directory walk; a bomb of agent files is reported as skipped, not read
 export const SESSION_ID = "preflight";
 const SKIP_DIRS = new Set(["node_modules", ".git"]);
 
@@ -28,8 +28,22 @@ const DIRS: [string, RegExp][] = [
   [".claude/agents", /\.md$/i], [".claude/commands", /\.md$/i], [".claude/skills", /(?:^|\/)SKILL\.md$/i], [".cursor/rules", /\.mdc?$/i],
 ];
 
-const fwd = (p: string) => p.replaceAll("\\", "/");
-const inside = (root: string, p: string) => p === root || p.startsWith(root + "/");
+export const fwd = (p: string) => p.replaceAll("\\", "/");
+export const inside = (root: string, p: string) => p === root || p.startsWith(root + "/");
+
+/** One glob segment against one name, `*` the only wildcard. No regex: the repo writes both sides, and a backtracking
+ * regex built from `*a*a*a…b` hangs on a long name; this backtracks only to the last `*`, so at most O(len × len). */
+export function globMatch(pat: string, name: string): boolean {
+  let p = 0, i = 0, star = -1, from = 0;
+  while (i < name.length) {
+    if (pat[p] === "*") (star = p++), (from = i);
+    else if (p < pat.length && pat[p] === name[i]) p++, i++;
+    else if (star >= 0) (p = star + 1), (i = ++from);
+    else return false;
+  }
+  while (pat[p] === "*") p++;
+  return p === pat.length;
+}
 
 function event(rel: string, abs: string, category: Category, n: number, ts: string): RawEvent {
   const id = createHash("sha256").update(`${SESSION_ID}\0${rel}\0${n}`).digest("hex").slice(0, 32);
@@ -53,7 +67,7 @@ function workspaceGlobs(root: string): string[] {
 }
 
 /** Hook commands of a settings.json become `hook:<Event>` process_creation events, as the live parser emits them. */
-function hookCommands(text: string): [string, string][] {
+export function hookCommands(text: string): [string, string][] {
   try {
     const hooks = (JSON.parse(text) as { hooks?: Record<string, unknown> }).hooks ?? {};
     return Object.entries(hooks).flatMap(([name, groups]) =>
@@ -74,11 +88,9 @@ export function collectRepo(dir: string, now = new Date()): Collected {
     const full = join(root, rel);
     let st;
     try {
-      st = lstatSync(full);
-      if (st.isSymbolicLink()) {
-        if (!inside(root, fwd(realpathSync(full)))) return skip(rel, "symlink outside the directory");
-        st = statSync(full);
-      }
+      // the real path, not only the last component: a symlinked `.claude` or `.vscode` must not lead out either
+      if (!inside(root, fwd(realpathSync(full)))) return skip(rel, "symlink outside the directory");
+      st = statSync(full);
     } catch {
       return; // absent: the normal case for most of these paths
     }
@@ -104,6 +116,8 @@ export function collectRepo(dir: string, now = new Date()): Collected {
   const walk = (rel: string, keep: RegExp, seen = { n: 0 }) => {
     let entries;
     try {
+      // readdir follows a symlinked walk root (`.claude/skills -> /`), so check where it really is first
+      if (!inside(root, fwd(realpathSync(join(root, rel))))) return skip(rel, "symlink outside the directory");
       entries = readdirSync(join(root, rel), { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
     } catch {
       return;
@@ -128,7 +142,6 @@ export function collectRepo(dir: string, now = new Date()): Collected {
     if (!segs.length) return void (rel && lstatSync(join(root, rel, "package.json"), { throwIfNoEntry: false }) && packages.add(`${rel}/package.json`));
     const [seg, ...rest] = segs as [string, ...string[]];
     if (seg === "**") expand(rel, rest);
-    const re = new RegExp(`^${seg.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replaceAll("*", ".*")}$`);
     let entries;
     if (++listed > MAX_WORKSPACE_DIRS) return;
     try {
@@ -140,7 +153,7 @@ export function collectRepo(dir: string, now = new Date()): Collected {
       if (!e.isDirectory() || SKIP_DIRS.has(e.name)) continue;
       const child = rel ? `${rel}/${e.name}` : e.name;
       if (seg === "**") expand(child, segs);
-      else if (re.test(e.name)) expand(child, rest);
+      else if (globMatch(seg, e.name)) expand(child, rest);
     }
   };
   for (const glob of workspaceGlobs(root)) {

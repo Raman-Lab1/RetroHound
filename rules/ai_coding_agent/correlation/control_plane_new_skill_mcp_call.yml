@@ -1,0 +1,68 @@
+title: Skill or plugin never seen before, then an MCP call made under it
+id: 259cce2d-934c-4eae-9ab7-1e649fc90157
+name: control_plane_new_skill_mcp_call
+author: Raman Kumar
+status: experimental
+description: >-
+  Within one session, the first event in all indexed history attributed to a skill or plugin is followed within an
+  hour by an MCP call attributed to the same skill or plugin (group-by `attribution`). One finding per new skill or
+  plugin, joined to its earliest MCP call in the window; when its very first event is an MCP call, that one event is
+  both steps. Approximation: "its first MCP call ever" is not expressible, so this is its first MCP call within an
+  hour of first use, in that session. Only `mcp` category calls count, so an MCP call with a URL is missed.
+  First-seen holds for any kind an event carries, so a known skill's first call to a new MCP server counts too. Needs
+  14 days of history (ADR 0016).
+tags:
+  - attack.execution
+  - attack.initial_access
+  - attack.t1195.002
+  - owasp_agentic.asi02
+  - owasp_agentic.asi04
+correlation:
+  type: temporal_ordered
+  rules:
+    - first_seen_skill_or_plugin
+    - mcp_call_by_skill_or_plugin
+  group-by:
+    - session_id
+    - attribution
+  timespan: 1h
+falsepositives:
+  - A skill or plugin the user just installed whose job is to drive an MCP server
+level: low
+x-retrohound:
+  lane: hunt
+---
+title: Helper, the first event attributed to a skill or plugin in all history
+id: 11863df4-14b7-46dc-a23b-4f20f14829b7
+name: first_seen_skill_or_plugin
+author: Raman Kumar
+description: Silenced step one of control_plane_new_skill_mcp_call. Runs on every category, as attribution does.
+logsource:
+  product: ai_coding_agent
+detection:
+  selection:
+    attribution|startswith:
+      - 'skill:'
+      - 'plugin:'
+    first_seen_global: true
+  condition: selection
+level: informational
+x-retrohound:
+  requires:
+    - first_seen
+---
+title: Helper, an MCP call attributed to a skill or plugin
+id: fdcf659f-9191-44f9-b07b-c5057e000f62
+name: mcp_call_by_skill_or_plugin
+author: Raman Kumar
+description: Silenced step two of control_plane_new_skill_mcp_call.
+logsource:
+  product: ai_coding_agent
+  category: mcp
+detection:
+  selection:
+    attribution|startswith:
+      - 'skill:'
+      - 'plugin:'
+  condition: selection
+level: informational

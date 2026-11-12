@@ -1,2 +1,6 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"git config --global core.hooksPath ~/.hooks"}
 {"category":"process_creation","tool_name":"Bash","command_line":"git config --global init.templateDir ~/.git-templates"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git -C /tmp/x config --global core.hooksPath ~/.hooks"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git  config  --global core.hooksPath ~/.hooks"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git config --system core.hooks''Path /opt/hooks"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git config core.hooksPath ~/.hooks --global"}

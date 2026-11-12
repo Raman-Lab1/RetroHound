@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { mask } from "../normalize/mask.ts";
 import { verifyChain } from "../store/chain.ts";
 import { defaultDbPath, openReadOnly } from "../store/index.ts";
-import { MIGRATIONS } from "../store/schema.ts";
+import { MIGRATIONS, schemaProblem } from "../store/schema.ts";
 import { UsageError, type IO, type Registrar } from "./io.ts";
 
 function verify(dbPath: string, head: string | undefined, io: IO): number {
@@ -17,8 +17,10 @@ function verify(dbPath: string, head: string | undefined, io: IO): number {
       const fix = version < MIGRATIONS.length ? ": run `retrohound scan` once to upgrade it, which starts the chain" : "";
       throw new UsageError(`index schema version ${version}, this RetroHound verifies ${MIGRATIONS.length}${fix}`);
     }
-    const v = verifyChain(db, head?.toLowerCase());
-    // A head can't refuse entries appended after it, so show them: an events delete outside a parser upgrade stands out.
+    const problem = schemaProblem(db); // a trigger can drop rows before the chain sees them
+    const v = problem ? { ok: false as const, problem } : verifyChain(db, head?.toLowerCase());
+    // A head can't refuse entries appended after it, so show them: an events delete outside a parser upgrade stands out,
+    // and an events rewrite is history changed after the head (a rescan resolving an outcome is one too).
     const since = v.ok && v.since
       ? `added since the recorded head: ${Object.entries(v.since).sort().map(([k, n]) => `${k} ×${n}`).join(", ") || "nothing"}\n` : "";
     io.out(mask(v.ok ? `ok: ${v.entries} entries, head ${v.head}\n${since}` : `broken: ${v.problem}\n`));

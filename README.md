@@ -24,8 +24,9 @@ Needs Node.js 22.13 or later. Nothing is uploaded: RetroHound reads files on you
 npx retrohound scan
 ```
 
-That reads `~/.claude`, keeps a masked index in `~/.retrohound/index.db` and prints what it found. To keep the
-command around, `npm install -g retrohound`; below, `retrohound` means either form.
+That reads `~/.claude`, keeps a masked index in `~/.retrohound/index.db`, prints what it found, and writes
+`~/.retrohound/index.footprint.html`: one offline page with everything the index holds about the AI agents on this machine
+(see [Footprint report](#footprint-report)). To keep the command around, `npm install -g retrohound`; below, `retrohound` means either form.
 
 ### Try it: ten things to do in your first five minutes
 
@@ -53,7 +54,7 @@ retrohound query "SELECT category, count(*) AS n FROM events GROUP BY category O
 retrohound verify                 # check the index was not edited; keep the printed head somewhere safe
 
 # 7. Machine-readable output and CI gates
-retrohound scan --format json > report.json      # also sarif, ndjson-ecs, ndjson-ocsf
+retrohound scan --format json > report.json      # also sarif, ndjson-ecs, ndjson-ocsf, attack-layer
 retrohound scan --no-index --fail-on high         # exit code 1 if anything high or critical is found
 
 # 8. A shareable summary with project and user names hashed
@@ -81,6 +82,11 @@ retrohound hook install --mode block             # when you trust it; `retrohoun
 
 If `hook install` refuses because a directory on the path to Node is writable by others (common with Homebrew),
 see [Hook install safety](#hook-install-safety).
+
+An agent can start another agent with its settings moved (`--setting-sources`, `--settings`, `CLAUDE_CONFIG_DIR`,
+`CODEX_HOME`), which skips a user-scope hook; the enforce rule `exec_nested_agent_cli` stops that in `--mode block`.
+To cover such children anyway, also put the hook entry in the agent's managed settings (by hand or through MDM;
+`hook install` writes user, project or local scope).
 
 ## What it catches
 
@@ -119,7 +125,7 @@ no setup and no hook, and reports:
   RetroHound keeps a masked, append-only index; deleted transcripts stay searchable there.
 - **Secrets, as rule #1.** Secret files read, secrets in tool input, with masked values and fingerprints, not raw text.
 
-Detections are Sigma v2.1 YAML with a proposed `ai_coding_agent` logsource. 48 rules ship today, plus 9 silent helper rules that only feed correlations (`rules/ai_coding_agent`).
+Detections are Sigma v2.1 YAML with a proposed `ai_coding_agent` logsource. 59 rules ship today, plus 15 silent helper rules that only feed correlations (`rules/ai_coding_agent`).
 
 ## What it does not do
 
@@ -150,7 +156,7 @@ bun test
 
 | Command | What it does |
 |---|---|
-| `scan` | Scan an agent's transcripts (Claude Code by default), index them, report findings. |
+| `scan` | Scan an agent's transcripts (Claude Code by default), index them, report findings, write the footprint report. |
 | `rules list` / `rules show <rule>` / `rules test [dir]` | Inspect loaded rules (and rejected ones, with the reason); check every rule has passing tests. |
 | `query <sql>` | Read-only SQL over the index. Tables: `events`, `sessions`, `findings`, `files_indexed`. |
 | `show <session-id>` | Timeline of one session with findings highlighted. |
@@ -163,8 +169,9 @@ bun test
 Flags (from `--help`):
 
 - `scan`: `--since <30d|12h|date>`, `--agent <claude_code|codex|antigravity>`, `--project <path-substring>`, `--rules <dir>`,
-  `--level <informational|low|medium|high|critical>` (hide lower), `--format <table|json|sarif|ndjson-ecs|ndjson-ocsf>`, `--no-index` (evaluate in
-  memory, write nothing), `--fail-on <level>` (exit 1 at or above it, for CI), `--db <path>`,
+  `--level <informational|low|medium|high|critical>` (hide lower), `--format <table|json|sarif|ndjson-ecs|ndjson-ocsf|attack-layer>`, `--no-index` (evaluate in
+  memory, write nothing), `--report <file>` (footprint report path; default `<index name>.footprint.html` next to the index),
+  `--no-report`, `--fail-on <level>` (exit 1 at or above it, for CI), `--db <path>`,
   `--root <dir>` (Claude config dir or its `projects` dir; default `~/.claude`).
 - `rules list`, `rules show`: `--rules <dir>`. `rules test [dir]`: `--tests <dir>` (default `<dir>/../tests`).
 - `query`: `--format <table|json>`, `--db <path>`.
@@ -173,7 +180,8 @@ Flags (from `--help`):
   `--out <file.html|file.svg>` (default `wrapped.html`), `--db <path>`, `--rules <dir>`. `--out card.svg` writes a
   self-contained 1200x630 share card (system fonts, no scripts or external references, secrets masked) that any
   browser shows and any tool can convert to PNG.
-- `purge`: `--db <path>`, `--yes`. Without `--yes` it only says what it would delete.
+- `purge`: `--db <path>`, `--yes`. Without `--yes` it only says what it would delete. It also deletes the
+  index's footprint report (`index.footprint.html`).
 - `preflight [dir]`: `--rules <dir>`, `--format <table|json>`, `--fail-on <level>`, `--ignore <file>`.
 - `hook install`: `--agent <claude_code|codex|antigravity>`, `--mode <log|confirm|block>`, `--scope <user|project|local>`, `--settings <path>`, `--fail-closed`,
   `--dry-run`, `--allow-unsafe-path`. Start with `--mode log` and read `~/.retrohound/hook-log.jsonl` before blocking
@@ -187,7 +195,8 @@ Flags (from `--help`):
   command; at run time a missing extra dir is one stderr line and the hook still decides with the rules that do load.
 
 `scan --format json` prints one document, schema `retrohound.scan/0.1`; `sarif` is SARIF 2.1.0 and `ndjson-ecs` /
-`ndjson-ocsf` give one SIEM line per finding: [docs/output-schema.md](docs/output-schema.md).
+`ndjson-ocsf` give one SIEM line per finding; `attack-layer` is a MITRE ATT&CK Navigator layer of the techniques the
+findings map to, scored by finding count (open it in the Navigator): [docs/output-schema.md](docs/output-schema.md).
 
 ### Ignoring known-benign findings
 
@@ -212,6 +221,8 @@ it with `--ignore` if you trust it.
 (`--scope project` uses `.codex/` or `.agents/` in the repo). Both are set up from the vendors' docs and tested on temp
 files only, not yet in a live session:
 - Codex runs a new or changed hook only after you trust it in `/hooks`, and has no "ask", so `confirm` is refused there.
+  Its file edits (`apply_patch`) reach the hook as plain tool calls, so file rules (config writes, MCP servers added)
+  fire on them in `scan`, not yet in the hook.
 - Antigravity's docs call the hook's `decision` required; RetroHound prints nothing when it has nothing to say (it
   never prints "allow"). Try `--agent antigravity --scope project --mode log` in a throwaway repo first and check that
   normal tool calls still run before installing it for your user.
@@ -237,9 +248,41 @@ installed paths every time and warns if they no longer pass.
   fingerprint, never the value.
 - **Raw text is never stored.** Rules see raw text in memory while parsing; the index holds masked fields and a
   pointer (`raw_ref`: file and line) back to the transcript.
+- **Agent config files** (Claude Code, Codex CLI, Antigravity CLI: user, project and managed scopes, for the
+  projects in the index) are read when the footprint report is built and at every indexed scan, for MCP server, hook,
+  skill and plugin names and hook commands only. Env, headers, arguments and URLs in them are never read out: each
+  entry is stored only as name, scope, file and a sha256 of its masked form, for the last 10 scans, so the report can
+  show what changed.
 - **The index** is `~/.retrohound/index.db` (override with `--db`), directory 0700, file 0600 on macOS and Linux.
   On Windows those modes protect nothing; rely on your user profile permissions. It is long-lived evidence, so it
-  may be the only copy of sessions Claude Code deleted. `retrohound purge --yes` deletes it.
+  may be the only copy of sessions Claude Code deleted. `retrohound purge --yes` deletes it, and the
+  footprint report built from it.
+
+## Footprint report
+
+A table `scan` that writes the index also writes `index.footprint.html` next to it (named after the index) and prints its `file://` link. The page
+covers the whole index (every agent, project and session RetroHound has kept, not only this scan's `--since` or
+`--project`), and answers, in order:
+
+- **Can I trust this data?** Hash-chain size and head (check them with `retrohound verify`, ADR 0015), files gone, sessions kept after deletion, retention window.
+- **What is on this machine?** Agents, projects, sessions, events, share from sub-agents, blocked calls, findings.
+- **When?** Activity per day, with blocked calls and findings marked.
+- **Where did agents work?** Agent, then project, then session, then sub-agent, as a tree you expand.
+- **What could they reach?** MCP servers, hook commands, skills and plugins, and the domains they contacted.
+- **Configured versus used:** what each agent's config files set up (MCP servers, hooks, skills, plugins, per scope)
+  next to how often transcripts show it used. Items never seen used are flagged (surface you may not need), and
+  anything used that no config file sets up now is listed (removed since, or set up somewhere unexpected). One row
+  per item, with every scope and how many files set it up. Use is visible in Claude Code transcripts, and for Codex
+  MCP servers; for Codex hooks, skills and plugins and for Antigravity the page lists what is configured and says their
+  use is not recorded (their transcripts hold no such record). A plugin counts the calls made under it, under its skills
+  and on its own MCP servers, each call once.
+- **What must I rotate?** Each secret by fingerprint, with the sessions, sub-agents and projects it appeared in.
+- **How long were guard rails off?** Events and sessions per permission mode.
+- **What did they try?** Blocked calls by kind and category, and findings (the 500 most severe, newest first).
+
+It is one HTML file with no scripts and a Content-Security-Policy that blocks loading anything, so it works offline
+and fetches nothing. Strings are masked as everywhere else. The file is 0600 like the index. `--no-report` skips it;
+`--no-index` and the `json`/`sarif`/`ndjson-*` formats never write it.
 
 ## Retention warning
 
@@ -251,7 +294,7 @@ index keeps the masked record either way, as long as you scan before the deletio
 ## What it found on my machine
 
 One developer machine (the author's), mostly sessions working on RetroHound itself, so self-referential. 9 sessions,
-3,272 events, 41 findings from 8 of the 38 rules shipped at that time (48 ship now). Counts only; see [docs/perf.md](docs/perf.md) for the review.
+3,272 events, 41 findings from 8 of the 38 rules shipped at that time (59 ship now). Counts only; see [docs/perf.md](docs/perf.md) for the review.
 
 | Rule | Level | Hits | Sessions |
 |---|---|---|---|
@@ -291,7 +334,7 @@ read the [code of conduct](CODE_OF_CONDUCT.md), and report vulnerabilities or ru
 
 - v0.2: `hook` (log / confirm / block) with a parsed-rule cache and install path checks, SARIF and NDJSON export,
   `preflight`, `mcp`, ignore file, `wrapped` SVG card, Codex CLI and Antigravity CLI collectors. Next: `scan --agent all`,
-  Codex file-edit and MCP items once real samples exist, Gemini CLI.
+  Gemini CLI.
   Dropped: rule #22 (ssh/scp to an unknown host; no threat needs it and it is noisy).
 - Later: SIEM conversion via pySigma, upstream logsource proposal to SigmaHQ.
 

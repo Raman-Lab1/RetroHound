@@ -32,7 +32,8 @@
     "NOTICE",
     "rules/LICENSE",
     "rules/ai_coding_agent",
-    "rules/tests"
+    "rules/tests",
+    "integrations/pysigma"
   ],
   "engines": {
     "node": ">=22.13"

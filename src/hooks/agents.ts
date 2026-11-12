@@ -3,7 +3,7 @@
 // Codex: learn.chatgpt.com/docs/hooks. Antigravity: antigravity.google/docs/hooks.
 import { mapToolUse, type ToolFields } from "../collectors/claude-code/v1.ts";
 import { mapCall } from "../collectors/antigravity/v1.ts";
-import { cwdOf, shellFields } from "../collectors/codex/map.ts";
+import { cwdOf, mapItem, shellFields, type Fields } from "../collectors/codex/map.ts";
 import { secretFingerprints, secretKinds } from "../normalize/mask.ts";
 import type { RawEvent } from "../normalize/types.ts";
 
@@ -24,12 +24,40 @@ function claude(p: Line): RawEvent {
     ...mapToolUse(p.tool_name, p.tool_input, cwd) } as RawEvent;
 }
 
-function codex(p: Line): RawEvent {
+/**
+ * apply_patch envelope (`*** Add File: p` / `*** Update File: p` [`*** Move to: q`] / `*** Delete File: p`, body lines
+ * after each) -> the rollout's FileChange `changes` map, so the collector's own mapping makes the file_events. The live
+ * payload is unseen (docs/formats/codex.md), so the patch is taken from any string in tool_input that has these headers.
+ */
+export function patchChanges(input: unknown): Record<string, Line> {
+  const texts = typeof input === "string" ? [input] : Object.values(obj(input)).flatMap((v) => (Array.isArray(v) ? v : [v]));
+  const patch = texts.find((t): t is string => typeof t === "string" && /^\*\*\* (?:Add|Update|Delete) File: /m.test(t)) ?? "";
+  const changes: Record<string, Line> = {};
+  let cur: Line | undefined;
+  for (const line of patch.split(/\r?\n/)) {
+    const h = /^\*\*\* (Add|Update|Delete) File: (.+)$/.exec(line);
+    if (h) changes[h[2]!.trim()] = cur = { type: h[1]!.toLowerCase(), lines: [] };
+    else if (cur && line.startsWith("*** Move to: ")) cur.move_path = line.slice(13).trim();
+    else if (cur && !/^\*\*\* (?:End|Begin) Patch/.test(line)) cur.lines.push(line);
+  }
+  for (const c of Object.values(changes)) {
+    if (c.type === "add") c.content = c.lines.map((l: string) => l.replace(/^\+/, "")).join("\n");
+    else if (c.type === "update") c.unified_diff = c.lines.join("\n");
+    delete c.lines;
+  }
+  return changes;
+}
+
+function codex(p: Line): RawEvent[] {
   const cwd = cwdOf(p.cwd);
   const c = obj(p.tool_input).command;
+  const head = { ...base("codex", p.tool_use_id, p.session_id, cwd), permission_mode: str(p.permission_mode) };
+  const files = p.tool_name === "apply_patch" ? mapItem({ type: "FileChange", changes: patchChanges(p.tool_input) }, false, cwd) as Fields[] : [];
+  // apply_patch with no file header stays one tool_call; outcome is unknown before the tool runs, so it is left out
+  if (files.length) return files.map(({ outcome: _, ...f }) => ({ ...head, ...f }) as RawEvent);
   // Bash: the same command_line extraction as the rollout collector's shell calls (codex/v1.ts)
   const f = p.tool_name === "Bash" ? shellFields(Array.isArray(c) ? c.map(String) : typeof c === "string" ? [c] : [], cwd) : mapToolUse(p.tool_name, p.tool_input, cwd);
-  return { ...base("codex", p.tool_use_id, p.session_id, cwd), permission_mode: str(p.permission_mode), ...f } as RawEvent;
+  return [{ ...head, ...f } as RawEvent];
 }
 
 // Same mapping as the Antigravity collector; a tool it does not know is still a tool_call the rules can see.
@@ -45,12 +73,13 @@ function antigravity(p: Line): RawEvent {
   return { ...ev, ...(kinds.length ? { secret_kinds: kinds } : {}), ...(fps.length ? { secret_fps: fps } : {}) } as RawEvent;
 }
 
-/** The event for one PreToolUse payload. Throws on a payload that is not that agent's tool-call object. */
-export function toEvent(agent: Agent, p: unknown): RawEvent {
+/** The events for one PreToolUse payload (one, or one per file of a Codex apply_patch). Throws on a payload that is not
+ * that agent's tool-call object. */
+export function toEvents(agent: Agent, p: unknown): RawEvent[] {
   const o = obj(p);
   if (agent === "antigravity" ? typeof o.toolCall?.name !== "string" : typeof o.tool_name !== "string") throw new Error("not a tool-call payload");
-  const ev = agent === "codex" ? codex(o) : agent === "antigravity" ? antigravity(o) : claude(o);
-  return Object.fromEntries(Object.entries(ev).filter(([, v]) => v !== undefined)) as RawEvent; // absent, not undefined: `|exists`
+  const evs = agent === "codex" ? codex(o) : [agent === "antigravity" ? antigravity(o) : claude(o)];
+  return evs.map((ev) => Object.fromEntries(Object.entries(ev).filter(([, v]) => v !== undefined)) as RawEvent); // absent, not undefined: `|exists`
 }
 
 /** Codex parses `ask` but treats it as a failed hook and runs the tool, so confirm mode would silently allow. */

@@ -1,0 +1,66 @@
+# pySigma processing pipeline: RetroHound `ai_coding_agent` rules -> the fields `retrohound scan --format ndjson-ocsf`
+# emits (Detection Finding, class 2004). See README.md. Fields with no OCSF target fail the rule instead of being
+# invented. Event fields sit in arrays (`evidences`, `finding_info.related_events`): the names are OCSF attribute paths.
+# The logsource category is not mapped: a Detection Finding does not say which kind of event it came from.
+name: RetroHound ai_coding_agent to ndjson-ocsf
+priority: 20
+transformations:
+  - id: retrohound_ocsf_derived
+    type: detection_item_failure
+    message: "computed by the RetroHound engine, not in any export: run this rule in RetroHound"
+    field_name_conditions:
+      - type: include_fields
+        mode: re
+        fields: ["target_outside_project", "command_line_unquoted", "download_executed", "first_seen_.*"]
+    rule_conditions: &product
+      - type: logsource
+        product: ai_coding_agent
+  - id: retrohound_ocsf_unmapped
+    type: detection_item_failure
+    message: "field not in ndjson-ocsf (never exported, or exported with other values): run this rule in RetroHound"
+    field_name_conditions:
+      - type: include_fields
+        fields:
+          - schema_version
+          - ts # `time` is the finding's, in epoch ms
+          - seq
+          - category
+          - tool_name
+          - outcome
+          - parent_tool_use_id
+          - permission_mode
+          - prompt_source
+          - entrypoint
+          - attribution
+          - denial_kind
+          - denial_category
+          - secret_kinds
+          - result_secret_kinds
+          - secret_fps
+          - text_excerpt # OCSF `message` carries the finding message
+          - raw_ref # an object
+          - content # match-only: never leaves memory
+          - tool_input
+          - tool_response
+          - text
+    rule_conditions: *product
+  - id: retrohound_ocsf_fields
+    type: field_name_mapping
+    mapping:
+      id: finding_info.related_events.uid
+      agent: evidences.ai_agent.name
+      agent_version: evidences.ai_agent.version
+      mcp_server: evidences.api.service.name
+      mcp_tool: evidences.api.operation
+      session_id: metadata.correlation_uid
+      parent_session_id: unmapped.retrohound.parent_session_id
+      agent_id: unmapped.retrohound.agent_id
+      project_path: unmapped.retrohound.project_path
+      CurrentDirectory: unmapped.retrohound.project_path
+      command_line: evidences.process.cmd_line
+      CommandLine: evidences.process.cmd_line
+      target_path: evidences.file.path
+      TargetFilename: evidences.file.path
+      url: evidences.url.url_string
+      domain: evidences.url.hostname
+    rule_conditions: *product

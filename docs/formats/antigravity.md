@@ -101,7 +101,46 @@ collection (ADR 0006, 0007).
   it is never guessed from the paths that file tools touched. v1 had only (2), so a root without sub-agents had none.
 - Event id = sha256(file, step_index, sub-index). No `parent_tool_use_id` (calls have no ids).
 
+## MCP, skill and hook markers (inspected, 10 transcripts, 629 lines)
+
+Step `type` counts: PLANNER_RESPONSE 286, GENERIC 253, USER_INPUT 27, EPHEMERAL_MESSAGE 26, SYSTEM_MESSAGE 12,
+LIST_DIRECTORY 6, VIEW_FILE 6, GREP_SEARCH 5, CONVERSATION_HISTORY 3, CHECKPOINT 3, ERROR_MESSAGE 2. Line keys:
+`step_index, source, type, status, created_at` (all), `content, tool_calls, thinking, error`, token counts.
+Tool call `name` counts (259 calls): run_command 122, read_file 75, edit_file 26, view_file 19, manage_task 10,
+list_dir 6, grep_search 5, write_file 3, schedule 2, invoke_subagent 1, manage_subagents 1.
+
+- No tool name contains `mcp`, `skill` or `hook`; no call carries a server name or a `mcp_*` argument. **No MCP calls
+  were recorded** in this data (the machine has no `mcp_config.json`, so none were configured either).
+- No skill-use or hook-run step exists. The words appear 7 (mcp), 9 (skill) and 26 (hook) times, only inside free text
+  (tool results, prompts, assistant prose), and once in a `tool_calls` value (a `run_command` command line).
+- So the collector cannot attribute `mcp_server`, skill or hook use for Antigravity; how a configured MCP server would
+  appear in a transcript is still unverified (no sample). Not mapped; revisit when a transcript with one exists.
+- Names the collector does not map yet (they stay generic `tool_call`, counted as `tool:<name>`): manage_task,
+  list_dir, grep_search, schedule, manage_subagents. New step types seen: EPHEMERAL_MESSAGE, LIST_DIRECTORY,
+  VIEW_FILE, GREP_SEARCH, CONVERSATION_HISTORY, CHECKPOINT, ERROR_MESSAGE.
+
 ## Open questions
 
 - Behaviour when the CLI's permission prompt is rejected, MCP tool calls, browser tool steps, `status` values other
   than `DONE`, and how long `brain/` directories are kept.
+
+## Configuration surface (`src/footprint/config-antigravity.ts`, footprint "configured versus used")
+
+Checked 2026-11-10 on macOS by key names only, against the [MCP](https://antigravity.google/docs/mcp),
+[hooks](https://antigravity.google/docs/hooks) and [skills](https://antigravity.google/docs/skills) docs.
+
+| What | Location (scope) | Key path | Item `name` | Seen here |
+|---|---|---|---|---|
+| MCP server | `~/.gemini/config/mcp_config.json` (user), `<project>/.agents/mcp_config.json` (project), `~/.gemini/config/plugins/<p>/mcp_config.json` (plugin) | `mcpServers.<name>`; `command` = stdio, `serverUrl`/`url` = HTTP; `disabled: true` drops it | `<name>` | user file exists, empty (0 bytes): read as nothing configured |
+| Hook | `~/.gemini/config/hooks.json` (user), `<project>/.agents/hooks.json` (project) | `<group>.<Event>[]`: `PreToolUse`/`PostToolUse` entries `{matcher, hooks[].command}`, other events handlers `{command}` directly; `<group>.enabled: false` drops the group | the command (masked), `detail` `hook:<Event>` | docs only |
+| Plugin | `~/.gemini/config/plugins/<folder>/` (user) | folder name | `<folder>` | docs only |
+| Skill | `~/.gemini/config/skills/`, `~/.gemini/skills/`, `~/.gemini/antigravity-cli/skills/` (user), `<project>/.agents/skills/`, `<project>/.agent/skills/` (project), `<plugin>/skills/` (plugin); each `<dir>/SKILL.md` | frontmatter `name`, defaults to the folder | `name`, else `<dir>` | `~/.gemini/skills` (symlinked folders, skipped as outside the directory), project |
+
+Not read: env, args, headers, URLs; `~/.gemini/antigravity-cli/settings.json` (the hooks doc says it is not loaded for
+hooks); built-in skills (`antigravity-cli/builtin/skills`); a plugin's own hooks file (path not documented);
+`.agents/skills` in parent folders.
+
+**Join with the index: unverified.** The collector (`antigravity/v3`) fills no `mcp_server`, `attribution` or
+`hook:` event, and the local index holds no Antigravity sessions. Per the MCP doc an eager tool is called as
+`mcp_<server>_<tool>` and a lazy one through `call_mcp_tool {ServerName, ToolName}`: either way `<server>` is the
+`mcpServers` key, which is the item name.

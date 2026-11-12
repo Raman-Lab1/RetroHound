@@ -1,3 +1,4 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"git config core.hooksPath .husky"}
 {"category":"process_creation","tool_name":"Bash","command_line":"git config --global user.name x"}
 {"category":"process_creation","tool_name":"Bash","command_line":"git config --global core.editor vim"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git -C x config --local core.hooksPath .githooks"}

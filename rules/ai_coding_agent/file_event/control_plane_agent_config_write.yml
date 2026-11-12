@@ -5,9 +5,11 @@ author: Raman Kumar
 status: experimental
 description: >-
   The agent edited an AI-tool control-plane file through Write/Edit: .claude/settings.json, .claude/settings.local.json,
-  .mcp.json, ~/.claude.json, .gemini/settings.json, .cursor/mcp.json, .continue/config.json, .windsurf/mcp.json or the
-  Claude Desktop config. Shell writes (sed -i, redirect, tee, cp, mv, Set-Content) are control_plane_agent_config_shell_write.
-  Writes that add hooks, SessionStart, a *_BASE_URL, apiKeyHelper or MCP auto-enable are the higher-level
+  .mcp.json, ~/.claude.json, .gemini/settings.json, .cursor/mcp.json, .continue/config.json, .windsurf/mcp.json, the
+  Claude Desktop config, Codex .codex/config.toml and .codex/hooks.json, or Antigravity .gemini/config/{mcp_config,hooks}.json
+  and project .agents/. Shell writes (sed -i, redirect, tee, cp, mv, Set-Content) are control_plane_agent_config_shell_write.
+  Writes that add hooks, SessionStart, a *_BASE_URL, apiKeyHelper, MCP auto-enable or another command-running key,
+  or that touch a hook entry or a hooks-only file, are the higher-level
   control_plane_agent_config_risky_write.
 tags:
   - attack.persistence
@@ -28,6 +30,12 @@ detection:
       - .continue/config.json
       - .windsurf/mcp.json
       - claude_desktop_config.json
+      - .codex/config.toml
+      - .codex/hooks.json
+      - .gemini/config/mcp_config.json
+      - .gemini/config/hooks.json
+      - .agents/mcp_config.json
+      - .agents/hooks.json
   selection_risky:
     - content|contains: &risky
         - '"hooks"'
@@ -38,10 +46,37 @@ detection:
         - apikeyhelper
         - enableallprojectmcpservers
         - enabledmcpjsonservers
+        - '[hooks'
+        - '[[hooks'
+        - 'base_url ='
+        - 'base_url='
+        - statusline
+        - awsauthrefresh
+        - awscredentialexport
+        - otelheadershelper
+        - disableallhooks
+        - 'notify ='
+        - 'notify='
     - tool_input|contains: *risky
     - content|re|i: &hidden_mcp '(?:mcpservers)[^}]{0,400}command\\{0,2}"\s{0,3}:\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
     - tool_input|re|i: *hidden_mcp
-  condition: selection_file and not selection_risky
+    # A JSON or TOML \u escape of printable ASCII spells a key or value the consumer decodes (`hooks`); the
+    # HTML-safe escapes of & < > are left out.
+    - content|re|i: &escape '\\u00(?:2[0-57-9a-f]|3[0-9abdf]|[4-7][0-9a-f])'
+    - tool_input|re|i: *escape
+    - content|re|i: '(?:mcp_servers)[^\[]{0,400}command\s{0,3}=\s{0,3}\[?\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
+    - tool_input|re|i: '(?:mcp_servers)[^\[]{0,400}command\s{0,3}=\s{0,3}\[?\s{0,3}\\{0,2}"[^"]{0,200}/\.[a-z0-9_-]'
+  # Any change to the hooks-only files, and any Write/Edit of Claude settings that touches a hook entry (the command, the
+  # `hook run` marker, the mode): removing or downgrading the hook is as risky as adding one.
+  selection_hooks_file:
+    target_path|endswith:
+      - .codex/hooks.json
+      - .gemini/config/hooks.json
+      - .agents/hooks.json
+  selection_hook_entry:
+    target_path|contains: .claude/settings
+    tool_input|re|i: '(?:retrohound|hook run|--mode|\\{0,2}"(?:hook|run|block|confirm|log|command)\\{0,2}")'
+  condition: selection_file and not (selection_risky or selection_hooks_file or selection_hook_entry)
 falsepositives:
   - Users and tools such as ruflo legitimately edit these files (a model swap, a version pin)
   - A bare `claude mcp add` run by the agent is not seen here, only direct file writes

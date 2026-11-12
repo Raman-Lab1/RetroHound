@@ -28,6 +28,10 @@ const STRONG: [kind: string, token: string, masked: string][] = [
   ["sk_key", "sk" + "-" + BODY, "sk-…[masked]"],
   ["sk_key", "sk" + "-ant-" + BODY, "sk-…[masked]"],
   ["sk_key", "sk" + "-proj-" + BODY, "sk-…[masked]"],
+  ["private_key", "-----BEGIN PGP PRIVATE " + "KEY BLOCK-----\n" + BODY + "\n-----END PGP PRIVATE KEY BLOCK-----", "-----BEGIN…[masked]"],
+  ["google_api_key", "AI" + "za" + BODY.slice(0, 35), "AIza…[masked]"],
+  ["npm_token", "np" + "m_" + BODY.slice(0, 36), "npm_…[masked]"],
+  ["huggingface_token", "h" + "f_" + BODY, "hf_…[masked]"],
   ["jwt", JWT, "eyJ…[masked]"],
   ["bearer_token", "Bearer " + BODY, "Bearer …[masked]"],
   ["bearer_token", "Authorization: bearer " + BODY, "Authorization: bearer …[masked]"],
@@ -41,6 +45,20 @@ const MASK_ONLY: [plain: string, masked: string][] = [
   ['"password": "' + BODY + '"', '"password": "…[masked]"'],
   ["DB_PASSWD: '" + BODY + "'", "DB_PASSWD: '…[masked]'"],
   ["https://user:hunter2@example.invalid/x", "https://user:…[masked]@example.invalid/x"],
+  ["curl -u admin:PLACEHOLDERpw https://api.example.invalid", "curl -u admin:…[masked] https://api.example.invalid"],
+  ["curl --user=admin:PLACEHOLDERpw x", "curl --user=admin:…[masked] x"],
+  ['curl -u "admin:PLACEHOLDERpass123" https://api.example.invalid', 'curl -u "admin:…[masked]" https://api.example.invalid'],
+  ["curl -u 'admin:PLACEHOLDER pass' x", "curl -u 'admin:…[masked]' x"],
+  ['mysql -p"PLACEHOLDERpass123" db', 'mysql -p"…[masked]" db'],
+  ["mysql -p'PLACEHOLDER pass' db", "mysql -p'…[masked]' db"],
+  ["mysql -uroot -pPLACEHOLDERpw db", "mysql -uroot -p…[masked] db"],
+  ["psql --password PLACEHOLDERpw", "psql --password …[masked]"],
+  ["Authorization: Basic YWRtaW46UExBQ0VIT0xERVI=", "Authorization: Basic …[masked]"],
+  ["authorization: token " + BODY, "authorization: token …[masked]"],
+  ["Authorization%3A%20Bearer%20" + BODY, "Authorization%3A%20Bearer%20…[masked]"],
+  ["export DB_PASS=PLACEHOLDERpw", "export DB_PASS=…[masked]"],
+  ["MYSQL_PWD=PLACEHOLDERpw mysql", "MYSQL_PWD=…[masked] mysql"],
+  ['curl -d "{\\"password\\":\\"PLACEHOLDERpw\\"}"', 'curl -d "{\\"password\\":\\"…[masked]\\"}"'],
 ];
 
 const NEGATIVE = [
@@ -70,6 +88,20 @@ const NEGATIVE = [
   "http://localhost:8080/path@tag",
   "https://example.invalid/a:b@c",
   "192.0.2.10",
+  "docker run -u 1000:1000 img",
+  "git push -u origin main",
+  "curl -u $USER:$PASS https://example.invalid",
+  'curl -u "$USER:$PASS" https://example.invalid',
+  'docker run -u "1000:1000" img',
+  'mysql -p"$PW" db',
+  "mkdir -p /tmp/x && ssh -p 22 host",
+  "mysql -uroot -p db",
+  "docker login --password-stdin",
+  "psql --password $PGPASSWORD",
+  "Authorization: Basic $CREDS",
+  "export PWD=/home/dev/project",
+  "AI" + "zashort",
+  "h" + "f_short",
 ];
 
 describe("mask", () => {
@@ -96,6 +128,7 @@ describe("mask(mask(x)) === mask(x)", () => {
     "PASSWORD=" + "AK" + "IA" + UP,
     "Bearer " + "AK" + "IA" + UP,
     "Authorization: Bearer " + JWT,
+    "mysql -p$PW -pPLACEHOLDERpw -pPLACEHOLDER2",
   ];
   test.each(fragments)("%s", (x) => expect(mask(mask(x))).toBe(mask(x)));
   test("every pair of fragments, with each joiner", () => {
@@ -113,7 +146,7 @@ describe("mask(mask(x)) === mask(x)", () => {
 describe("secretKinds", () => {
   test("names every strong pattern, in table order, once", () => {
     const names = [...new Set(STRONG.map(([kind]) => kind))];
-    expect(names).toHaveLength(11);
+    expect(names).toHaveLength(14);
     expect(secretKinds(STRONG.map(([, token]) => token).join("\n=\n"))).toEqual(names);
   });
   test.each(STRONG)("%s: %#", (kind, token) => expect(secretKinds(token)).toContain(kind));
@@ -173,6 +206,11 @@ describe("hostile input stays fast", () => {
     ["authorization run", "authorization: ".repeat(big / 15)],
     ["authorization spaces", "authorization" + " ".repeat(big)],
     ["whitespace after keyword", "key" + " ".repeat(big)],
+    ["mysql run", "mysql ".repeat(big / 6)],
+    ["-u run", " -u a".repeat(big / 5)],
+    ["--password spaces", "--password" + " ".repeat(big)],
+    ["url-encoded authorization run", "Authorization%3A%20".repeat(big / 19)],
+    ["authorization colon spaces", "authorization:" + " ".repeat(big) + "x"],
   ])("%s", (_name, s) => {
     const start = performance.now();
     mask(s);

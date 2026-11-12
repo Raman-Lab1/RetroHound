@@ -1,7 +1,7 @@
 // The index schema (ADR 0002). Versioning is PRAGMA user_version plus this ordered list: a released entry
 // never changes, so a schema change is a new entry at the end. An entry is SQL, or a function when SQL can't do it.
 import { createChain } from "./chain.ts";
-import type { Db } from "./sqlite.ts";
+import { open, type Db } from "./sqlite.ts";
 
 export type Migration = string | ((db: Db) => void);
 
@@ -99,6 +99,22 @@ export const MIGRATIONS: readonly Migration[] = [
   `,
   // 3: the hash chain (ADR 0015), seeded from the rows already present; sha256 needs JS, hence a function.
   createChain,
+  // 4: what the agents' config files set up at each indexed scan (src/footprint/snapshot.ts), the last 10 scans kept.
+  // Not chained, like `sessions`: it is re-read from the config files on every scan. `hash` is entryHash of the masked
+  // entry, never the value. rule_runs.config_items is NULL for a scan that took no snapshot (every scan before this).
+  `
+  CREATE TABLE config_snapshots (
+    scan_id INTEGER NOT NULL, -- rule_runs.id
+    agent TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    name TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    source TEXT NOT NULL,
+    hash TEXT NOT NULL
+  );
+  CREATE INDEX config_snapshots_scan ON config_snapshots (scan_id);
+  ALTER TABLE rule_runs ADD COLUMN config_items INTEGER;
+  `,
 ];
 
 /** Applies the entries `db` has not had yet, each in its own transaction. Refuses a DB newer than `migrations`, and
@@ -124,4 +140,30 @@ export function migrate(db: Db, migrations: readonly Migration[] = MIGRATIONS): 
       throw err;
     }
   }
+}
+
+const objects = (db: Db) => db.prepare("SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name").all()
+  .map((r) => ({ key: JSON.stringify([r.type, r.name, r.tbl_name, r.sql]), what: `${r.type} ${r.name}` }));
+
+/** Why `db` is not an index RetroHound wrote, or undefined. Its sqlite_master must be exactly what `MIGRATIONS` create
+ * up to its user_version. That refuses another program's database before anything writes to it, and a trigger, view,
+ * table or constraint added by hand (a BEFORE INSERT trigger can drop evidence before the chain sees it). A version
+ * newer than ours is left to `migrate`, which names it. */
+export function schemaProblem(db: Db): string | undefined {
+  const version = Number(db.prepare("PRAGMA user_version").get()?.user_version ?? 0);
+  if (version > MIGRATIONS.length) return undefined;
+  const mem = open(":memory:");
+  let want: ReturnType<typeof objects>;
+  try {
+    migrate(mem, MIGRATIONS.slice(0, version));
+    want = objects(mem);
+  } finally {
+    mem.close();
+  }
+  const have = objects(db);
+  const odd = have.find((o) => !want.some((w) => w.key === o.key));
+  const gone = want.find((w) => !have.some((o) => o.key === w.key));
+  if (!odd && !gone) return undefined;
+  return `${odd ? `${odd.what} is not as RetroHound creates it` : `${gone!.what} is missing`}: this database is not a RetroHound index, `
+    + `or its schema was changed outside RetroHound`;
 }

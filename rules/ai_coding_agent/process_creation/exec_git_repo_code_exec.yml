@@ -1,0 +1,24 @@
+name: exec_git_repo_code_exec
+author: Raman Kumar
+id: b2b16311-cb1a-4753-8bc6-98fdabf59de1
+title: Repository git config or hook set to run a command
+status: experimental
+description: >
+  A shell command sets a git key whose value git later runs as a command (core.fsmonitor, core.pager, core.hooksPath,
+  core.sshCommand, filter.<x>.smudge|clean|process, diff.<x>.textconv, pager.<cmd>), or writes, copies, links or
+  chmods a file under .git/hooks/. The user's next git status or commit, or an IDE polling git, then runs it outside
+  the agent's approval flow. Reading a key (`git config --get core.pager`) is not matched. Write/Edit to the same
+  places is files_git_hook_write; the global or system hooksPath is exec_git_global_hooks.
+level: high
+tags: [attack.persistence, attack.t1546, owasp_agentic.asi05]
+falsepositives:
+  - Setting up a project's hooks directory (`git config core.hooksPath .githooks`) or a pager the user asked for.
+x-retrohound: { lane: enforce }
+logsource: { product: ai_coding_agent, category: process_creation }
+detection:
+  # `git [-C dir …] config [--local|set|…] KEY VALUE`: a value follows the key, so a read does not match.
+  config_key:
+    command_line_unquoted|re|i: '\bgit\b[^;&|\n]{0,200}\sconfig\b[^;&|\n]{0,300}\s(?:core\.(?:fsmonitor|pager|hookspath|sshcommand)|filter\.[^\s=]{1,100}\.(?:smudge|clean|process)|diff\.[^\s=]{1,100}\.textconv|pager\.[\w-]{1,60})\s{1,5}[^\s;&|]'
+  hook_write:
+    command_line_unquoted|re|i: '(?:>|\b(?:tee|cp|mv|ln|install|chmod)\b[^;&|\n]{0,300})\s{0,5}[^\s;&|]{0,200}\.git/hooks/[\w.-]'
+  condition: config_key or hook_write

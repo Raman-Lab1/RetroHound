@@ -6,6 +6,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { parseAllDocuments } from "yaml";
 import { evaluate } from "../engine/evaluate.ts";
+import { firstSeenOf, setFirstSeen } from "../engine/first-seen.ts";
 import type { Rule } from "../engine/load.ts";
 import { mask } from "../normalize/mask.ts";
 import type { RawEvent } from "../normalize/types.ts";
@@ -53,9 +54,12 @@ function checkOne(rule: Rule, testsDir: string): RuleCheck {
     if (!existsSync(file)) return [];
     try {
       const evs = events(file);
+      setFirstSeen(firstSeenOf(evs)); // the scan's pre-pass (ADR 0016), over this file: its ts values decide
       return evs.length ? check(evs) : [`${file} is empty`];
     } catch (e) {
       return [`${file}: ${(e as Error).message}`];
+    } finally {
+      setFirstSeen();
     }
   };
   const positive = run(pos, (evs) =>

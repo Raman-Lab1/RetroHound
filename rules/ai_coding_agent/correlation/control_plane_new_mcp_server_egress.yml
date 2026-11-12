@@ -1,0 +1,31 @@
+title: MCP server never seen before, and network egress in the same session
+id: 9979de13-bc4c-4e99-8b20-11ece375a163
+name: control_plane_new_mcp_server_egress
+author: Raman Kumar
+status: experimental
+description: >-
+  Within one session and one hour, in either order, the agent called an MCP server for the first time in all indexed
+  history and made a network egress call (step two of secrets_read_then_egress: WebFetch, an MCP call with a URL,
+  curl, wget, scp, git push and the like, loopback excluded). Only `mcp` category calls count as the new server, and
+  first-seen holds for any kind an event carries (see control_plane_new_mcp_server_secret_read). Needs 14 days of
+  history (ADR 0016).
+tags:
+  - attack.exfiltration
+  - attack.initial_access
+  - attack.t1041
+  - attack.t1195.002
+  - owasp_agentic.asi02
+  - owasp_agentic.asi04
+correlation:
+  type: temporal
+  rules:
+    - first_seen_mcp_server
+    - secrets_egress_call
+  group-by:
+    - session_id
+  timespan: 1h
+falsepositives:
+  - Setting up a new MCP server in a session that also fetches docs or pushes code
+level: low
+x-retrohound:
+  lane: hunt

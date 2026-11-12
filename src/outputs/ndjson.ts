@@ -24,7 +24,7 @@ const ECS_CATEGORY: Partial<Record<Category, { category: string[]; type: string[
 type Attack = { tactics: string[]; techniques: string[]; subtechniques: string[]; other: string[] };
 
 /** Splits Sigma tags: attack.t1552.001 -> technique T1552 + sub T1552.001, attack.credential_access -> tactic. */
-function parseTags(tags: string[]): Attack {
+export function parseTags(tags: string[]): Attack {
   const a: Attack = { tactics: [], techniques: [], subtechniques: [], other: [] };
   const add = (list: string[], v: string) => { if (!list.includes(v)) list.push(v); };
   for (const t of tags) {
@@ -70,14 +70,22 @@ function ecsEvent(e: AgentEvent) {
   };
 }
 
+/** A transcript timestamp that is not ISO 8601 with a zone is rewritten as one (the scan's end when it is not a date at all):
+ * a SIEM rejects an alert whose @timestamp is "January 1, 2024" even though Date.parse reads it. */
+const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/;
+const dateOr = (ts: string, fallback: string) =>
+  ISO.test(ts) && !Number.isNaN(Date.parse(ts)) ? ts : Number.isNaN(Date.parse(ts)) ? fallback : new Date(ts).toISOString();
+
 function ecsLine(f: Finding, rule: ReportRule | undefined, report: ScanReport) {
   const [p, ...rest] = f.events;
   const base = p ? ecsEvent(p) : { "@timestamp": f.ts, retrohound: { session_id: f.session_id } };
+  const ts = dateOr(base["@timestamp"], report.scan.finished_at);
   const sev = SEVERITY[f.level];
   const atk = parseTags(rule?.tags ?? []);
   const baseEvent = "event" in base ? base.event : {};
   return {
     ...base,
+    "@timestamp": ts,
     ecs: { version: ECS_VERSION },
     event: {
       ...baseEvent, kind: "alert", module: "retrohound", dataset: "retrohound.finding", id: f.id,
@@ -95,12 +103,16 @@ function ecsLine(f: Finding, rule: ReportRule | undefined, report: ScanReport) {
     tags: atk.other,
     message: f.message,
     retrohound: {
-      ...base.retrohound, finding: { id: f.id, event_ids: [p, ...rest].filter(Boolean).map((e) => e!.id) },
+      ...base.retrohound, ...(ts === base["@timestamp"] ? {} : { raw_ts: base["@timestamp"] }), finding: { id: f.id, event_ids: [p, ...rest].filter(Boolean).map((e) => e!.id) },
     },
   };
 }
 
+// evidences[].ai_agent is OCSF 1.9.0. type_id 1 Native: every parsed agent is first-party, no third-party framework.
+// The ai_operation profile (ai_model, message_context) does not apply to Detection Finding, so it is not declared.
 const evidence = (e: AgentEvent) => ({
+  ai_agent: { name: e.agent, version: e.agent_version, instance_uid: e.session_id, type_id: 1 },
+  api: e.mcp_server ? { operation: e.mcp_tool, service: { name: e.mcp_server } } : undefined,
   process: e.command_line ? { cmd_line: e.command_line } : undefined,
   file: e.target_path ? { path: e.target_path, name: baseName(e.target_path), type_id: 1 } : undefined,
   url: e.url ? { url_string: e.url, hostname: e.domain } : undefined,
@@ -110,7 +122,7 @@ function ocsfLine(f: Finding, rule: ReportRule | undefined, report: ScanReport) 
   const p = f.events[0];
   const atk = parseTags(rule?.tags ?? []);
   const times = f.events.map((e) => Date.parse(e.ts)).filter((t) => !Number.isNaN(t));
-  const time = Date.parse(f.ts);
+  const time = Date.parse(dateOr(f.ts, report.scan.finished_at));
   const attacks = [
     ...atk.tactics.map((n) => ({ tactic: { name: n } })),
     ...atk.techniques.map((t) => ({
@@ -132,13 +144,11 @@ function ocsfLine(f: Finding, rule: ReportRule | undefined, report: ScanReport) 
       first_seen_time: times.length ? Math.min(...times) : time, last_seen_time: times.length ? Math.max(...times) : time,
     },
     evidences: f.events.map(evidence),
-    // ai_agent is only schema-valid on classes with the ai_operation profile; Detection Finding is not one, so it rides in unmapped.
     unmapped: {
       retrohound: {
         session_id: f.session_id, agent: p?.agent, agent_id: p?.agent_id, parent_session_id: p?.parent_session_id,
         rule_author: rule?.author,
         project_path: p?.project_path, raw_ref: p?.raw_ref, other_tags: atk.other,
-        ai_agent: p ? { name: p.agent, version: p.agent_version, instance_uid: p.session_id, type_id: 99 } : undefined,
       },
     },
   };

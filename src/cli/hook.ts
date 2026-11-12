@@ -2,7 +2,8 @@
 // (exit 2 would BLOCK it), any error becomes one stderr line and no decision.
 import { DEFAULT_RULES_DIR } from "../version.ts";
 import { defaultLogPath, loadEnforceRules, MODES, runHook, type Mode } from "../hooks/run.ts";
-import { loadIgnore } from "../suppress.ts";
+import { loadIgnore, NO_IGNORE, type Ignore } from "../suppress.ts";
+import type { Rule } from "../engine/load.ts";
 import { AGENTS, type Agent } from "../hooks/agents.ts";
 import { mask } from "../normalize/mask.ts";
 import { install, settingsPath, status, uninstall, UnsafePathError, type InstallOpts, type Scope } from "../hooks/install.ts";
@@ -30,7 +31,7 @@ function manageOpts(f: ManageFlags): InstallOpts {
   const mode = oneOf("mode", f.mode ?? "log", MODES);
   const extraRules = (f.extraRules ?? []).map((d) => resolve(d));
   if (extraRules.length) loadRuleDir(DEFAULT_RULES_DIR, extraRules); // missing dir or reused id: usage error before anything is written
-  return { ...target(f), mode, command: process.execPath, entry: resolve(process.argv[1] ?? ""), failClosed: f.failClosed, dryRun: f.dryRun, allowUnsafePath: f.allowUnsafePath, extraRules };
+  return { ...target(f), mode, command: process.execPath, entry: resolve(process.argv[1] ?? ""), failClosed: f.failClosed, dryRun: f.dryRun, allowUnsafePath: f.allowUnsafePath, extraRules, rulesDir: DEFAULT_RULES_DIR };
 }
 
 function manage(fn: typeof install, f: ManageFlags, io: IO): number {
@@ -49,7 +50,7 @@ function manage(fn: typeof install, f: ManageFlags, io: IO): number {
 
 function showStatus(f: ManageFlags, io: IO): number {
   const { agent, path } = target(f);
-  const s = status(path, undefined, undefined, agent);
+  const s = status(path, undefined, undefined, agent, DEFAULT_RULES_DIR);
   io.out(mask(`${s.installed ? `installed (mode ${s.mode ?? "?"}${s.failClosed ? ", fail-closed" : ""})` : "not installed"}: ${s.path}\n`));
   if (s.extraRules?.length) io.out(mask(`extra rules: ${s.extraRules.join(", ")}\n`));
   if (s.allowUnsafePath) io.out("installed with --allow-unsafe-path: the path safety check was overridden.\n");
@@ -70,6 +71,28 @@ async function readStdin(): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
+// Fields that alone pick out a whole class of calls, not one known-benign case: an entry naming only these (and no
+// project_path) would switch a rule off everywhere, so the hook skips it.
+const BROAD = new Set(["agent", "agent_version", "category", "tool_name", "outcome", "permission_mode", "prompt_source", "entrypoint", "attribution", "denial_kind", "denial_category"]);
+
+/**
+ * Only the home file (or --ignore): a repo's own file must not switch off enforcement for that repo. A file that does
+ * not load is reported and ignored as a whole, so every enforce rule still decides (never fail open on it).
+ */
+function hookIgnore(rules: Rule[], file: string | undefined, io: IO): Ignore {
+  const say = (m: string) => io.err(mask(`retrohound hook: ${m}`).split("\n")[0] + "\n");
+  let ig: Ignore;
+  try {
+    ig = loadIgnore(rules, { file, skipUnknownRules: true });
+  } catch (e) {
+    say(`deciding without the ignore file, it does not load: ${(e as Error).message}`);
+    return NO_IGNORE;
+  }
+  const entries = ig.entries.filter((x) => x.project_path !== undefined || Object.keys(x.match).some((k) => !BROAD.has(k)));
+  if (entries.length < ig.entries.length) say(`${ig.entries.length - entries.length} ignore entries match only on ${[...BROAD].join("/")} and are not applied to the live hook`);
+  return { ...ig, entries };
+}
+
 type RunFlags = { agent?: string; mode?: string; rules?: string; extraRules?: string[]; log?: string; cache?: string; ignore?: string };
 
 export async function hookRun(f: RunFlags, io: IO, stdin: () => Promise<string> = readStdin): Promise<number> {
@@ -84,9 +107,8 @@ export async function hookRun(f: RunFlags, io: IO, stdin: () => Promise<string> 
     // A missing extra dir must not switch off the shipped rules: say so and decide with the rules that do load.
     for (const d of extras) if (!statSync(d, { throwIfNoEntry: false })?.isDirectory()) io.err(mask(`retrohound hook: --extra-rules ${d} is not a directory; deciding without it`) + "\n");
     const rules = loadEnforceRules(dir, f.cache, extras);
-    // Only the home file (or --ignore): a repo's own file must not switch off enforcement for that repo.
-    const ignore = loadIgnore(rules, { file: f.ignore, skipUnknownRules: true });
-    const res = runHook(text, mode, rules, f.log ?? defaultLogPath(), ignore, agent);
+    const res = runHook(text, mode, rules, f.log ?? defaultLogPath(), hookIgnore(rules, f.ignore, io), agent,
+      [dir, ...extras, f.cache, f.ignore].filter((p): p is string => !!p).map((p) => resolve(p)));
     if (res.output) io.out(res.output);
   } catch (e) {
     io.err(mask(`retrohound hook: ${(e as Error).message}; no decision (fail open)`).split("\n")[0] + "\n");

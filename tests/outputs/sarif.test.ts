@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { toSarif } from "../../src/outputs/sarif.ts";
 import { toNdjson } from "../../src/outputs/ndjson.ts";
+import { toAttackLayer } from "../../src/outputs/attack.ts";
 import type { ScanReport } from "../../src/outputs/report.ts";
 import type { AgentEvent, Finding, Level } from "../../src/normalize/types.ts";
 
@@ -110,7 +111,18 @@ describe("toNdjson", () => {
     expect(o.finding_info.analytic.uid).toBe("r1");
     expect(o.finding_info.attacks).toContainEqual({ technique: { uid: "T1552" }, sub_technique: { uid: "T1552.001" } });
     expect(o.finding_info.related_events).toEqual([{ uid: "e1" }]);
-    expect(o.unmapped.retrohound).toMatchObject({ agent_id: "agentxyz99", ai_agent: { type_id: 99 } });
+    expect(o.unmapped.retrohound).toMatchObject({ agent_id: "agentxyz99" });
+    expect(o.unmapped.retrohound.ai_agent).toBeUndefined();
+    expect(o.evidences[0].ai_agent).toEqual({ name: "claude_code", instance_uid: "aaaaaaaa-1111", type_id: 1 });
+    expect(o.evidences[0].api).toBeUndefined();
+  });
+  test("OCSF evidence per event: agent version, MCP server and tool as api", () => {
+    const mcp = ev({ id: "e2", category: "mcp", agent: "codex", agent_version: "0.50.0", tool_name: "mcp__docs__fetch", mcp_server: "docs", mcp_tool: "fetch" });
+    const o = JSON.parse(toNdjson(report([finding({ events: [ev(), mcp] })]), "ocsf").trim());
+    expect(o.metadata.profiles).toBeUndefined();
+    expect(o.evidences[1]).toMatchObject({
+      ai_agent: { name: "codex", version: "0.50.0", type_id: 1 }, api: { operation: "fetch", service: { name: "docs" } },
+    });
   });
   test("masks secrets and strips match-only fields in both schemas", () => {
     const e = { ...ev({ command_line: `echo ${TOKEN}`, text_excerpt: TOKEN }), content: "C0NTENT", tool_response: "T2ESP" } as AgentEvent;
@@ -118,5 +130,42 @@ describe("toNdjson", () => {
       const out = toNdjson(report([finding({ message: TOKEN, events: [e] })]), s);
       for (const w of [TOKEN, "C0NTENT", "T2ESP"]) expect(out).not.toContain(w);
     }
+  });
+});
+
+describe("toAttackLayer", () => {
+  test("one entry per technique, the sub-technique instead of its parent, scored by findings; untagged ones only counted", () => {
+    const r = report([finding(), finding({ id: "f2" }), finding({ id: "f3", rule_id: "r2" })]);
+    r.rules.push({ id: "r2", title: "No technique", level: "low", tags: ["attack.discovery"], lane: "hunt" });
+    const layer = JSON.parse(toAttackLayer(r));
+    expect(layer).toMatchObject({ name: "RetroHound findings", domain: "enterprise-attack", versions: { layer: "4.5" } });
+    expect(layer.techniques).toEqual([
+      { techniqueID: "T1041", score: 2, comment: "secret_read_then_egress (2)", enabled: true },
+      { techniqueID: "T1552.001", score: 2, comment: "secret_read_then_egress (2)", enabled: true },
+    ]);
+    expect(layer.gradient).toMatchObject({ minValue: 0, maxValue: 2 });
+    expect(layer.description).toContain("3 findings across 1 scanned sessions");
+    expect(layer.description).toContain("1 findings come from rules with no ATT&CK technique");
+  });
+
+  test("a parent tagged by another rule keeps its own entry, summed by the Navigator; counts are per rule id", () => {
+    const r = report([finding(), finding({ id: "f2", rule_id: "r2" }), finding({ id: "f3", rule_id: "r3" }), finding({ id: "f4", rule_id: "gone" })]);
+    r.rules.push({ id: "r2", name: "secret_read_then_egress", title: "Same name", level: "low", tags: ["attack.t1552"], lane: "hunt" },
+      { id: "r3", title: "Untitled twin", level: "low", tags: ["attack.t1552"], lane: "hunt" });
+    const layer = JSON.parse(toAttackLayer(r));
+    expect(layer.techniques.map((t: { techniqueID: string; score: number; comment: string }) => [t.techniqueID, t.score, t.comment])).toEqual([
+      ["T1041", 1, "secret_read_then_egress (1)"], ["T1552", 2, "Untitled twin (1), secret_read_then_egress (1)"],
+      ["T1552.001", 1, "secret_read_then_egress (1)"]]);
+    expect(layer.layout).toMatchObject({ showAggregateScores: true, aggregateFunction: "sum" });
+    expect(layer.description).toContain("1 findings come from rules with no ATT&CK technique"); // the finding whose rule is gone
+  });
+
+  test("no findings is still a valid layer (maxValue above minValue); rule names are masked", () => {
+    const empty = JSON.parse(toAttackLayer(report([])));
+    expect(empty).toMatchObject({ techniques: [], gradient: { maxValue: 1 } });
+    expect(empty.description).not.toContain("no ATT&CK technique");
+    const r = report();
+    r.rules[0]!.name = `rule ${TOKEN}`;
+    expect(toAttackLayer(r)).not.toContain(TOKEN);
   });
 });

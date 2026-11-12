@@ -342,11 +342,11 @@ describe("target_outside_project (computed)", () => {
 
 describe("hostile input", () => {
   const big = "a".repeat(8_000_000);
-  test("re over a huge value with a quadratic pattern finishes fast; a match past the cap is missed", () => {
+  test("re over a huge value with a quadratic pattern finishes in bounded time; a match in the middle is missed", () => {
     const t = performance.now();
     expect(item("command_line|re", "'a+b'", cmd(big))).toBe(false);
-    expect(item("command_line|re", "'a+b'", cmd(big + "b"))).toBe(false);
     expect(item("command_line|re", "'a+b'", cmd("ab" + big))).toBe(true);
+    expect(item("command_line|re", "'b+c'", cmd(big + "bc" + big))).toBe(false);
     expect(performance.now() - t).toBeLessThan(2000);
   });
   test("internal-* globs stay linear in the text", () => {

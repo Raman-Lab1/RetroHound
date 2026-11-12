@@ -8,6 +8,7 @@ import { buildPack, type Selection } from "../incident/pack.ts";
 import { mask } from "../normalize/mask.ts";
 import { defaultDbPath, openReadOnly } from "../store/index.ts";
 import type { Db } from "../store/sqlite.ts";
+import { term } from "../outputs/table.ts";
 import { DEFAULT_RULES_DIR } from "../version.ts";
 import { UsageError, type IO, type Registrar } from "./io.ts";
 import { EXTRA_HELP, loadRuleDir, repeat } from "./rules.ts";
@@ -22,7 +23,7 @@ function select(db: Db, prefix: string): Selection {
     UNION ALL SELECT 'finding', id FROM findings WHERE substr(id, 1, length(?)) = ? ORDER BY 1 DESC, 2 LIMIT 11`).all(prefix, prefix, prefix, prefix);
   if (hits.length === 0) throw new UsageError(`no session or finding id starts with '${prefix}'`);
   if (hits.length > 1) {
-    const list = hits.slice(0, 10).map((x) => `  ${x.kind} ${x.id}`).join("\n");
+    const list = hits.slice(0, 10).map((x) => `  ${x.kind} ${term(mask(String(x.id)))}`).join("\n");
     throw new UsageError(`'${prefix}' is ambiguous, it matches ${hits.length > 10 ? "more than 10" : hits.length} ids:\n${list}`);
   }
   const { kind, id } = hits[0] as { kind: Selection["kind"]; id: string };
@@ -38,7 +39,8 @@ function incident(prefix: string, f: Flags, io: IO): number {
   const db = openReadOnly(f.db);
   try {
     const sel = select(db, prefix);
-    const out = f.out ?? `retrohound-incident-${sel.id.slice(0, 8)}`;
+    // the id comes from a transcript: `../` or a separator in it must not move the default folder out of cwd
+    const out = f.out ?? `retrohound-incident-${sel.id.slice(0, 8).replace(/[^A-Za-z0-9_-]/g, "_")}`;
     // Never mixes with other files: a pack is only trustworthy if the folder holds nothing but what manifest.json lists.
     if (existsSync(out) && (!statSync(out).isDirectory() || readdirSync(out).length)) {
       throw new UsageError(`${out} exists and is not an empty directory; pass --out with a new or empty one`);
@@ -52,7 +54,7 @@ function incident(prefix: string, f: Flags, io: IO): number {
     files.push(["manifest.json", JSON.stringify(manifest, null, 2) + "\n"]);
     mkdirSync(out, { recursive: true, mode: 0o700 }); // masked evidence: private like the index (0008)
     for (const [name, text] of files) writeFileSync(join(out, name), text, { mode: 0o600, flag: "wx" });
-    io.out(mask(`wrote ${out}: ${pack.sessions.length} session(s), ${pack.counts.events} events, ${pack.findings.length} findings\n`));
+    io.out(mask(`wrote ${term(out)}: ${pack.sessions.length} session(s), ${pack.counts.events} events, ${pack.findings.length} findings\n`));
     return 0;
   } finally {
     db.close();

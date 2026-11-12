@@ -1,0 +1,9 @@
+<!--
+  Add inside <ossec_config> in the Wazuh agent's ossec.conf (/var/ossec/etc/ossec.conf on Linux and macOS).
+  The file is written by a scheduled scan, see docs/integrations.md (Wazuh).
+-->
+<localfile>
+  <location>/var/log/retrohound/findings.ndjson</location>
+  <log_format>json</log_format>
+  <label key="@source">retrohound</label>
+</localfile>

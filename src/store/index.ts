@@ -1,14 +1,15 @@
 // The index: masked events, sessions, files and findings (ADR 0002, 0006, 0008). Raw events enter only through
 // toStored, so nothing here can write a match-only field. File paths are masked like any other string column (0007).
 import { createHash } from "node:crypto";
-import { chmodSync, closeSync, mkdirSync, openSync } from "node:fs";
+import { chmodSync, closeSync, mkdirSync, openSync, readSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import type { ConfigItem } from "../footprint/types.ts";
 import { mask } from "../normalize/mask.ts";
 import { LIST_FIELDS, OPTIONAL_STRINGS, toStored } from "../normalize/stored.ts";
 import type { AgentEvent, Finding, RawEvent } from "../normalize/types.ts";
-import { chainWriter } from "./chain.ts";
-import { migrate } from "./schema.ts";
+import { chainWriter, sessionsFromEvents } from "./chain.ts";
+import { migrate, schemaProblem } from "./schema.ts";
 import { open, type Db, type Row, type SqlValue } from "./sqlite.ts";
 
 export type FileRecord = { path: string; size: number; mtime: number; parser_version: string; sha256: string };
@@ -51,6 +52,8 @@ const SESSION_SELECT = `SELECT s.*, NOT EXISTS (
     SELECT 1 FROM events e JOIN files_indexed f ON f.path = e.source_file
     WHERE e.session_id = s.session_id AND f.gone_at IS NULL
   ) AS archived FROM sessions s`;
+
+export const SNAPSHOTS = 10; // config snapshots kept, one per indexed scan
 
 const now = () => new Date().toISOString();
 const plain = <T>(row: Row) => ({ ...row }) as unknown as T; // Node rows have a null prototype
@@ -103,12 +106,14 @@ export function findingId(ruleId: string, eventIds: string[]): string {
 // sees it, so it never exists wider than 0600. Only the default directory is tightened after the fact: a --db path may
 // sit in a directory that is not ours. On Windows chmod only toggles the read-only bit, so these calls protect nothing
 // there, and the catch covers filesystems that refuse chmod: neither is a reason to stop a scan.
+// An existing file is tightened only after schemaProblem passed it: another program's database is left as it was.
 function createPrivate(path: string): void {
-  const dir = dirname(path);
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   closeSync(openSync(path, "a", 0o600));
+}
+function restrict(path: string): void {
   try {
-    if (path === defaultDbPath()) chmodSync(dir, 0o700);
+    if (path === defaultDbPath()) chmodSync(dirname(path), 0o700);
     chmodSync(path, 0o600);
   } catch {
     // see above
@@ -120,6 +125,24 @@ export function openReadOnly(path: string = defaultDbPath()): Db {
   return open(path, { readonly: true });
 }
 
+/** For purge: `path` is empty, or a SQLite database with a version and RetroHound's files_indexed table. Weaker than
+ * schemaProblem on purpose: an index that was tampered with must still be deletable. */
+export function looksLikeIndex(path: string): boolean {
+  const header = Buffer.alloc(16);
+  const fd = openSync(path, "r");
+  const n = readSync(fd, header, 0, 16, 0);
+  closeSync(fd);
+  if (n === 0) return true;
+  if (header.toString("latin1") !== "SQLite format 3\0") return false;
+  const db = open(path);
+  try {
+    return Number(db.prepare("PRAGMA user_version").get()?.user_version ?? 0) > 0
+      && Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'files_indexed'").get());
+  } finally {
+    db.close();
+  }
+}
+
 export type Store = ReturnType<typeof openStore>;
 
 /** Opens the index, creating and migrating it as needed. Always `close()`, or Windows keeps the file locked. */
@@ -127,6 +150,9 @@ export function openStore(path: string = defaultDbPath()) {
   createPrivate(path);
   const db = open(path);
   try {
+    const problem = schemaProblem(db); // before the chmod and the WAL switch below change the file
+    if (problem) throw new Error(`${problem}; left unchanged`);
+    restrict(path);
     // WAL + NORMAL: a commit no longer waits for a disk sync (about 40% off a cold scan of 1,000 sessions). A power cut
     // can lose the last commits but not corrupt the file, and the index is rebuilt from transcripts (0008).
     db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL");
@@ -155,11 +181,7 @@ export function openStore(path: string = defaultDbPath()) {
     dropEmptySession: db.prepare(`DELETE FROM sessions
       WHERE session_id = ? AND NOT EXISTS (SELECT 1 FROM events WHERE session_id = ?)`),
     refreshSession: db.prepare(`INSERT INTO sessions (session_id, agent, project_path, first_ts, last_ts, event_count)
-      SELECT session_id, min(agent),
-        (SELECT p.project_path FROM events p WHERE p.session_id = e.session_id AND p.project_path IS NOT NULL
-          ORDER BY p.ts, p.seq LIMIT 1),
-        min(ts), max(ts), count(*)
-      FROM events e WHERE session_id = ? GROUP BY session_id
+      ${sessionsFromEvents("WHERE session_id = ?")}
       ON CONFLICT(session_id) DO UPDATE SET agent = excluded.agent, project_path = excluded.project_path,
         first_ts = excluded.first_ts, last_ts = excluded.last_ts, event_count = excluded.event_count`),
     sessionEvents: db.prepare("SELECT * FROM events WHERE session_id = ? ORDER BY ts, seq, id"),
@@ -179,6 +201,23 @@ export function openStore(path: string = defaultDbPath()) {
       VALUES (?, ?, ?, ?, ?)`),
     lastRuleRun: db.prepare(`SELECT rule_set_hash, started_at, finished_at, events, findings
       FROM rule_runs ORDER BY id DESC LIMIT 1`),
+    // ADR 0016: the earliest (ts, id) event per (kind, value) and per (project, kind, value). The keys must match
+    // engine/first-seen.ts, which does the same over in-memory events for --no-index.
+    firstSeen: db.prepare(`WITH k AS (
+        SELECT id, ts, coalesce(project_path, '') AS p, 'domain' AS kind, lower(domain) AS v FROM events WHERE domain <> ''
+        UNION ALL SELECT id, ts, coalesce(project_path, ''), 'mcp', mcp_server FROM events WHERE mcp_server <> ''
+        UNION ALL SELECT id, ts, coalesce(project_path, ''), 'hook', command_line FROM events
+          WHERE substr(tool_name, 1, 5) = 'hook:' AND command_line <> ''
+        UNION ALL SELECT id, ts, coalesce(project_path, ''), 'skill', attribution FROM events
+          WHERE substr(attribution, 1, 6) = 'skill:' OR substr(attribution, 1, 7) = 'plugin:'
+      ), r AS (SELECT id, ts, row_number() OVER (PARTITION BY kind, v ORDER BY ts, id) AS g,
+          row_number() OVER (PARTITION BY p, kind, v ORDER BY ts, id) AS pr FROM k)
+      SELECT id, g = 1 AS global, pr = 1 AS project FROM r WHERE (g = 1 OR pr = 1) AND ts >= ?`),
+    lastRuleRunId: db.prepare("SELECT id FROM rule_runs ORDER BY id DESC LIMIT 1"),
+    insertSnapshot: db.prepare("INSERT INTO config_snapshots (scan_id, agent, kind, name, scope, source, hash) VALUES (?, ?, ?, ?, ?, ?, ?)"),
+    markSnapshot: db.prepare("UPDATE rule_runs SET config_items = ? WHERE id = ?"),
+    pruneSnapshots: db.prepare(`DELETE FROM config_snapshots WHERE scan_id NOT IN
+      (SELECT id FROM rule_runs WHERE config_items IS NOT NULL ORDER BY id DESC LIMIT ?)`),
   };
 
   function refreshSessions(ids: Iterable<string>): void {
@@ -312,9 +351,32 @@ export function openStore(path: string = defaultDbPath()) {
       q.insertRuleRun.run(run.rule_set_hash, run.started_at, run.finished_at, run.events, run.findings);
     },
 
+    /** Ids of the events that first carried a domain, MCP server, hook command or skill/plugin, at or after `cutoff`
+     * (the cold start, ADR 0016). */
+    firstSeen(cutoff: string): { project: Set<string>; global: Set<string> } {
+      const fs = { project: new Set<string>(), global: new Set<string>() };
+      for (const row of q.firstSeen.all(cutoff)) {
+        if (row.global) fs.global.add(row.id as string);
+        if (row.project) fs.project.add(row.id as string);
+      }
+      return fs;
+    },
+
     lastRuleRun(): RuleRun | undefined {
       const row = q.lastRuleRun.get();
       return row && plain<RuleRun>(row);
+    },
+
+    /** Stores `items` as the snapshot of the last recorded rule run (call right after recordRuleRun) and drops every
+     * snapshot but the last SNAPSHOTS, in one transaction. Not chained (ADR 0015): the config files are re-read each scan. */
+    recordConfigSnapshot(items: ConfigItem[]): void {
+      transaction(() => {
+        const id = q.lastRuleRunId.get()?.id;
+        if (id === undefined) return;
+        for (const i of items) q.insertSnapshot.run(id, mask(i.agent), mask(i.kind), mask(i.name), mask(i.scope), mask(i.source), i.hash);
+        q.markSnapshot.run(items.length, id);
+        q.pruneSnapshots.run(SNAPSHOTS);
+      });
     },
 
     close: () => db.close(),

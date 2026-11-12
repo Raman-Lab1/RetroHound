@@ -268,3 +268,47 @@ describe("runScan --agent all", () => {
     expect(Object.keys((await runScan({ ...opts, noIndex: true })).scan)).not.toContain("agents");
   });
 });
+
+describe("first-seen fields (ADR 0016)", () => {
+  const FS = ["global", "project"].map((s) => `title: First ${s}
+name: fs-${s}
+logsource: { product: ai_coding_agent, category: web_request }
+detection:
+    selection: { first_seen_${s}: true }
+    condition: selection
+x-retrohound: { requires: [first_seen] }
+`).join("---\n");
+  const fetch = (sid: string, ts: string, url: string, cwd = "/home/x/acme") => ({
+    type: "assistant", uuid: `u-${++n}`, sessionId: sid, timestamp: ts, cwd,
+    message: { content: [{ type: "tool_use", id: `t${n}`, name: "WebFetch", input: { url } }] },
+  });
+  const fired = (r: Awaited<ReturnType<typeof runScan>>) =>
+    r.findings.filter((f) => f.rule_id.startsWith("fs-")).map((f) => `${f.rule_id} ${f.session_id} ${f.events[0]!.domain}`).sort();
+
+  test("the earliest use of a domain fires, per project and overall; --no-index agrees with the index", async () => {
+    writeFileSync(join(dir, "rules", "fs.yml"), FS);
+    const proj = join(root, "projects", "-home-x-acme");
+    // Baseline: inside the first 14 days, so its domain never fires.
+    put(join(proj, "s09.jsonl"), [fetch("s09", "2026-10-01T10:00:00.000Z", "https://base.example.invalid/")]);
+    put(join(proj, "s10.jsonl"), [fetch("s10", "2026-10-20T10:00:00.000Z", "https://a.example.invalid/x")]);
+    put(join(proj, "s11.jsonl"), [
+      fetch("s11", "2026-11-08T10:00:00.000Z", "https://a.example.invalid/y"),
+      fetch("s11", "2026-11-08T10:00:01.000Z", "https://b.example.invalid/"),
+    ]);
+    put(join(root, "projects", "-home-x-other", "s12.jsonl"), [fetch("s12", "2026-11-09T10:00:00.000Z", "https://a.example.invalid/", "/home/x/other")]);
+    const want = [
+      "fs-global s10 a.example.invalid", "fs-global s11 b.example.invalid",
+      "fs-project s10 a.example.invalid", "fs-project s11 b.example.invalid", "fs-project s12 a.example.invalid",
+    ];
+    expect(fired(await runScan({ ...opts, noIndex: true }))).toEqual(want);
+    expect(fired(await runScan(opts))).toEqual(want);
+    expect(fired(await runScan(opts))).toEqual(want); // a warm rescan keeps them
+  });
+
+  test("cold start: nothing fires while the data spans under 14 days", async () => {
+    writeFileSync(join(dir, "rules", "fs.yml"), FS);
+    put(join(root, "projects", "-home-x-acme", "s10.jsonl"), [fetch("s10", "2026-11-01T10:00:00.000Z", "https://a.example.invalid/")]);
+    expect(fired(await runScan({ ...opts, noIndex: true }))).toEqual([]);
+    expect(fired(await runScan(opts))).toEqual([]);
+  });
+});

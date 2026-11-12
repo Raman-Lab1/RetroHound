@@ -18,6 +18,7 @@ type Json = Record<string, any>;
 export type InstallOpts = {
   path: string; mode: Mode; command: string; entry: string; failClosed?: boolean; dryRun?: boolean; agent?: Agent;
   extraRules?: string[]; // absolute dirs, passed to `hook run --extra-rules`; path-checked like the entry
+  rulesDir?: string; // the shipped rules the hook loads: path-checked like an extra dir, not written to the handler
   allowUnsafePath?: boolean; safety?: SafetyEnv; // safety: test seam for the path check
   now?: Date; afterWrite?: (path: string) => void; // afterWrite: test seam, runs between write and verify
 };
@@ -59,17 +60,25 @@ const why = (s: FsInfo, uid?: number): string | undefined =>
   s.uid !== uid && s.uid !== 0 ? `owned by uid ${s.uid}, not by you (uid ${uid}) or root`
   : writable(s) ? `group- or world-writable (mode ${(s.mode & 0o7777).toString(8)})` : undefined;
 
-/** POSIX: the path and every parent up to the first safe root-owned directory (that one included) must be ours or root's and not group/world-writable. */
-function posixProblems(p: string, env: SafetyEnv): Finding[] {
+/**
+ * POSIX: the path and every parent up to the first safe root-owned directory (that one included) must be ours or root's
+ * and not group/world-writable. A symlink is followed; with `link`, the dirs holding the link itself are walked too
+ * (whoever can write those can swap the link; a rule dir's entries are covered by the dir's own check).
+ */
+function posixProblems(p: string, env: SafetyEnv, link = false): Finding[] {
   const out: Finding[] = [];
-  for (let cur = (env.real ?? ((x) => x))(p); ; ) {
+  const r = (env.real ?? ((x) => x))(p);
+  for (let cur = r; ; ) {
     const s = env.stat(cur);
     const bad = s ? why(s, env.uid) : "cannot be inspected";
     if (bad) out.push({ path: cur, reason: bad });
     const up = dirname(cur);
-    if (up === cur || !s || (!bad && s.isDir && s.uid === 0)) return out;
+    if (up === cur || !s || (!bad && s.isDir && s.uid === 0)) break;
     cur = up;
   }
+  if (!link || r === p || dirname(p) === p) return out;
+  const seen = new Set(out.map((f) => f.path));
+  return [...out, ...posixProblems(dirname(p), env, true).filter((f) => !seen.has(f.path))];
 }
 
 const norm = (p: string, plat: NodeJS.Platform) => (plat === "win32" ? p.replace(/\\/g, "/").toLowerCase() : p).replace(/\/+$/, "");
@@ -87,7 +96,7 @@ export function checkPaths(command: string, entry: string, env: SafetyEnv = real
     const r = real(p);
     if (!env.stat(r)) out.push({ path: p, reason: "does not exist or cannot be inspected" });
     else if (under(r, env.tmp, env.platform)) out.push({ path: r, reason: `is inside the temp directory (${env.tmp}), which other users or processes can write` });
-    else if (!win) out.push(...posixProblems(p, env));
+    else if (!win) out.push(...posixProblems(p, env, p === command || p === entry));
     else if (![env.home, ...env.programDirs].some((d) => under(r, d, "win32"))) out.push({ path: r, reason: "is not under your user profile or a Program Files directory" });
   }
   // An extra rules dir: a file or subdir others can write lets them add or change a blocking rule. An entry that
@@ -141,13 +150,24 @@ function partsOf(h: any): { command: string; args: string[] } | undefined {
   return { command, args };
 }
 
-/** The marker: args hold `hook run` right after a retrohound entry (command or first arg), exec form or command string. */
+/**
+ * The marker: args hold `hook run` right after a retrohound entry (command or first arg), exec form or command string,
+ * followed by exactly the flags handlerFor writes (`--mode` among them). Another tool's `cli.mjs hook run --policy x`
+ * is not ours, so install does not replace it and uninstall does not delete it.
+ */
 export function isOurs(h: any): boolean {
   const p = h && h.type === "command" ? partsOf(h) : undefined;
   if (!p) return false;
   const i = p.args.findIndex((a: unknown, k: number) => a === "hook" && p.args[k + 1] === "run");
   const owner = i > 0 ? p.args[i - 1] : i === 0 ? p.command : "";
-  return typeof owner === "string" && /retrohound|(^|[\\/])(cli\.mjs|bin\.ts|entry\.ts)$/i.test(owner);
+  if (typeof owner !== "string" || !/retrohound|(^|[\\/])(cli\.mjs|bin\.ts|entry\.ts)$/i.test(owner)) return false;
+  const rest = p.args.slice(i + 2);
+  for (let k = 0; k < rest.length; k++) {
+    if (rest[k] === UNSAFE_FLAG) continue;
+    if (!["--agent", "--mode", EXTRA_FLAG].includes(rest[k]!) || typeof rest[k + 1] !== "string") return false;
+    k++; // the flag's value
+  }
+  return rest.includes("--mode");
 }
 
 // Codex runs the string with `$SHELL -lc` or `cmd.exe /C` (codex-rs hooks command_runner); Antigravity's shell is not
@@ -188,18 +208,25 @@ const oursIn = (obj: Json, root?: string) => groupsOf(obj, root).flatMap((g) => 
 function withInstalled(orig: Json, h: Handler, root = "hooks"): Json {
   const obj = structuredClone(orig);
   const found = oursIn(obj, root);
+  const add = () => (obj[root] = { ...obj[root], PreToolUse: [...groupsOf(obj, root), { matcher: "*", hooks: [h] }] });
   if (!found.length) {
-    obj[root] = { ...obj[root], PreToolUse: [...groupsOf(obj, root), { matcher: "*", hooks: [h] }] };
+    add();
     return obj;
   }
   const [first, ...extra] = found; // update in place; duplicates of ours are dropped
   for (const k of Object.keys(first)) delete first[k];
   Object.assign(first, h);
+  const g = groupsOf(obj, root).find((x) => Array.isArray(x?.hooks) && x.hooks.includes(first));
+  if (g.matcher !== "*" && g.hooks.length === 1) g.matcher = "*"; // every tool, not only the ones a narrowed matcher names
+  else if (g.matcher !== "*") { // a group shared with other handlers keeps its matcher; ours moves to a group of its own
+    g.hooks = g.hooks.filter((x: any) => x !== first);
+    add();
+  }
   return extra.length ? removeOurs(obj, root, extra) : obj;
 }
 
 function removeOurs(obj: Json, root = "hooks", only?: any[]): Json {
-  const keep = (x: any) => !(isOurs(x) && (!only || only.includes(x)));
+  const keep = (x: any) => (only ? !only.includes(x) : !isOurs(x));
   const groups = groupsOf(obj, root).map((g) => (Array.isArray(g?.hooks) ? { ...g, hooks: g.hooks.filter(keep) } : g)).filter((g) => !Array.isArray(g.hooks) || g.hooks.length);
   if (!obj[root]) return obj;
   if (groups.length) obj[root].PreToolUse = groups;
@@ -267,7 +294,7 @@ function change(o: InstallOpts, build: (orig: Json) => Json, countOurs: number):
 
 export function install(o: InstallOpts): Outcome {
   const h = handlerFor(o);
-  const bad = checkPaths(o.command, o.entry, o.safety, o.extraRules);
+  const bad = checkPaths(o.command, o.entry, o.safety, [...(o.rulesDir ? [o.rulesDir] : []), ...(o.extraRules ?? [])]);
   if (bad.length && !o.allowUnsafePath) throw new UnsafePathError(`refusing to install, the hook would run files others may be able to modify: ${describe(bad)}. Nothing was written. Fix the permissions or install from a user-owned path; ${UNSAFE_FLAG} overrides this check.`);
   const root = rootOf(o.agent);
   const out = change(o, (orig) => withInstalled(orig, h, root), oursIn(readSettings(o.path).obj, root).length);
@@ -289,7 +316,7 @@ const MANAGED = ["C:\\Program Files\\ClaudeCode\\managed-settings.json", "/Libra
 export type Status = { installed: boolean; mode?: string; failClosed?: boolean; managedHooksOnly: boolean; path: string; allowUnsafePath?: boolean; unsafe?: Finding[]; extraRules?: string[] };
 
 /** `unsafe` re-runs the path check on the paths recorded in the handler, so a later chmod or file swap shows up. */
-export function status(path: string, managedPaths: string[] = MANAGED, safety?: SafetyEnv, agent: Agent = "claude_code"): Status {
+export function status(path: string, managedPaths: string[] = MANAGED, safety?: SafetyEnv, agent: Agent = "claude_code", rulesDir?: string): Status {
   const { obj } = readSettings(path);
   const h = oursIn(obj, rootOf(agent))[0];
   const p = h ? partsOf(h)! : undefined;
@@ -302,6 +329,6 @@ export function status(path: string, managedPaths: string[] = MANAGED, safety?: 
     }
   });
   const extraRules = p?.args.flatMap((a, i) => (a === EXTRA_FLAG && p.args[i + 1] ? [p.args[i + 1]!] : []));
-  const unsafe = p ? checkPaths(p.command, (p.args[0] === "hook" ? undefined : p.args[0]) ?? p.command, safety, extraRules) : undefined; // entry is the command itself when args start at `hook`
+  const unsafe = p ? checkPaths(p.command, (p.args[0] === "hook" ? undefined : p.args[0]) ?? p.command, safety, [...(rulesDir ? [rulesDir] : []), ...(extraRules ?? [])]) : undefined; // entry is the command itself when args start at `hook`
   return { installed: !!h, mode: m >= 0 ? p!.args[m + 1] : undefined, failClosed: h?.onFailure === "block", managedHooksOnly, path, allowUnsafePath: p?.args.includes(UNSAFE_FLAG), unsafe, extraRules };
 }

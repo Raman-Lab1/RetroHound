@@ -1,0 +1,7 @@
+{"session_id":"s0","category":"mcp","tool_name":"mcp__notes__list","mcp_server":"notes","mcp_tool":"list","ts":"2025-12-10T00:00:00.000Z"}
+{"session_id":"s1","category":"mcp","tool_name":"mcp__notes__list","mcp_server":"notes","mcp_tool":"list"}
+{"session_id":"s1","category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env"}
+{"session_id":"s2","category":"mcp","tool_name":"mcp__helper__save","mcp_server":"helper","mcp_tool":"save"}
+{"session_id":"s2","category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env.example"}
+{"session_id":"s3","category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env","ts":"2026-01-01T03:00:00.000Z"}
+{"session_id":"s3","category":"mcp","tool_name":"mcp__other__run","mcp_server":"other","mcp_tool":"run","ts":"2026-01-01T05:00:00.000Z"}

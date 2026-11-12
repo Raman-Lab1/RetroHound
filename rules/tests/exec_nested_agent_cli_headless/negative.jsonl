@@ -1,0 +1,6 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"claude --version"}
+{"category":"process_creation","tool_name":"Bash","command_line":"claude mcp list"}
+{"category":"process_creation","tool_name":"Bash","command_line":"codex login"}
+{"category":"process_creation","tool_name":"Bash","command_line":"ls ~/.claude/projects -p"}
+{"category":"process_creation","tool_name":"Bash","command_line":"grep -rn exec src/codex.ts"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat claude.md | head -p"}

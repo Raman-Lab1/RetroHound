@@ -5,8 +5,8 @@ title: Global git hook redirection
 status: experimental
 description: >
   git config --global (or --system) sets init.templateDir or core.hooksPath, so hooks run in every repository on the
-  machine. Project-local core.hooksPath (husky style) is not matched. Writes into ~/.git-templates/hooks are not
-  covered by this rule.
+  machine. Project-local core.hooksPath and other repository-local code-running keys are exec_git_repo_code_exec.
+  Writes into ~/.git-templates/hooks are not covered by this rule.
 level: high
 tags: [attack.persistence, attack.t1546, owasp_agentic.asi05]
 falsepositives:
@@ -14,10 +14,9 @@ falsepositives:
 x-retrohound: { lane: enforce }
 logsource: { product: ai_coding_agent, category: process_creation }
 detection:
+  # `git [-C dir …] config … --global|--system`, any spacing; quotes do not hide the key (`core.hooks''Path`).
   scope:
-    command_line|contains|all: ['git config', '--global']
-  scope_system:
-    command_line|contains|all: ['git config', '--system']
+    command_line_unquoted|re|i: '\bgit\b[^;&|\n]{0,200}\sconfig\b[^;&|\n]{0,300}\s--(?:global|system)\b'
   key:
-    command_line|contains: ['init.templatedir', 'core.hookspath']
-  condition: 1 of scope* and key
+    command_line_unquoted|contains: ['init.templatedir', 'core.hookspath']
+  condition: scope and key

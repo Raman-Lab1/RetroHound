@@ -92,6 +92,74 @@ describe("root thread", () => {
   });
 });
 
+describe("MCP tool call", () => {
+  const mcp = (extra: object) => item({ type: "McpToolCall", id: "i1", server: "docs", tool: "find__deep", arguments: { q: "x" }, status: "completed",
+    result: { content: [{ type: "text", text: `found ${KEY}` }], isError: false }, duration: { secs: 0, nanos: 1 }, ...extra });
+  const parse = async (...items: object[]) => (ord = 0, (await parseFile(write("mcp.jsonl", [meta(ROOT), ...items]))).events);
+
+  test("is an mcp event named as the hooks name it, with the exact server and tool and its result", async () => {
+    const [ev] = await parse(mcp({}));
+    expect(ev).toMatchObject({ category: "mcp", tool_name: "mcp__docs__find__deep", mcp_server: "docs", mcp_tool: "find__deep",
+      tool_input: '{"q":"x"}', outcome: "success", tool_response: `found ${KEY}`, result_secret_kinds: ["aws_access_key"] });
+  });
+
+  test("an error result or a failed call is an error; a URL argument makes it a web_request", async () => {
+    const evs = await parse(mcp({ result: { content: [], isError: true } }), mcp({ status: "failed", result: undefined }),
+      mcp({ arguments: { url: "https://example.invalid/a" }, status: "inProgress" }));
+    expect(evs.map((e) => [e.category, e.outcome, e.domain])).toEqual([["mcp", "error", undefined], ["mcp", "error", undefined],
+      ["web_request", "unknown", "example.invalid"]]);
+  });
+
+  test("without a server or tool name there is no event", async () => {
+    expect(await parse(mcp({ server: "" }), mcp({ tool: undefined }))).toEqual([]);
+  });
+});
+
+describe("FileChange (apply_patch)", () => {
+  const patch = (changes: unknown, status = "completed") => item({ type: "FileChange", id: "p1", changes, status, stdout: "ok", stderr: "" });
+  const parse = async (...items: object[]) => (ord = 0, (await parseFile(write("patch.jsonl", [meta(ROOT), ...items]))).events);
+
+  test("one file_event per changed file, shaped like Write; an add carries the whole file", async () => {
+    const evs = await parse(patch({ "/w/a.txt": { type: "add", content: "one" }, "C:\\w\\b.txt": { type: "add", content: "two" } }));
+    expect(evs.map((e) => [e.category, e.tool_name, e.target_path, e.content, e.outcome])).toEqual([
+      ["file_event", "apply_patch", "/w/a.txt", "one", "success"], ["file_event", "apply_patch", "C:/w/b.txt", "two", "success"]]);
+    expect(new Set(evs.map((e) => e.id)).size).toBe(2);
+  });
+
+  test("an update's content is the added lines; a secret on a removed line is still flagged", async () => {
+    const diff = `--- a/.env\n+++ b/.env\n@@ -1,2 +1,2 @@\n-KEY=${KEY}\n+KEY=placeholder\n keep\n+added`;
+    const [ev] = await parse(patch({ "/w/.env": { type: "update", unified_diff: diff, move_path: null } }));
+    expect(ev).toMatchObject({ category: "file_event", target_path: "/w/.env", content: "KEY=placeholder\nadded", secret_kinds: ["aws_access_key"] });
+  });
+
+  test("a move targets where the content lands; a delete writes nothing but its secrets still count", async () => {
+    const [moved, deleted] = await parse(patch({
+      "/w/old.sh": { type: "update", unified_diff: "@@ -1 +1 @@\n-a\n+b", move_path: "/home/x/.bashrc" },
+      "/w/.env": { type: "delete", content: `KEY=${KEY}` },
+    }));
+    expect(moved).toMatchObject({ target_path: "/home/x/.bashrc", content: "b" });
+    expect(moved!.tool_input).toContain('"path":"/w/old.sh"');
+    expect(deleted).toMatchObject({ category: "file_event", target_path: "/w/.env", secret_kinds: ["aws_access_key"] });
+    expect("content" in deleted!).toBe(false);
+  });
+
+  test("headerless diffs keep an added line that starts with ++; relative paths resolve; empty or forged paths do not win", async () => {
+    const evs = await parse(patch({
+      "/w/c.txt": { type: "update", unified_diff: "@@ -1 +1,2 @@\n x\n+++ y", move_path: null, file_path: "/etc/passwd" },
+      "src/a.ts": { type: "add", content: "z" }, "": { type: "add", content: "lost" },
+    }));
+    expect(evs).toHaveLength(2);
+    const [ev, rel] = evs;
+    expect(ev).toMatchObject({ target_path: "/w/c.txt", content: "++ y" });
+    expect(rel!.target_path).toBe("C:/Users/x/proj/src/a.ts");
+  });
+
+  test("a failed patch is an error; no changes, no event", async () => {
+    expect((await parse(patch({ "/w/a": { type: "add", content: "x" } }, "failed"))).map((e) => e.outcome)).toEqual(["error"]);
+    expect(await parse(patch({}), patch("nope"), patch(undefined))).toEqual([]);
+  });
+});
+
 describe("sub-agent thread", () => {
   const sub = () => {
     ord = 0;
@@ -261,6 +329,6 @@ describe("discover", () => {
   });
 
   test("collector shape", () => {
-    expect([codex.agent, codex.parserVersion]).toEqual(["codex", "codex/v3"]);
+    expect([codex.agent, codex.parserVersion]).toEqual(["codex", "codex/v6"]);
   });
 });

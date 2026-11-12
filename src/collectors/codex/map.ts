@@ -41,21 +41,35 @@ export function shellFields(argv: string[], cwd?: string): Fields {
   return ev;
 }
 
-const argvOf = (c: unknown): string[] =>
+export const argvOf = (c: unknown): string[] =>
   Array.isArray(c) ? c.filter((a): a is string => typeof a === "string") : typeof c === "string" ? [c] : [];
 
 function commandFields(item: Line): Fields {
   const ev = shellFields(argvOf(item.command), cwdOf(item.cwd));
   const ok = item.status === "completed" && item.exit_code === 0;
   ev.outcome = ok ? "success" : item.status === "failed" || (typeof item.exit_code === "number" && item.exit_code !== 0) ? "error" : "unknown";
-  const out = str(item.aggregated_output);
-  if (out) {
-    ev.tool_response = out;
-    const kinds = secretKinds(out);
-    if (kinds.length) ev.result_secret_kinds = kinds;
-  }
+  withOutput(ev, str(item.aggregated_output));
   const cwd = cwdOf(item.cwd);
   return cwd ? { ...ev, project_path: cwd } : ev;
+}
+
+function withOutput(ev: Fields, out: string | undefined) {
+  if (!out) return;
+  ev.tool_response = out;
+  const kinds = secretKinds(out);
+  if (kinds.length) ev.result_secret_kinds = kinds;
+}
+
+/** An MCP call, named as Claude Code and Codex hooks name it (`mcp__<server>__<tool>`), with the exact server and tool:
+ * the name split in mapToolUse guesses when a tool name holds `__`. */
+function mcpFields(item: Line): Fields | undefined {
+  const server = str(item.server), tool = str(item.tool);
+  if (!server || !tool) return undefined;
+  const ev: Fields = { ...mapToolUse(`mcp__${server}__${tool}`, item.arguments ?? {}), mcp_server: server, mcp_tool: tool };
+  const failed = item.status === "failed" || item.result?.isError === true;
+  ev.outcome = failed ? "error" : item.status === "completed" ? "success" : "unknown";
+  withOutput(ev, textOf(item.result?.content));
+  return ev;
 }
 
 function webFields(item: Line): Fields {
@@ -65,11 +79,35 @@ function webFields(item: Line): Fields {
   return { ...ev, outcome: "success", ...(hits.length ? { tool_response: hits.join("\n") } : {}) };
 }
 
-/** Fields for one item, or undefined when the item is not an event (reasoning, a finished sub-agent, unknown kinds). */
-export function mapItem(item: Line, fromSubagent: boolean): Fields | undefined {
+/** apply_patch: one file_event per changed file, shaped like Claude Code's Write so the file rules apply. `tool_input` is
+ * the raw change (content, or the diff with its removed lines) plus `path`; `content` is what was written: the whole file
+ * for an add, the diff's added lines for an update, nothing for a delete (its text, if any, still counts for secrets
+ * through tool_input). A move (`move_path`) targets where the content lands; relative paths resolve against `cwd`. */
+function fileFields(item: Line, cwd?: string): Fields[] {
+  const changes = item.changes && typeof item.changes === "object" && !Array.isArray(item.changes) ? Object.entries(item.changes) : [];
+  const outcome = item.status === "completed" ? "success" : item.status === "failed" ? "error" : "unknown";
+  return changes.filter(([path]) => path).map(([path, c]) => {
+    const change: Line = c && typeof c === "object" ? c : {};
+    const ev: Fields = { ...mapToolUse("Write", { ...change, path, file_path: str(change.move_path) ?? path }, cwd), tool_name: "apply_patch", outcome };
+    if (change.type === "update") {
+      const lines = String(change.unified_diff ?? "").split("\n");
+      const hunk = lines.findIndex((l) => l.startsWith("@@")); // `---`/`+++` headers, when present, precede the first hunk
+      ev.content = str(lines.slice(Math.max(0, hunk)).filter((l) => l.startsWith("+")).map((l) => l.slice(1)).join("\n"));
+    } else if (change.type === "delete") delete ev.content;
+    return ev;
+  });
+}
+
+/** Fields for one item (several for a multi-file patch), or undefined when the item is not an event (reasoning, a
+ * finished sub-agent, unknown kinds). */
+export function mapItem(item: Line, fromSubagent: boolean, cwd?: string): Fields | Fields[] | undefined {
   switch (item.type) {
     case "CommandExecution":
       return commandFields(item);
+    case "McpToolCall":
+      return mcpFields(item);
+    case "FileChange":
+      return fileFields(item, cwd);
     case "Extension":
       return item.kind === "web.search" ? webFields(item) : undefined;
     case "UserMessage": {

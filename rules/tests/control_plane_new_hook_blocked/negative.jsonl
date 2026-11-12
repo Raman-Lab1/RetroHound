@@ -1,0 +1,7 @@
+{"session_id":"s0","category":"process_creation","tool_name":"hook:SessionStart","command_line":"node ~/.claude/hooks/banner.js","ts":"2025-12-10T00:00:00.000Z"}
+{"session_id":"s1","category":"process_creation","tool_name":"hook:SessionStart","command_line":"node ~/.claude/hooks/banner.js"}
+{"session_id":"s1","category":"process_creation","tool_name":"Bash","command_line":"rm -rf /home/dev/app","outcome":"blocked","denial_kind":"permission-rule"}
+{"session_id":"s2","category":"process_creation","tool_name":"hook:PreToolUse","command_line":"sh .claude/hooks/guard.sh"}
+{"session_id":"s2","category":"process_creation","tool_name":"Bash","command_line":"rm -rf build","outcome":"blocked","denial_kind":"user-rejected"}
+{"session_id":"s3","category":"process_creation","tool_name":"hook:Stop","command_line":"sh .claude/hooks/notify.sh"}
+{"session_id":"s3","category":"process_creation","tool_name":"Bash","command_line":"npm test","outcome":"success"}

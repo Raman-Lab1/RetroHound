@@ -10,6 +10,14 @@ const KEYS = { files_indexed: "path", events: "id", findings: "id" } as const;
 type Table = keyof typeof KEYS;
 type Op = "seed" | "write" | "delete";
 
+/** `sessions` as recomputed from events, `where` going before the GROUP BY. The store writes sessions with this and
+ * verify compares the table against it: the table is derived, not chained, and every view starts from it. */
+export const sessionsFromEvents = (where: string) => `SELECT session_id, min(agent) AS agent,
+    (SELECT p.project_path FROM events p WHERE p.session_id = e.session_id AND p.project_path IS NOT NULL
+      ORDER BY p.ts, p.seq LIMIT 1) AS project_path,
+    min(ts) AS first_ts, max(ts) AS last_ts, count(*) AS event_count
+  FROM events e ${where} GROUP BY session_id`;
+
 const sha = (s: string) => createHash("sha256").update(s).digest("hex");
 /** Columns in table order; `last_seen` is left out: every scan rewrites it for every file (ADR 0015). */
 const rowHash = (row: Row) => sha(JSON.stringify({ ...row, last_seen: undefined }));
@@ -44,7 +52,8 @@ export function createChain(db: Db): void {
   for (const [table, key] of Object.entries(KEYS)) chain.append(table as Table, "seed", db.prepare(`SELECT * FROM ${table} ORDER BY ${key}`).all());
 }
 
-/** `since`, with a `head`: entries appended after it, counted by "table op". */
+/** `since`, with a `head`: entries appended after it, counted by "table op", where op "rewrite" is a write to a row that
+ * already had an entry at the head (a rescan resolving an outcome, or an edit re-chained by hand). */
 export type Verdict = { ok: true; entries: number; head: string; since?: Record<string, number> } | { ok: false; problem: string };
 
 /** Walks the chain, then checks every row against its latest entry. Reports the first problem. `head`, when given,
@@ -64,6 +73,7 @@ function check(db: Db, head?: string): Verdict {
   let seen = head === GENESIS;
   const latest = new Map<string, Row>();
   const since: Record<string, number> = {}; // entries after `head`: appending is the one change a head can't refuse
+  const before = new Set<string>(); // rows with an entry at or before `head`: a later write to one is a "rewrite"
   // Limit: whole chain and tables in memory (about 200 B per row); stream them if indexes reach millions of rows
   const entries = db.prepare("SELECT * FROM chain ORDER BY seq").all();
   for (const e of entries) {
@@ -71,10 +81,15 @@ function check(db: Db, head?: string): Verdict {
     if (link(prev, e.tbl as string, e.row_id as string, e.op as string, e.row_hash as string) !== e.hash) {
       return fail(`chain entry ${e.seq}: hash does not match its contents (the entry was edited)`);
     }
-    if (seen) since[`${e.tbl} ${e.op}`] = (since[`${e.tbl} ${e.op}`] ?? 0) + 1;
+    const key = `${e.tbl} ${e.row_id}`;
+    if (!seen) before.add(key);
+    else {
+      const k = `${e.tbl} ${e.op === "write" && before.has(key) ? "rewrite" : e.op}`;
+      since[k] = (since[k] ?? 0) + 1;
+    }
     prev = e.hash as string;
     if (prev === head) seen = true;
-    latest.set(`${e.tbl} ${e.row_id}`, e);
+    latest.set(key, e);
   }
   for (const [table, key] of Object.entries(KEYS)) {
     for (const row of db.prepare(`SELECT * FROM ${table} ORDER BY ${key}`).all()) {
@@ -87,6 +102,13 @@ function check(db: Db, head?: string): Verdict {
   for (const e of latest.values()) {
     if (e.op !== "delete") return fail(`chain entry ${e.seq}: ${e.tbl} row ${e.row_id} is missing (deleted outside RetroHound)`);
   }
+  // Rows only in one side of the two, both ways round. A scan refreshes sessions in its last transaction, so one that is
+  // running or was cut short also shows here; its next run repairs the rows, which a hand edit does not get.
+  const s = db.prepare(`WITH d AS (${sessionsFromEvents("")}),
+      t AS (SELECT session_id, agent, project_path, first_ts, last_ts, event_count FROM sessions)
+    SELECT session_id FROM (SELECT * FROM d EXCEPT SELECT * FROM t)
+    UNION SELECT session_id FROM (SELECT * FROM t EXCEPT SELECT * FROM d) ORDER BY 1 LIMIT 1`).get();
+  if (s) return fail(`sessions row ${s.session_id}: does not match its events (changed outside RetroHound, or a scan is running or was cut short: scan, then verify again)`);
   if (head !== undefined && !seen) return fail(`head ${head} is not in the chain (it was cut back or rebuilt)`);
   return { ok: true, entries: entries.length, head: prev, ...(head !== undefined && { since }) };
 }

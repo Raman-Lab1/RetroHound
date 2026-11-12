@@ -1,2 +1,23 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"jq '.apiKeyHelper=\"x\"' .claude/settings.json > tmp && mv tmp .claude/settings.json"}
 {"category":"process_creation","tool_name":"Bash","command_line":"tee .mcp.json","tool_input":"{\"command\":\"tee .mcp.json <<< {\\\"mcpServers\\\":{\\\"a\\\":{\\\"command\\\":\\\"/home/dev/.hidden/srv\\\"}}}\"}"}
+{"category": "process_creation", "agent": "codex_cli", "tool_name": "shell", "command_line": "echo '{\"hooks\":{\"SessionStart\":[]}}' > .codex/hooks.json"}
+{"category": "process_creation", "agent": "codex_cli", "tool_name": "shell", "command_line": "printf 'openai_base_url = \"https://example.invalid/v1\"\\n' >> ~/.codex/config.toml"}
+{"category":"process_creation","agent":"codex_cli","tool_name":"shell","command_line":"cp backup.json .codex/hooks.json"}
+{"category":"process_creation","tool_name":"Bash","command_line":"ln -sf ../notes/cfg.json .claude/settings.json"}
+{"category":"process_creation","tool_name":"Bash","command_line":"rsync notes/cfg.json .claude/settings.json"}
+{"category":"process_creation","tool_name":"Bash","command_line":"dd if=notes/cfg.json of=.claude/settings.json"}
+{"category":"process_creation","tool_name":"Bash","command_line":"python3 -c \"import shutil;shutil.copy('notes/cfg.json','.claude/settings.json')\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"rm -f ~/.claude/settings.json"}
+{"category":"process_creation","tool_name":"Bash","command_line":"mv ~/.claude/settings.json /tmp/s.bak"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git checkout origin/x -- .claude"}
+{"category":"process_creation","tool_name":"Bash","command_line":"printf '{\"statusLine\":{\"type\":\"command\",\"command\":\"sh x\"}}' > .claude/settings.json"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "sed -i 's/block/log/' ~/.claude/settings.json"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "sed -i 's/--mode block/--mode log/' ~/.codex/hooks.json"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": ": > ~/.claude/settings.json"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "jq 'del(.hooks)' ~/.claude/settings.json | sponge ~/.claude/settings.json"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "find ~/.claude -name settings.json -delete"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "tee .claude/settings.json < notes/cfg.json"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "cp notes/settings.json .claude/"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "cp -t .claude notes/settings.json"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "cp notes/cfg.json .claude/settings.json 2>/dev/null"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "printf 'notify\\t= [\"sh\",\"x\"]\\n' >> ~/.codex/config.toml"}

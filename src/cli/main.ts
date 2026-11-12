@@ -6,12 +6,15 @@ import { COLLECTORS } from "../collectors/index.ts";
 import { runScan, type ScanOptions } from "../scan.ts";
 import { DEFAULT_RULES_DIR, TOOL_VERSION } from "../version.ts";
 import { LEVELS, type Level } from "../normalize/types.ts";
+import { toAttackLayer } from "../outputs/attack.ts";
 import { toJson } from "../outputs/json.ts";
 import { toNdjson } from "../outputs/ndjson.ts";
 import { toSarif } from "../outputs/sarif.ts";
 import { toTable } from "../outputs/table.ts";
-import { defaultDbPath } from "../store/index.ts";
+import { defaultDbPath, looksLikeIndex } from "../store/index.ts";
+import { defaultLogPath } from "../hooks/run.ts";
 import { oneOf, parseSince, processIO, UsageError, useColor, type IO } from "./io.ts";
+import { registerGitSecrets } from "./gitjoin.ts";
 import { registerHook } from "./hook.ts";
 import { registerIncident } from "./incident.ts";
 import { registerVerify } from "./verify.ts";
@@ -22,17 +25,21 @@ import { registerShow } from "./show.ts";
 import { registerWrapped } from "./wrapped.ts";
 import { EXTRA_HELP, listRules, repeat, showRule } from "./rules.ts";
 import { testRules } from "./rules-test.ts";
-import { summaryLines } from "./summary.ts";
+import { registerConvert } from "./convert.ts";
+import { retentionDays, summaryLines } from "./summary.ts";
+import { defaultReportPath, writeFootprint } from "./footprint.ts";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 type ScanFlags = {
   since?: string; agent: string; project?: string; rules: string; extraRules?: string[]; level?: string; format: string;
   index: boolean; failOn?: string; db?: string; root?: string; ignore?: string;
+  report?: string | false; // undefined: next to the index; false: --no-report
 };
 
 const AGENTS = Object.keys(COLLECTORS);
-const FORMATS = ["table", "json", "sarif", "ndjson-ecs", "ndjson-ocsf"] as const;
+const DB_FILES = ["", "-wal", "-shm", "-journal"]; // the index and SQLite's side files
+const FORMATS = ["table", "json", "sarif", "ndjson-ecs", "ndjson-ocsf", "attack-layer"] as const;
 
 async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
   const agent = oneOf("agent", f.agent, [...AGENTS, "all"]);
@@ -40,6 +47,11 @@ async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
   const format = oneOf("format", f.format, FORMATS);
   const level = f.level ? oneOf<Level>("level", f.level, LEVELS) : undefined;
   const failOn = f.failOn ? oneOf<Level>("level", f.failOn, LEVELS) : undefined;
+  if (typeof f.report === "string") {
+    if (!f.index || format !== "table") throw new UsageError("--report needs the index and the table format: it is built from the index after the scan");
+    const db = resolve(f.db ?? defaultDbPath());
+    if (DB_FILES.some((s) => resolve(f.report as string) === db + s)) throw new UsageError("--report would overwrite the index");
+  }
   const opts: ScanOptions = {
     agent, root: f.root, dbPath: f.db, rulesDir: f.rules, extraRules: f.extraRules, project: f.project, level, noIndex: !f.index,
     since: f.since ? parseSince(f.since) : undefined, ignore: f.ignore,
@@ -51,10 +63,24 @@ async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
   else if (format === "sarif") io.out(toSarif(report) + "\n");
   else if (format === "ndjson-ecs") io.out(toNdjson(report, "ecs")); // ends with its own newline
   else if (format === "ndjson-ocsf") io.out(toNdjson(report, "ocsf"));
+  else if (format === "attack-layer") io.out(toAttackLayer(report) + "\n");
   else {
     const root = f.root ?? join(homedir(), ".claude");
     // the retention summary reads Claude Code's own settings, so it only applies to that agent
     const summary = agent === "claude_code" ? summaryLines(root, f.index ? f.db : undefined, report.scan.archived_sessions.length) : [];
+    if (f.index && f.report !== false) {
+      const dbPath = f.db ?? defaultDbPath();
+      const claude = agent === "claude_code" ? root : join(homedir(), ".claude");
+      try {
+        const url = writeFootprint({
+          dbPath, out: f.report || defaultReportPath(dbPath), rulesDir: f.rules, extraRules: f.extraRules,
+          retentionDays: existsSync(claude) ? retentionDays(claude) : undefined, env: io.env,
+        });
+        summary.push(`  Footprint report (everything in the index): ${url}`);
+      } catch (e) {
+        io.err(`retrohound: footprint report not written: ${(e as Error).message}\n`); // the scan itself succeeded
+      }
+    }
     io.out(toTable(report, { color: useColor(io) }) + summary.join("\n") + "\n");
   }
   const min = failOn ? LEVELS.indexOf(failOn) : undefined;
@@ -64,13 +90,19 @@ async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
 function purgeCommand(f: { db?: string; yes?: boolean }, io: IO): number {
   const path = f.db ?? defaultDbPath();
   if (!existsSync(path)) return io.out(`Nothing to delete: ${path} does not exist.\n`), 0;
+  if (!looksLikeIndex(path)) throw new UsageError(`${path} is not a RetroHound index; purge deletes only an index`);
+  const page = defaultReportPath(path); // built from the index, so it goes with it; a --report elsewhere is the user's
+  // The hook's own record is not part of the index: say it stays rather than widen what purge deletes.
+  const kept = existsSync(defaultLogPath()) ? `Kept: the hook log ${defaultLogPath()}, which purge does not delete.\n` : "";
   if (!f.yes) {
-    io.out(`Would delete the index ${path} (${statSync(path).size} bytes).\n`);
-    io.out("It may hold the only copy of evidence Claude Code has since deleted. Re-run with --yes to delete it.\n");
+    io.out(`Would delete the index ${path} (${statSync(path).size} bytes)${existsSync(page) ? ` and its footprint report ${page}` : ""}.\n`);
+    io.out("It may hold the only copy of evidence Claude Code has since deleted. Re-run with --yes to delete it.\n" + kept);
     return 1;
   }
-  for (const suffix of ["", "-wal", "-shm", "-journal"]) rmSync(path + suffix, { force: true });
+  for (const suffix of DB_FILES) rmSync(path + suffix, { force: true });
   io.out(`Deleted ${path}\n`);
+  if (existsSync(page)) rmSync(page), io.out(`Deleted ${page}\n`);
+  io.out(kept);
   return 0;
 }
 
@@ -86,8 +118,10 @@ export function buildProgram(io: IO, setCode: (n: number) => void): Command {
     .option("--rules <dir>", "rules directory", DEFAULT_RULES_DIR)
     .option("--extra-rules <dir>", EXTRA_HELP, repeat)
     .option("--level <level>", `hide findings below this level (${LEVELS.join("|")})`)
-    .option("--format <format>", "table, json, sarif, ndjson-ecs or ndjson-ocsf", "table")
+    .option("--format <format>", "table, json, sarif, ndjson-ecs, ndjson-ocsf or attack-layer (ATT&CK Navigator)", "table")
     .option("--no-index", "evaluate in memory, write nothing")
+    .option("--report <file>", "where to write the offline footprint report (default: report.html next to the index)")
+    .option("--no-report", "do not write the footprint report")
     .option("--fail-on <level>", "exit 1 when any finding is at or above this level")
     .option("--db <path>", "index database", defaultDbPath())
     .option("--root <dir>", "Claude config dir or its projects dir (default ~/.claude)")
@@ -108,6 +142,7 @@ export function buildProgram(io: IO, setCode: (n: number) => void): Command {
     .option("--tests <dir>", "tests directory (default: <rules dir>/../tests, per rules dir)")
     .option("--extra-rules <dir>", EXTRA_HELP, repeat)
     .action((dir: string | undefined, f: { tests?: string; extraRules?: string[] }) => run(() => testRules(dir ?? DEFAULT_RULES_DIR, f.tests, io, f.extraRules)));
+  registerConvert(rules, run, io);
 
   program.command("purge").description("Delete the local index database (it may be the only copy of deleted evidence)")
     .option("--db <path>", "index database", defaultDbPath())
@@ -122,6 +157,7 @@ export function buildProgram(io: IO, setCode: (n: number) => void): Command {
   registerPreflight(program, run, io);
   registerMcp(program, run, io);
   registerHook(program, run, io);
+  registerGitSecrets(program, run, io);
   return program;
 }
 
