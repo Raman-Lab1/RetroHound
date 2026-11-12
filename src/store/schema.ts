@@ -1,7 +1,7 @@
 // The index schema (ADR 0002). Versioning is PRAGMA user_version plus this ordered list: a released entry
 // never changes, so a schema change is a new entry at the end. An entry is SQL, or a function when SQL can't do it.
 import { createChain } from "./chain.ts";
-import type { Db } from "./sqlite.ts";
+import { open, type Db } from "./sqlite.ts";
 
 export type Migration = string | ((db: Db) => void);
 
@@ -140,4 +140,30 @@ export function migrate(db: Db, migrations: readonly Migration[] = MIGRATIONS): 
       throw err;
     }
   }
+}
+
+const objects = (db: Db) => db.prepare("SELECT type, name, tbl_name, sql FROM sqlite_master ORDER BY type, name").all()
+  .map((r) => ({ key: JSON.stringify([r.type, r.name, r.tbl_name, r.sql]), what: `${r.type} ${r.name}` }));
+
+/** Why `db` is not an index RetroHound wrote, or undefined. Its sqlite_master must be exactly what `MIGRATIONS` create
+ * up to its user_version. That refuses another program's database before anything writes to it, and a trigger, view,
+ * table or constraint added by hand (a BEFORE INSERT trigger can drop evidence before the chain sees it). A version
+ * newer than ours is left to `migrate`, which names it. */
+export function schemaProblem(db: Db): string | undefined {
+  const version = Number(db.prepare("PRAGMA user_version").get()?.user_version ?? 0);
+  if (version > MIGRATIONS.length) return undefined;
+  const mem = open(":memory:");
+  let want: ReturnType<typeof objects>;
+  try {
+    migrate(mem, MIGRATIONS.slice(0, version));
+    want = objects(mem);
+  } finally {
+    mem.close();
+  }
+  const have = objects(db);
+  const odd = have.find((o) => !want.some((w) => w.key === o.key));
+  const gone = want.find((w) => !have.some((o) => o.key === w.key));
+  if (!odd && !gone) return undefined;
+  return `${odd ? `${odd.what} is not as RetroHound creates it` : `${gone!.what} is missing`}: this database is not a RetroHound index, `
+    + `or its schema was changed outside RetroHound`;
 }

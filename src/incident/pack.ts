@@ -42,7 +42,18 @@ function clean<T>(row: Row, fix: (s: string) => string): T {
 const outcomes = (es: PackEvent[]) => Object.fromEntries(OUTCOMES.map((o) => [o, es.filter((e) => e.outcome === o).length])) as Record<(typeof OUTCOMES)[number], number>;
 const tally = (es: PackEvent[]) => ({ events: es.length, first_ts: es[0]?.ts, last_ts: es.at(-1)?.ts, outcomes: outcomes(es) });
 
+/** All reads in one snapshot, as verify does: a scan committing mid-build must not give rows from before it and the
+ * index_head after it. */
 export function buildPack(db: Db, sel: Selection, rules: Rule[], anonymize: boolean) {
+  db.exec("BEGIN");
+  try {
+    return build(db, sel, rules, anonymize);
+  } finally {
+    db.exec("COMMIT");
+  }
+}
+
+function build(db: Db, sel: Selection, rules: Rule[], anonymize: boolean) {
   const ids = JSON.stringify(sel.sessions);
   const files = db.prepare(`SELECT path, sha256, first_seen, last_seen, gone_at FROM files_indexed
     WHERE path IN (SELECT source_file FROM events WHERE session_id ${IN}) ORDER BY path`).all(ids);
