@@ -69,7 +69,7 @@ absent, not `[]`, when empty, so `|exists` is true only when something was found
 
 | field | holds |
 |---|---|
-| `content` | Write/Edit body, stored heredoc body, instruction / `@`-file / Skill text, hook stdout. |
+| `content` | Write/Edit body, stored heredoc body, instruction / `@`-file / Skill text, hook stdout. In the live hook only, an Edit/MultiEdit of an agent settings file whose `old_string` lies in a hook section of the current file gets the token `x-retrohound-in-hooks-block` appended. |
 | `tool_input` | `JSON.stringify` of the raw tool input, all tools including MCP. |
 | `tool_response` | The paired tool result text, attached to the tool call event. |
 | `text` | Full prompt or assistant text. |

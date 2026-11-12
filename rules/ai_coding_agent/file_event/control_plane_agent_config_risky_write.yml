@@ -10,7 +10,8 @@ description: >-
   awsCredentialExport, otelHeadersHelper and Codex `notify`, disableAllHooks, a `\u` escape of printable ASCII, any write to
   a hooks-only file, and a Claude settings edit that touches a hook entry (its command, `hook run`, or mode). This is the persistence shape of supply-chain droppers (SessionStart hook running a repo-local
   script) and of CVE-2026-21852 style base-URL redirects. Shell writes are control_plane_agent_config_risky_shell_write.
-  A permissions.allow wildcard is reported by control_plane_disable_safety.
+  In the live hook only (`scan` has no past file content) an Edit/MultiEdit whose old_string lies inside a hooks, statusLine or notify
+  section of the file as it is now is marked and also fires. A permissions.allow wildcard is reported by control_plane_disable_safety.
 tags:
   - attack.persistence
   - attack.t1546
@@ -57,6 +58,7 @@ detection:
         - awscredentialexport
         - otelheadershelper
         - disableallhooks
+        - x-retrohound-in-hooks-block # set by the live hook only (see description)
     - tool_input|contains: *risky
     # Codex `notify` in any TOML spelling: extra spaces or a tab before `=`, a quoted key.
     - content|re|i: &notify '(?:^|[^\w.])\\{0,3}[\x22\x27]?notify\\{0,3}[\x22\x27]?(?:\s|\\t){0,8}='
