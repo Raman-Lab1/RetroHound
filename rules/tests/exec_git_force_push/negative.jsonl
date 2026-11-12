@@ -3,3 +3,6 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"git push -u origin main"}
 {"category":"process_creation","tool_name":"Bash","command_line":"git pull --force"}
 {"category":"process_creation","tool_name":"Bash","command_line":"git log --oneline"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git push origin HEAD:main"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git push --follow-tags origin main"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git push -u origin fix-foo"}

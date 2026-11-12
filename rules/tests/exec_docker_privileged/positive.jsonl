@@ -2,3 +2,13 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"docker run -v /var/run/docker.sock:/var/run/docker.sock example.invalid/img"}
 {"category":"process_creation","tool_name":"Bash","command_line":"docker run -it -v /:/host alpine"}
 {"category":"process_creation","tool_name":"Bash","command_line":"docker run --pid=host alpine ps"}
+{"category":"process_creation","tool_name":"Bash","command_line":"docker  run --privileged alpine"}
+{"category":"process_creation","tool_name":"Bash","command_line":"docker container run --privileged alpine"}
+{"category":"process_creation","tool_name":"Bash","command_line":"docker create --privileged alpine"}
+{"category":"process_creation","tool_name":"Bash","command_line":"docker run -v/:/host alpine"}
+{"category":"process_creation","tool_name":"Bash","command_line":"docker run --mount type=bind,src=/,dst=/host alpine"}
+{"category":"process_creation","tool_name":"Bash","command_line":"docker -H tcp://192.0.2.10:2375 run --privileged alpine"}
+{"category":"process_creation","tool_name":"Bash","command_line":"DOCKER RUN --PRIVILEGED alpine"}
+{"category":"process_creation","tool_name":"Bash","command_line":"podman run -v /:/host alpine"}
+{"category":"process_creation","tool_name":"Bash","command_line":"docker run --cap-add=ALL alpine"}
+{"category":"process_creation","tool_name":"Bash","command_line":"docker run \"--privileged\" alpine"}

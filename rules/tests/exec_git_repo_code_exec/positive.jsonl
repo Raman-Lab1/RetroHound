@@ -1,0 +1,11 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"git config core.fsmonitor 'bash .x/a.sh'"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git config core.hooksPath .x"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git config core.pager 'sh -c \"bash .x/a.sh; less\"'"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git config filter.x.smudge 'bash .x/a.sh'"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git -C repo  config --local diff.x.textconv ./.x/a.sh"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git config set core.sshCommand 'ssh -o ProxyCommand=.x/a.sh'"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git config pager.log ./.x/a.sh"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git config core.fs''monitor .x/a.sh"}
+{"category":"process_creation","tool_name":"Bash","command_line":"printf '#!/bin/sh\\nbash .x/a.sh\\n' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cp .x/a.sh .git/hooks/post-checkout"}
+{"category":"process_creation","tool_name":"Bash","command_line":"ln -sf ../../.x/a.sh .git/hooks/pre-push"}

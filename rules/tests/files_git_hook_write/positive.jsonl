@@ -1,0 +1,4 @@
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/.git/hooks/pre-commit","content":"#!/bin/sh\nbash .x/a.sh\n"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/.git/config","content":"[core]\n\tfsmonitor = bash .x/a.sh\n"}
+{"category":"file_event","tool_name":"Edit","target_path":"/home/dev/app/.git/config","content":"[filter \"x\"]\n  smudge = .x/a.sh\n"}
+{"category":"file_event","tool_name":"Edit","target_path":"/home/dev/app/.git/config","content":"[pager]\n\tlog = .x/a.sh\n"}

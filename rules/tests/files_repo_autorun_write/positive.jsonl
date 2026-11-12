@@ -1,0 +1,2 @@
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/.husky/pre-commit","content":"bash .x/a.sh"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/.envrc","content":"bash .x/a.sh"}

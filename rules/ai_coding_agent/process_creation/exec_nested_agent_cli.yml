@@ -1,0 +1,24 @@
+name: exec_nested_agent_cli
+author: Raman Kumar
+id: 5366702f-caa0-4d65-a1f0-715bb5d891cb
+title: Agent started another agent CLI headless or with its settings moved
+status: experimental
+description: >
+  A shell command runs claude, codex, gemini or antigravity non-interactively (-p, --print, --prompt, exec) or with
+  its settings or home moved (--settings, --setting-sources, CLAUDE_CONFIG_DIR, CODEX_HOME). The child gets its own
+  session id, so session-scoped correlations (secret read then egress) cannot join its events with the parent's; with
+  --setting-sources or a moved config dir it can run without a user-scope RetroHound hook, and its transcript can land
+  outside the default scan roots. Install the hook at managed scope as well to cover such children.
+level: medium
+tags: [attack.defense_evasion, attack.t1562, owasp_agentic.asi03, owasp_agentic.asi07]
+falsepositives:
+  - Scripts or workflows that drive an agent CLI headless on purpose.
+  - Quoted text that shows such a command, for example a commit message or an echo, matches as if it ran.
+x-retrohound: { lane: enforce }
+logsource: { product: ai_coding_agent, category: process_creation }
+detection:
+  headless:
+    command_line_unquoted|re|i: '(?:^|[\s;&|(`/])(?:claude(?:-code)?|codex|gemini|antigravity)(?:\.exe)?\s(?:[^;&|\n]{0,300}\s)?(?:-p|--print|--prompt|exec|--settings|--setting-sources)(?:[\s=]|$)'
+  moved_home:
+    command_line_unquoted|re|i: '\b(?:CLAUDE_CONFIG_DIR|CODEX_HOME)='
+  condition: headless or moved_home

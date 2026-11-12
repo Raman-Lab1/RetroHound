@@ -1,0 +1,19 @@
+name: files_repo_autorun_write
+author: Raman Kumar
+id: 2533c9c5-6182-495d-a1cd-a6465d3024fe
+title: Repository file that tools run on their own written
+status: experimental
+description: >
+  The agent writes (Write/Edit) a husky hook (.husky/<name>) or a direnv .envrc. Git runs the husky hook on the next
+  commit or push, and direnv runs .envrc on the next cd into the project once it is allowed. Shell writes are not
+  matched; .git/hooks and git config are files_git_hook_write and exec_git_repo_code_exec.
+level: medium
+tags: [attack.persistence, attack.t1546, owasp_agentic.asi05]
+falsepositives:
+  - Adding a lint or test hook, or project environment variables, because the user asked.
+x-retrohound: { lane: hunt }
+logsource: { product: ai_coding_agent, category: file_event }
+detection:
+  written_path:
+    target_path|re: '(?:^|/)\.husky/[^/]{1,200}$|(?:^|/)\.envrc$'
+  condition: written_path

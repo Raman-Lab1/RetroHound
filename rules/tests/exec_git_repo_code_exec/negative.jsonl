@@ -1,0 +1,7 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"git config --get core.pager"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git config core.hooksPath"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git config user.email dev@example.invalid"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git config core.autocrlf false"}
+{"category":"process_creation","tool_name":"Bash","command_line":"ls -la .git/hooks/"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat .git/hooks/pre-commit"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git -c core.pager=cat log --oneline"}

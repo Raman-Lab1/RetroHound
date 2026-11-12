@@ -3,3 +3,11 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"git push origin +main"}
 {"category":"process_creation","tool_name":"Bash","command_line":"git filter-branch --env-filter 'true' HEAD"}
 {"category":"process_creation","tool_name":"Bash","command_line":"git filter-repo --path src"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git push -fu origin main"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git push -uf origin main"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git push origin +HEAD:main"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git push origin '+main'"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git push --mirror https://example.invalid/r.git"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git push origin :main"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git  push  -f origin main"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git -C repo filter-branch --tree-filter true HEAD"}
