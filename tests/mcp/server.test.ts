@@ -105,7 +105,25 @@ describe("tools", () => {
     const t = performance.now();
     const r = JSON.parse(call("query", { sql: "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c WHERE x < 3000000) SELECT x FROM c -- end", limit: 3 }).text);
     expect(r).toEqual({ rows: [{ x: 1 }, { x: 2 }, { x: 3 }], truncated: true });
-    expect(performance.now() - t).toBeLessThan(200);
+    expect(performance.now() - t).toBeLessThan(3000);
+  });
+
+  test("query is killed at its time limit: endless CTEs that sort, aggregate or comment out the cap still return", () => {
+    const cte = "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM c)";
+    const fast = { ...ctx, queryMs: 1000 };
+    expect(JSON.parse(call("query", { sql: `${cte} SELECT x FROM c`, limit: 2 }, fast).text)).toEqual({ rows: [{ x: 1 }, { x: 2 }], truncated: true });
+    for (const sql of [`${cte} SELECT x FROM c /*`, `${cte} SELECT x FROM c) /*`]) { // the comment once swallowed the LIMIT wrap
+      const r = call("query", { sql, limit: 2 }, fast);
+      expect(r.isError ? r.text : JSON.parse(r.text).rows.length).not.toBe("query stopped after 1s");
+      if (!r.isError) expect(JSON.parse(r.text).rows).toHaveLength(2);
+    }
+    for (const sql of [`${cte} SELECT x FROM c ORDER BY x`, `${cte} SELECT count(*) FROM c`]) {
+      const t = performance.now();
+      const r = call("query", { sql }, fast);
+      expect(r).toMatchObject({ isError: true, text: "query stopped after 1s" });
+      expect(performance.now() - t).toBeLessThan(5000);
+    }
+    expect(call("query", { sql: "SELECT nope FROM events" }).text).toContain("no such column");
   });
 
   test("tools that return transcript text, and initialize, say it is data, not instructions", () => {

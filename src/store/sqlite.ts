@@ -3,6 +3,7 @@
 // BEGIN/COMMIT around batches, no integers above 2^53, and no booleans or
 // undefined as params (Node throws where Bun would not; SqlValue keeps them out, so map optional fields to null).
 // Rows from Node have a null prototype: read fields, don't compare whole rows.
+import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 
 export type SqlValue = string | number | bigint | Uint8Array | null;
@@ -67,4 +68,38 @@ export function open(path: string, { readonly = false }: { readonly?: boolean } 
       db.close();
     },
   };
+}
+
+// Reads [path, sql, maxRows] on stdin; writes {rows} or {error}. Cells are made JSON-safe: a blob becomes "<blob>".
+const CHILD = `const [p, sql, max] = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+const cell = (v) => (typeof v === "bigint" ? Number(v) : v instanceof Uint8Array ? "<blob>" : v);
+try {
+  const db = process.versions.bun ? new (require("bun:sqlite").Database)(p, { readonly: true }) : new (require("node:sqlite").DatabaseSync)(p, { readOnly: true });
+  const rows = [];
+  for (const r of db.prepare(sql).iterate()) {
+    rows.push(Object.fromEntries(Object.entries(r).map(([k, v]) => [k, cell(v)])));
+    if (rows.length >= max) break;
+  }
+  process.stdout.write(JSON.stringify({ rows }));
+} catch (e) {
+  process.stdout.write(JSON.stringify({ error: String(e && e.message) }));
+}`;
+
+/**
+ * Runs one statement over a read-only open of `path` in a child process, stopping at `maxRows` rows; null when it
+ * takes over `ms` and is killed. SQLite has no interrupt either driver exposes, and a worker's terminate() cannot stop
+ * a thread inside sqlite3_step (it spins on, and Node then never exits), so a process is the only thing that ends it.
+ * Throws the SQLite error message.
+ */
+export function queryInChild(path: string, sql: string, maxRows: number, ms: number): Row[] | null {
+  const r = spawnSync(process.execPath, ["-e", CHILD], { input: JSON.stringify([path, sql, maxRows]), timeout: ms, killSignal: "SIGKILL", encoding: "utf8", maxBuffer: 64 << 20 });
+  if ((r.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT") return null;
+  let out: { rows?: Row[]; error?: string };
+  try {
+    out = JSON.parse(r.stdout);
+  } catch {
+    throw new Error(r.error?.message ?? `no result (exit ${r.status ?? r.signal})`);
+  }
+  if (!out.rows) throw new Error(out.error ?? "no result");
+  return out.rows;
 }

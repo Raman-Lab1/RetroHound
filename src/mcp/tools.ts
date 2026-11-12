@@ -5,18 +5,23 @@ import { loadRuleDir } from "../cli/rules.ts";
 import { LEVELS } from "../normalize/types.ts";
 import { maskDeep } from "../outputs/json.ts";
 import { openReadOnly } from "../store/index.ts";
-import type { Db, Row, SqlValue } from "../store/sqlite.ts";
+import { queryInChild, type Db, type SqlValue } from "../store/sqlite.ts";
 
 export class ToolError extends Error {}
-export type Ctx = { dbPath: string; rulesDir: string; extraRules?: string[] };
+export type Ctx = { dbPath: string; rulesDir: string; extraRules?: string[]; queryMs?: number };
 type Args = Record<string, unknown>;
 export type Tool = { name: string; description: string; inputSchema: object; run: (a: Args, c: Ctx) => unknown };
 
 const ROW_CAP = 200;
 const EVENT_CAP = 500;
+const QUERY_MS = 5000;
+
+function needIndex(c: Ctx) {
+  if (!existsSync(c.dbPath)) throw new ToolError(`no index at ${c.dbPath}: run \`retrohound scan\` first`);
+}
 
 function withDb<T>(c: Ctx, fn: (db: Db) => T): T {
-  if (!existsSync(c.dbPath)) throw new ToolError(`no index at ${c.dbPath}: run \`retrohound scan\` first`);
+  needIndex(c);
   const db = openReadOnly(c.dbPath);
   try {
     return fn(db);
@@ -28,7 +33,6 @@ function withDb<T>(c: Ctx, fn: (db: Db) => T): T {
 }
 
 const num = (v: SqlValue | undefined) => Number(v ?? 0);
-const cell = (v: SqlValue): string | number | null => (typeof v === "bigint" ? Number(v) : v instanceof Uint8Array ? "<blob>" : v);
 
 function str(a: Args, key: string): string | undefined {
   const v = a[key];
@@ -118,12 +122,16 @@ function query(a: Args, c: Ctx) {
   // An MCP client may have no file access of its own: ATTACH would let it read any SQLite file on disk through us.
   if (!/^\s*(?:select|with)\b/i.test(sql) || /\b(?:attach\b|pragma)/i.test(sql)) throw new ToolError("only a read-only SELECT over the index is allowed (no ATTACH or PRAGMA)");
   const n = limit(a, ROW_CAP, ROW_CAP);
-  return withDb(c, (db) => {
-    // SQLite stops at the outer LIMIT, so an endless recursive CTE yields n+1 rows instead of filling memory.
-    // ponytail: an aggregate over an endless CTE (count(*)) still never returns; needs an interrupt the drivers lack
-    const all: Row[] = db.prepare(`SELECT * FROM (${sql.replace(/;\s*$/, "")}\n) LIMIT ${n + 1}`).all();
-    return { rows: all.slice(0, n).map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, cell(v)]))), truncated: all.length > n };
-  });
+  needIndex(c);
+  const ms = c.queryMs ?? QUERY_MS;
+  let rows;
+  try {
+    rows = queryInChild(c.dbPath, sql, n + 1, ms);
+  } catch (e) {
+    throw new ToolError(`query failed: ${(e as Error).message}`);
+  }
+  if (rows === null) throw new ToolError(`query stopped after ${ms / 1000}s`);
+  return { rows: rows.slice(0, n), truncated: rows.length > n };
 }
 
 function listRules(_a: Args, c: Ctx) {
