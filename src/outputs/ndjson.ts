@@ -70,14 +70,19 @@ function ecsEvent(e: AgentEvent) {
   };
 }
 
+/** A transcript timestamp that is not a date becomes the scan's end: a SIEM rejects an alert whose @timestamp or time is not one. */
+const dateOr = (ts: string, fallback: string) => (Number.isNaN(Date.parse(ts)) ? fallback : ts);
+
 function ecsLine(f: Finding, rule: ReportRule | undefined, report: ScanReport) {
   const [p, ...rest] = f.events;
   const base = p ? ecsEvent(p) : { "@timestamp": f.ts, retrohound: { session_id: f.session_id } };
+  const ts = dateOr(base["@timestamp"], report.scan.finished_at);
   const sev = SEVERITY[f.level];
   const atk = parseTags(rule?.tags ?? []);
   const baseEvent = "event" in base ? base.event : {};
   return {
     ...base,
+    "@timestamp": ts,
     ecs: { version: ECS_VERSION },
     event: {
       ...baseEvent, kind: "alert", module: "retrohound", dataset: "retrohound.finding", id: f.id,
@@ -95,7 +100,7 @@ function ecsLine(f: Finding, rule: ReportRule | undefined, report: ScanReport) {
     tags: atk.other,
     message: f.message,
     retrohound: {
-      ...base.retrohound, finding: { id: f.id, event_ids: [p, ...rest].filter(Boolean).map((e) => e!.id) },
+      ...base.retrohound, ...(ts === base["@timestamp"] ? {} : { raw_ts: base["@timestamp"] }), finding: { id: f.id, event_ids: [p, ...rest].filter(Boolean).map((e) => e!.id) },
     },
   };
 }
@@ -114,7 +119,7 @@ function ocsfLine(f: Finding, rule: ReportRule | undefined, report: ScanReport) 
   const p = f.events[0];
   const atk = parseTags(rule?.tags ?? []);
   const times = f.events.map((e) => Date.parse(e.ts)).filter((t) => !Number.isNaN(t));
-  const time = Date.parse(f.ts);
+  const time = Date.parse(dateOr(f.ts, report.scan.finished_at));
   const attacks = [
     ...atk.tactics.map((n) => ({ tactic: { name: n } })),
     ...atk.techniques.map((t) => ({

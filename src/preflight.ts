@@ -7,6 +7,7 @@ import { mask } from "./normalize/mask.ts";
 import { toStored } from "./normalize/stored.ts";
 import { LEVELS, type Finding, type Level, type RawEvent } from "./normalize/types.ts";
 import type { ScanReport } from "./outputs/report.ts";
+import { term } from "./outputs/table.ts";
 import { reportRule } from "./scan.ts";
 import { DEFAULT_RULES_DIR, TOOL_VERSION } from "./version.ts";
 import { findingId } from "./store/index.ts";
@@ -52,13 +53,13 @@ const rank = (l: Level) => LEVELS.indexOf(l);
 export function preflightTable({ report, skipped }: PreflightResult): string {
   const { scan } = report;
   const sorted = report.findings.slice().sort((a, b) => rank(b.level) - rank(a.level));
-  const lines = [`  Preflight ${scan.root}: ${scan.files.indexed} agent files, ${scan.events} events`, ""];
+  const lines = [`  Preflight ${term(scan.root)}: ${scan.files.indexed} agent files, ${scan.events} events`, ""];
   const names = new Map(report.rules.map((r) => [mask(r.id), r.name ?? r.id]));
   for (const f of sorted) {
     const e = f.events[0];
-    lines.push(`  ${f.level.toUpperCase().padEnd(13)}${f.message}  (${names.get(f.rule_id) ?? f.rule_id})`, `               ${e?.raw_ref.file ?? ""}${e?.command_line ? `  ${e.command_line.slice(0, 100)}` : ""}`);
+    lines.push(`  ${f.level.toUpperCase().padEnd(13)}${term(f.message)}  (${term(names.get(f.rule_id) ?? f.rule_id)})`, `               ${term(e?.raw_ref.file ?? "")}${e?.command_line ? `  ${term(e.command_line.slice(0, 100))}` : ""}`);
   }
-  for (const s of skipped) lines.push(`  skipped ${s.path}: ${s.reason}`);
+  for (const s of skipped) lines.push(`  skipped ${term(s.path)}: ${term(s.reason)}`);
   if (scan.suppressed) lines.push(`  ${scan.suppressed} findings suppressed by your ignore file`);
   lines.push("  " + "─".repeat(45), `  ${report.findings.length ? `${report.findings.length} finding(s)` : "no findings"}`);
   return mask(lines.join("\n") + "\n");

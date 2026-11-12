@@ -57,7 +57,7 @@ describe("renderFootprint", () => {
   const html = renderFootprint(sample());
 
   test("loads nothing and runs nothing", () => {
-    expect(html).toContain(`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">`);
+    expect(html).toContain(`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">`);
     expect(html).not.toMatch(/<script|<link|<img|<iframe|<object|<embed|\b(?:src|href|action)\s*=|url\(|@import/i);
     expect(html).not.toMatch(/https?:\/\//i);
     expect(html).toContain("Nothing on this page was fetched or sent.");
