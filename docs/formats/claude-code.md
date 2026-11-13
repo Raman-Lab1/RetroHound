@@ -116,7 +116,7 @@ A `user` line with array content containing `tool_result`:
 
 hook_success (5061: `{hookEvent,hookName,command,stdout,stderr,exitCode,durationMs,toolUseID}`), total_tokens_reminder, deferred_tools_record,
 environment, prompt_snapshot, hook_additional_context, queued_command, edited_text_file (`{filename,snippet}`), deferred_tools_delta,
-mcp_instructions_delta, skill_listing, **instructions** (`{files,changed?,reason?}` - CLAUDE.md etc. loaded; relevant to rules 16/17),
+mcp_instructions_delta, skill_listing, **instructions** (`{files,changed?,reason?}` - CLAUDE.md etc. loaded; read by `files_instruction_concealment` and `files_invisible_unicode_instruction`),
 model, agent_listing_delta, credential_org, date, session_context, remote_session_change, auto_mode, command_permissions,
 silent_turn_reminder, **file** (24: user `@`-mentioned file, `{filename,displayPath,content}` - file content enters context),
 team_context, skill_mention, compact_file_reference, task_status, thinking_drop, invoked_skills, hook_cancelled.

@@ -160,10 +160,14 @@ and MCP servers, and the project scope for domains.
 Supported types: `event_count`, `temporal_ordered`, `temporal` (ADR 0004). `generate` defaults to false: a rule that
 only a non-generating correlation references emits nothing alone (`rules list` marks it silenced).
 
-- `group-by` must contain `session_id`. `agent_id` is optional (ADR 0004 amendment).
+- `group-by` must contain `session_id` or `project_path`. `agent_id` is optional with `session_id` (ADR 0004
+  amendments).
   - `[session_id]`: one group across the main conversation and all sub-agents, ordered by `ts`, then `(agent_id, seq)`
     on a tie. Use it when a main-agent read and a sub-agent send should join.
   - `[session_id, agent_id]`: one group per transcript stream, in `seq` order.
+  - `[project_path]` (no `session_id`): one group across every session in that directory, so a nested `claude -p` or
+    `codex exec` joins its parent. Ordered by `ts`; `agent_id` is rejected (`unsupported-group-by`), `timespan` is at
+    most `1h` (`project-group-timespan`), and events with no `project_path` are skipped.
 - `x-retrohound.max_events_between: N` (seq distance) needs `agent_id` in `group-by`; otherwise the rule is rejected
   (`max-events-needs-agent-id`). `timespan` works either way. With both set, both must hold.
 - `x-retrohound.differ_by: [field, ...]` (`temporal_ordered` only, stored fields): each later step's event must differ
@@ -179,7 +183,9 @@ only a non-generating correlation references emits nothing alone (`rules list` m
 ## Matching rules
 
 Map = AND, list = OR. A plain value matches the whole field, case-insensitive, with `*` and `?` globs. Modifiers:
-`contains`, `startswith`, `endswith`, `all`, `re`, `cased`, `exists`, `gt`/`gte`/`lt`/`lte`, `fieldref`. Anything else,
+`contains`, `startswith`, `endswith`, `all`, `re`, `cased`, `exists`, `gt`/`gte`/`lt`/`lte`, `fieldref`, `windash` (a
+`-` or `/` that starts a flag, such as `-enc` or `/c`, also matches the other one, an en dash, an em dash or a
+horizontal bar). Anything else,
 keyword lists, `timeframe` and `|` aggregation reject the rule.
 
 `re` limits:
