@@ -2,7 +2,7 @@
 // session, never per file: a session is its main transcript plus its sub-agent files (and set-aside copies), and
 // event_count correlations must see all of them at once (ADR 0004). Zero network, nothing raw is persisted.
 import { createHash } from "node:crypto";
-import { resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { COLLECTORS, type Collector } from "./collectors/index.ts";
 import { evaluate, type Match } from "./engine/evaluate.ts";
 import { coldStartCutoff, FIRST_SEEN_FIELDS, firstSeenOf, setFirstSeen, type FirstSeen } from "./engine/first-seen.ts";
@@ -39,7 +39,11 @@ export type ScanOptions = {
 type Sess = { id: string; agent: string; project_path?: string; last_ts: string; events: number; archived: boolean };
 type Job = { c: Collector; root: string; paths: string[] };
 /** What one job evaluates: its rule-run check and record are per scope (0006), or another agent's scan would mark it current. */
-const scopeOf = (j: Job) => `${j.c.agent}:${resolve(j.root)}`;
+// `--root ~/.claude` and `~/.claude/projects` name the same data, so they share a scope.
+const scopeOf = (j: Job) => {
+  const r = resolve(j.root);
+  return `${j.c.agent}:${basename(r) === "projects" ? dirname(r) : r}`;
+};
 const BLOCKED_FIELDS = ["session_id", "agent_id", "attribution", "denial_kind", "denial_category"] as const;
 type BlockedRow = Partial<Record<(typeof BLOCKED_FIELDS)[number] | "project_path", string | null>>; // DB rows carry null
 type View = {
@@ -216,7 +220,7 @@ async function indexAgent(c: Collector, store: Store, paths: string[], full: boo
   const index = await indexFiles(store, paths, parse, c.parserVersion);
   // A touched file dirties every group holding events of its sessions, so a session split over groups is re-read
   // whole: replaceFindings would otherwise swap its findings for those of a partial parse (0008).
-  const held = new Set(full ? [] : store.sessionFiles([...touched]));
+  const held = new Set(full || !touched.size ? [] : store.sessionFiles([...touched]));
   const dirty = [...groupPaths(c, paths).values()].filter((g) => full || g.some((p) => touched.has(p) || held.has(mask(p))));
   const sessions = await collect(dirty, safeParse(c, cache));
   cache.clear();

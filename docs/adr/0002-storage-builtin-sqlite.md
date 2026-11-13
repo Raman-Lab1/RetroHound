@@ -24,7 +24,8 @@ Option 3. `src/store/sqlite.ts` imports whichever module exists and exposes `ope
 Schema (`src/store/schema.ts`), beyond the basic tables:
 - `files_indexed` keeps a content hash, `first_seen`, `last_seen` and `gone_at`, so events survive the agent
   deleting the transcript (0008);
-- `rule_runs.rule_set_hash` says when findings must be re-evaluated (0006);
+- `rule_runs.rule_set_hash` says when findings must be re-evaluated (0006); `rule_runs.scope` (migration 5, a JSON list
+  of `agent:root`) ties each run to the scopes it evaluated;
 - an event `id` is a hash of the canonical path, the line's `uuid` (or its text plus a repeat number) and a sub-index,
   so a rewritten or set-aside copy of a file upserts onto the same rows (0008);
 - `events` stores the normalized, masked fields only, never raw text (0006, 0007);
