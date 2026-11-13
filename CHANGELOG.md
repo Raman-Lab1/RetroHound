@@ -9,8 +9,38 @@ and versions follow [Semantic Versioning](https://semver.org/).
 - The Homebrew formula and the Velociraptor artifact carry the SHA-256 of the 0.3.1 tarball.
 - Docs: `group-by: [project_path]` correlations and the `windash` modifier are documented; ADR 0001 notes that
   `.jsonl.zst` needs Node 22.15; ADR 0005 amended (older sub-agent layouts are parsed); performance figures re-run.
+- Index schema migration 5: rule runs are recorded per scope (agent plus root). After the upgrade each scope is
+  re-evaluated once in full.
+- Codex parser `codex/v7`: event ids use the rollout's file name, so every Codex file is re-parsed once. Sessions that
+  `codex archive` moved before this version keep their duplicate events.
+- Hook commands in exec form (`command` plus `args`) are read with their arguments. On the first scan after the upgrade
+  the footprint shows each exec-form hook (RetroHound's own included) as removed and added once.
+- `query` accepts only `SELECT`/`WITH` queries. `show` opens the index read-only, so it also reads an evidence copy on
+  read-only media.
+- `exec_decode_to_shell` (enforce) also catches `powershell -e`, `-ec` and `/enc`, only when flags alone sit between
+  the executable and the switch.
+- `rules list` and `rules show` mark silenced rules; `rules test` skips cold-start baseline lines of `first_seen` rules.
+- `hook install --dry-run` says "would install"; ECS `gen_ai.provider.name` is set for Codex (`openai`) and
+  Antigravity (`gcp.gemini`).
 
 ### Fixed
+- `hook install` failed when the settings folder did not exist yet (project scope in most repos); it now creates it.
+  Codex user scope honours `CODEX_HOME`. Malformed `hooks` values and non-regular settings files are refused instead
+  of being rewritten or hanging. `hook run` creates `~/.retrohound` with mode 0700.
+- Preflight and the footprint dropped exec-form hook `args`, so `sh -c "curl … | sh"` and a repointed hook went unseen.
+- A scan of one agent or root marked the rule set current for all, so other agents kept stale findings after a rule
+  change. A session split over legacy flat `agent-*.jsonl` files lost findings on a warm scan.
+- `codex archive` (moving a rollout to `archived_sessions/`) duplicated its events.
+- Piping output into a reader that closes early (`| head`) crashed with EPIPE.
+- `scan` honours `CLAUDE_CONFIG_DIR`; `--root <dir>/projects` reads that dir's settings and history; `--no-index --db`
+  uses the given index for the history line; `verify` names a file that is not an index; `query` no longer writes a
+  copy with `VACUUM INTO`.
+- `incident --anonymize` left project names in tool names and attribution, and dir names after a space or inside a
+  quoted path with an apostrophe.
+- OCSF kept only the first sub-technique of a parent; tactic names read "Command And Control"; `--no-index` listed
+  findings in another order than an indexed scan.
+- `event_count` counted one event twice when two referenced rules matched it in a session or project group.
+- Rule test fixtures used an agent value that does not exist (`codex_cli`).
 - SARIF: Codex and Antigravity findings pointed under `CLAUDE_PROJECTS` with a truncated path (every Antigravity
   finding shared one URI). Each agent now has its own `uriBaseId` (`CODEX_HOME`, `ANTIGRAVITY_HOME`) and URIs are
   percent-encoded.
