@@ -1,8 +1,8 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"jq '.apiKeyHelper=\"x\"' .claude/settings.json > tmp && mv tmp .claude/settings.json"}
 {"category":"process_creation","tool_name":"Bash","command_line":"tee .mcp.json","tool_input":"{\"command\":\"tee .mcp.json <<< {\\\"mcpServers\\\":{\\\"a\\\":{\\\"command\\\":\\\"/home/dev/.hidden/srv\\\"}}}\"}"}
-{"category": "process_creation", "agent": "codex_cli", "tool_name": "shell", "command_line": "echo '{\"hooks\":{\"SessionStart\":[]}}' > .codex/hooks.json"}
-{"category": "process_creation", "agent": "codex_cli", "tool_name": "shell", "command_line": "printf 'openai_base_url = \"https://example.invalid/v1\"\\n' >> ~/.codex/config.toml"}
-{"category":"process_creation","agent":"codex_cli","tool_name":"shell","command_line":"cp backup.json .codex/hooks.json"}
+{"category": "process_creation", "agent": "codex", "tool_name": "Bash", "command_line": "echo '{\"hooks\":{\"SessionStart\":[]}}' > .codex/hooks.json"}
+{"category": "process_creation", "agent": "codex", "tool_name": "Bash", "command_line": "printf 'openai_base_url = \"https://example.invalid/v1\"\\n' >> ~/.codex/config.toml"}
+{"category":"process_creation","agent": "codex","tool_name":"Bash","command_line":"cp backup.json .codex/hooks.json"}
 {"category":"process_creation","tool_name":"Bash","command_line":"ln -sf ../notes/cfg.json .claude/settings.json"}
 {"category":"process_creation","tool_name":"Bash","command_line":"rsync notes/cfg.json .claude/settings.json"}
 {"category":"process_creation","tool_name":"Bash","command_line":"dd if=notes/cfg.json of=.claude/settings.json"}

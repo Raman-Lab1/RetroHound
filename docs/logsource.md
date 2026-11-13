@@ -157,8 +157,10 @@ and MCP servers, and the project scope for domains.
 
 ## Correlation
 
-Supported types: `event_count`, `temporal_ordered`, `temporal` (ADR 0004). `generate` defaults to false: a rule that
-only a non-generating correlation references emits nothing alone (`rules list` marks it silenced).
+Supported types: `event_count`, `temporal_ordered`, `temporal` (ADR 0004). `generate` defaults to false: a rule
+referenced by a non-generating correlation in its own file, and by no generating one, emits nothing alone (`rules list`
+marks it silenced). A correlation in another file (an `--extra-rules` pack) never silences it. `generate` may sit inside
+the `correlation:` block (Sigma) or at the top level of the document; the block wins when both are set.
 
 - `group-by` must contain `session_id` or `project_path`. `agent_id` is optional with `session_id` (ADR 0004
   amendments).
@@ -191,7 +193,12 @@ horizontal bar; not with `re`). Anything else, keyword lists, `timeframe` and `|
 
 - Flags are `|re|i`, `|re|m`, `|re|s`. Case-sensitive and unanchored by default. No lookarounds, backreferences, POSIX
   classes, or `\u{...}`.
-- **8 KiB cap:** `re` tests only the first 8,192 characters of a field. A match after that is missed.
+- **Windows:** a bounded pattern (no `*`, `+` or `{n,}`) tests the whole field. An unbounded one tests overlapping 8 KiB
+  windows (4 KiB step) over the first 256 KiB of the field, plus its last 8 KiB: a match longer than 4 KiB, or one in
+  the middle of a field over 256 KiB, can be missed, and `^`, `$` or `\b` can match at a window edge. Write
+  `\s{1,9}` for `\s+` to cover any length.
+- **Nested quantifiers** such as `(a+)+` or `(a|b?){1,9}` are rejected at load (`regex-nested-quantifier`): they
+  backtrack exponentially.
 - **One-`.*` guard:** `retrohound rules test` fails a rule whose `re` pattern has more than one unescaped `.*` or
   `.+`, because `.*a.*b` is cubic in V8 (about 1 s per KiB). Use bounded classes such as `[^;&|]{0,200}`.
 

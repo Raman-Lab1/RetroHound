@@ -4,3 +4,11 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"cat data.b64 | base64 -d | jq ."}
 {"category":"process_creation","tool_name":"PowerShell","command_line":"Get-Content a.txt | Out-File -Encoding utf8 b.txt"}
 {"category":"process_creation","tool_name":"Bash","command_line":"grep -rnE \"eval\\(|base64 -d|exec\\(\" src --include=*.py | head"}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"powershell -ExecutionPolicy Bypass -File x.ps1"}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"pwsh -ep bypass -f build.ps1 -Name tools-e x"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "pwsh -c \"Get-Date\"; grep -e foo src"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "ls tools/powershell && sed -e s/a/b/ f.txt"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "powershell -NoProfile -Command \"robocopy src dst /E /MIR\""}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "npm run build:pwsh -- -e prod"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "cat docs/pwsh.md | grep -e Encoded"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "pwsh -File build.ps1 -e prod"}

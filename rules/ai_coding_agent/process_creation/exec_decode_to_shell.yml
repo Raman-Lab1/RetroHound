@@ -28,4 +28,8 @@ detection:
       - 'iex*frombase64string'
       - 'invoke-expression*frombase64string'
       - 'frombase64string*| iex'
-  condition: 1 of posix_* or ps_encoded
+  ps_encoded_flag:
+    # -e/-ec/-enc: only flags (each with at most one bare-word value) between the executable and it, so a later
+    # grep -e, sed -e or robocopy /E is not it.
+    command_line|re|i: '\b(?:powershell|pwsh)(?:\.exe)?[\x22\x27]?(?:\s{1,5}[-/\u2013\u2014\u2015]\w{1,30}(?:\s{1,5}\w{1,30})?){0,8}\s{1,5}[-/\u2013\u2014\u2015](?:e|ec|enc|encodedcommand)\s{1,5}[\x22\x27]?[a-z0-9+/]{4}'
+  condition: 1 of posix_* or 1 of ps_*

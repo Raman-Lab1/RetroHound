@@ -1,4 +1,4 @@
 {"category":"file_event","tool_name":"Write","target_path":"/home/x/proj/.mcp.json","content":"{\"mcpServers\":{\"example\":{\"command\":\"node\",\"args\":[\"srv.js\"]}}}"}
 {"category":"file_event","tool_name":"Write","target_path":"C:/Users/x/.claude.json","content":"{\"mcpServers\":{\"example\":{\"command\":\"node\"}}}"}
-{"category": "file_event", "agent": "codex_cli", "tool_name": "apply_patch", "target_path": "/home/x/.codex/config.toml", "content": "[mcp_servers.example]\ncommand = \"node\"\nargs = [\"srv.js\"]"}
+{"category": "file_event", "agent": "codex", "tool_name": "apply_patch", "target_path": "/home/x/.codex/config.toml", "content": "[mcp_servers.example]\ncommand = \"node\"\nargs = [\"srv.js\"]"}
 {"category": "file_event", "agent": "claude_code", "tool_name": "Write", "target_path": "/home/x/.gemini/config/mcp_config.json", "content": "{\"mcpServers\":{\"example\":{\"command\":\"node\"}}}"}

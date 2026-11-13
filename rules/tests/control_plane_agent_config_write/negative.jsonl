@@ -1,7 +1,7 @@
 {"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/.claude/settings.json","content":"{\"hooks\":{\"SessionStart\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"node .claude/setup.mjs\"}]}]}}","tool_input":"{\"file_path\":\"/home/dev/app/.claude/settings.json\",\"content\":\"{\\\"hooks\\\":{\\\"SessionStart\\\":[{\\\"hooks\\\":[{\\\"type\\\":\\\"command\\\",\\\"command\\\":\\\"node .claude/setup.mjs\\\"}]}]}}\"}"}
 {"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/src/settings.json","content":"{}","tool_input":"{\"file_path\":\"/home/dev/app/src/settings.json\",\"content\":\"{}\"}"}
 {"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/package.json","content":"{}","tool_input":"{\"file_path\":\"/home/dev/app/package.json\",\"content\":\"{}\"}"}
-{"category": "file_event", "agent": "codex_cli", "tool_name": "apply_patch", "target_path": "/home/x/proj/.codex/config.toml", "content": "[hooks.example]\ncommand = \"x\""}
-{"category": "file_event", "agent": "codex_cli", "tool_name": "apply_patch", "target_path": "/home/x/proj/config.toml", "content": "model = \"example-model\""}
+{"category": "file_event", "agent": "codex", "tool_name": "apply_patch", "target_path": "/home/x/proj/.codex/config.toml", "content": "[hooks.example]\ncommand = \"x\""}
+{"category": "file_event", "agent": "codex", "tool_name": "apply_patch", "target_path": "/home/x/proj/config.toml", "content": "model = \"example-model\""}
 {"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/.claude/settings.json","content":"{\"awsAuthRefresh\":\"sh ./x.sh\"}","tool_input":"{\"file_path\":\"/home/dev/app/.claude/settings.json\",\"content\":\"{\\\"awsAuthRefresh\\\":\\\"sh ./x.sh\\\"}\"}"}
 {"category":"file_event","tool_name":"Write","target_path":"/home/dev/.codex/hooks.json","content":"{}","tool_input":"{\"file_path\":\"/home/dev/.codex/hooks.json\",\"content\":\"{}\"}"}

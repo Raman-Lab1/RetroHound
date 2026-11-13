@@ -6,3 +6,8 @@
 {"category":"process_creation","tool_name":"PowerShell","command_line":"powershell -enc ZQBjAGgAbwA="}
 {"category":"process_creation","tool_name":"PowerShell","command_line":"iex ([Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('ZWNobyBoaQ==')))"}
 {"category":"process_creation","tool_name":"Bash","command_line":"eval $(echo ZWNobyBoaQ== | xxd -r -p)"}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"powershell -e ZQBjAGgAbwA="}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"pwsh -NoProfile -ec ZQBjAGgAbwA="}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"powershell.exe /enc ZQBjAGgAbwA="}
+{"category":"process_creation","tool_name":"Bash","command_line":"sh <(echo ZWNobyBoaQ== | base64 -d)"}
+{"category": "process_creation", "tool_name": "PowerShell", "command_line": "powershell.exe -NoP -W Hidden -ExecutionPolicy Bypass -ec ZQBjAGgAbwA="}
