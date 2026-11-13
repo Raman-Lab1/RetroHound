@@ -40,3 +40,5 @@ Antigravity CLI have their own formats (docs/formats/).
 - Hook events make a repository-planted hook visible even when the agent itself called no tool.
 - Older formats (inline sidechains, flat `agent-*.jsonl` files) are not parsed. Support would be added when a real
   sample is available.
+- Amendment 2026-11-13: they are parsed. Discovery picks up flat `agent-*.jsonl` files, and both forms go through the
+  same parser as current transcripts; no real legacy sample has shown a difference (`docs/formats/claude-code.md`).

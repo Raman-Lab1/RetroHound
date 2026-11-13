@@ -18,7 +18,7 @@ and then retried. Local, offline, and the evidence outlives the agent's own clea
 
 ## Quick start
 
-Needs Node.js 22.13 or later. Nothing is uploaded: RetroHound reads files on your machine and makes no network calls.
+Needs Node.js 22.13 or later (22.15 to read compressed Codex logs). Nothing is uploaded: RetroHound reads files on your machine and makes no network calls.
 
 ```sh
 npx retrohound scan

@@ -4,25 +4,30 @@ Targets: a warm scan of 1,000 sessions in under 5 s, and rule evaluation at 50k 
 
 ## Method
 
-- Machine: a Windows 10 machine, Bun 1.4.4. Wall times swing 2x to 10x between runs of the same code when other work
-  runs alongside, so CPU time and before/after ratios are more reliable than single wall times. "Idle" below means
-  nothing else running.
+- Machines: the synthetic rows below were measured on an Apple M5 (arm64), macOS 27.2, Bun 1.4.4, two runs, not
+  idle (other work ran alongside). The real-transcript row, the cost-per-rule table and the "What made it faster"
+  figures were measured earlier on a Windows 10 machine, Bun 1.4.4. Wall times swing 2x to 10x between runs of the
+  same code when other work runs alongside, so CPU time and before/after ratios are more reliable than single wall
+  times.
 - `tests/perf.test.ts` synthesizes N defanged sessions (about 100 events each, 1.3 KB payloads, `example.invalid`) in a
   temp dir and measures parse, evaluate, cold scan and warm scan, all in-process. `bun test` runs it at 5 sessions as a
   smoke test; `PERF=1 bun test tests/perf.test.ts` runs 1,000 (`PERF_SESSIONS=n`; `PERF_KEEP=1` keeps the dir for
   profiling) and asserts both targets.
 - Real-transcript figures below come from an earlier, larger fixture set (56 files, 75 MB, 9,928 events, long heredoc
   command lines), since replaced by `fixtures/redacted/` (12 files, 14 MB, free text replaced by placeholders). Numbers
-  measured on the new set are lower and do not compare one to one.
+  measured on the new set are lower and do not compare one to one. Those figures are historical: they cannot be
+  re-run like for like.
 
-## Results (1,000 synthetic sessions, 101,000 events, idle)
+## Results (1,000 synthetic sessions, 101,000 events)
+
+Synthetic rows: 75 rules loaded (58 files: 60 shipped rules plus 15 helper rules that only feed correlations).
 
 | Measure | Result | Target |
 |---|---|---|
-| Warm scan | 0.31-0.38 s | < 5 s: met |
-| Evaluate, synthetic sessions | 62.6k-78.0k events/s | 50k: met |
-| Evaluate, real transcripts (all 48 rules) | 18.6k-19.8k events/s | 50k: not met (see below) |
-| Cold scan | 19.5-20.3 s (5.0k-5.2k events/s) | none set |
+| Warm scan | 0.14 s | < 5 s: met |
+| Evaluate, synthetic sessions | 154.6k-155.6k events/s | 50k: met |
+| Evaluate, real transcripts (historical: 48 rules, old fixture set, Windows) | 18.6k-19.8k events/s | 50k: not met (see below) |
+| Cold scan | 6.0-6.1 s (16.6k-16.8k events/s) | none set |
 
 The warm scan compares file size and mtime against the index and reads findings back from SQLite. The evaluate rate on
 real transcripts is lower because their long heredoc command lines make the bounded-window `re` rules expensive.
@@ -40,7 +45,7 @@ real transcripts is lower because their long heredoc command lines make the boun
 4. The four `events` indexes no query uses were dropped (migration 2), and `sha256` comes from the parse read instead
    of a second read of every file. Cold scan: about -17%.
 
-## Cost per rule (real transcripts, best of 3, top 8)
+## Cost per rule (historical: real transcripts, old fixture set, best of 3, top 8)
 
 | ms | Category | Rule | Why |
 |---|---|---|---|
@@ -89,11 +94,11 @@ initialising the hook's modules, 4.3 ms loading the enforce rules from the cache
 - `event_count` gives one finding per window, in practice one per session per rule, so
   `control_plane_hook_repo_script` cannot report per command (see the `shortcut:` comment in `src/engine/correlate.ts`).
 
-## False-positive review (one real developer history)
+## False-positive review (historical: one real developer history, 38 rules)
 
-A read-only scan of one developer's `~/.claude/projects` (temp DB, deleted afterwards): 9 sessions, 3,272 events,
-41 findings from 8 of the 38 rules shipped at that time. The sessions were mostly work on RetroHound itself, so the
-history is self-referential. Counts only:
+Not re-run on the current rule set. A read-only scan of one developer's `~/.claude/projects` (temp DB, deleted
+afterwards): 9 sessions, 3,272 events, 41 findings from 8 of the 38 rules shipped at that time. The sessions were
+mostly work on RetroHound itself, so the history is self-referential. Counts only:
 
 | Rule | Level | Hits | Sessions | Verdict |
 |---|---|---|---|---|
