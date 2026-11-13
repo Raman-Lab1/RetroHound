@@ -158,7 +158,7 @@ bun test
 |---|---|
 | `scan` | Scan an agent's transcripts (Claude Code by default), index them, report findings, write the footprint report. |
 | `rules list` / `rules show <rule>` / `rules test [dir]` | Inspect loaded rules (and rejected ones, with the reason); check every rule has passing tests. |
-| `query <sql>` | Read-only SQL over the index. Tables: `events`, `sessions`, `findings`, `files_indexed`. |
+| `query <sql>` | Read-only SQL over the index. Tables: `events`, `sessions`, `findings`, `files_indexed`, `rule_runs`, `config_snapshots`, `chain`. |
 | `show <session-id>` | Timeline of one session with findings highlighted. |
 | `wrapped` | Write a self-contained HTML report card. |
 | `purge` | Delete the index database. |
@@ -168,11 +168,12 @@ bun test
 
 Flags (from `--help`):
 
-- `scan`: `--since <30d|12h|date>`, `--agent <claude_code|codex|antigravity>`, `--project <path-substring>`, `--rules <dir>`,
+- `scan`: `--since <30d|12h|date>`, `--agent <claude_code|codex|antigravity|all>`, `--project <path-substring>`, `--rules <dir>`,
   `--level <informational|low|medium|high|critical>` (hide lower), `--format <table|json|sarif|ndjson-ecs|ndjson-ocsf|attack-layer>`, `--no-index` (evaluate in
   memory, write nothing), `--report <file>` (footprint report path; default `<index name>.footprint.html` next to the index),
   `--no-report`, `--fail-on <level>` (exit 1 at or above it, for CI), `--db <path>`,
-  `--root <dir>` (Claude config dir or its `projects` dir; default `~/.claude`).
+  `--root <dir>` (the agent's own root: `~/.claude` or its `projects` dir, `$CODEX_HOME` or `~/.codex`,
+  `~/.gemini/antigravity-cli`; not with `--agent all`, which reads each agent's default root).
 - `rules list`, `rules show`: `--rules <dir>`. `rules test [dir]`: `--tests <dir>` (default `<dir>/../tests`).
 - `query`: `--format <table|json>`, `--db <path>`.
 - `show`: `--db <path>`, `--rules <dir>`.
@@ -185,7 +186,9 @@ Flags (from `--help`):
   in `~/.retrohound` (nothing else, symlinks skipped).
 - `preflight [dir]`: `--rules <dir>`, `--format <table|json>`, `--fail-on <level>`, `--ignore <file>`.
 - `hook install`: `--agent <claude_code|codex|antigravity>`, `--mode <log|confirm|block>`, `--scope <user|project|local>`, `--settings <path>`, `--fail-closed`,
-  `--dry-run`, `--allow-unsafe-path`. Start with `--mode log` and read `~/.retrohound/hook-log.jsonl` before blocking
+  `--dry-run`, `--allow-unsafe-path`. `--fail-closed` (Claude Code only) blocks tool calls only when the hook cannot
+  run at all: runtime or entry file missing, a crash before it starts, or the 5 s timeout. An error inside `hook run`
+  (bad payload, rules that do not load) is still one stderr line and no decision. Start with `--mode log` and read `~/.retrohound/hook-log.jsonl` before blocking
   anything.
 - `mcp`: `--db <path>`, `--rules <dir>`. Register it with `claude mcp add retrohound -- retrohound mcp`.
 - `scan`, `preflight`, `hook run` also take `--ignore <file>` (below).
@@ -222,8 +225,8 @@ it with `--ignore` if you trust it.
 (`--scope project` uses `.codex/` or `.agents/` in the repo). Both are set up from the vendors' docs and tested on temp
 files only, not yet in a live session:
 - Codex runs a new or changed hook only after you trust it in `/hooks`, and has no "ask", so `confirm` is refused there.
-  Its file edits (`apply_patch`) reach the hook as plain tool calls, so file rules (config writes, MCP servers added)
-  fire on them in `scan`, not yet in the hook.
+  Its file edits (`apply_patch`) reach the hook as file events, one per changed file, so file rules (config writes,
+  git hook writes) decide on them live as well as in `scan`. A patch with no file header stays one plain tool call.
 - Antigravity's docs call the hook's `decision` required; RetroHound prints nothing when it has nothing to say (it
   never prints "allow"). Try `--agent antigravity --scope project --mode log` in a throwaway repo first and check that
   normal tool calls still run before installing it for your user.

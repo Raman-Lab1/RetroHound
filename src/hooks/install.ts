@@ -5,7 +5,7 @@
 // uninstall of a file that had no hooks gives back the same data (a file that did not exist ends up as `{}`).
 // Codex (~/.codex/hooks.json) and Antigravity CLI (~/.gemini/config/hooks.json) files are JSON too: same algorithm.
 import { createHash } from "node:crypto";
-import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeSync, chmodSync } from "node:fs";
+import { closeSync, copyFileSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeSync, chmodSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { Agent } from "./agents.ts";
@@ -31,7 +31,9 @@ export type SafetyEnv = {
   tmp: string; home: string; programDirs: string[]; cwd: string;
 };
 export type Finding = { path: string; reason: string };
-export class UnsafePathError extends Error {}
+/** A refusal caused by the flags or paths given: the CLI exits 2 (usage), not 3. */
+export class InstallUsageError extends Error {}
+export class UnsafePathError extends InstallUsageError {}
 const UNSAFE_FLAG = "--allow-unsafe-path";
 const EXTRA_FLAG = "--extra-rules";
 
@@ -133,7 +135,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 export function settingsPath(scope: Scope, cwd = process.cwd(), env = process.env, agent: Agent = "claude_code"): string {
   // Codex: learn.chatgpt.com/docs/hooks. Antigravity CLI: antigravity.google/docs/hooks. Neither has a `local` file.
   if (agent !== "claude_code" && scope === "local") throw new Error(`${agent} has no local scope; use --scope user or project`);
-  if (agent === "codex") return scope === "user" ? join(homedir(), ".codex", "hooks.json") : join(cwd, ".codex", "hooks.json");
+  if (agent === "codex") return scope === "user" ? join(env.CODEX_HOME || join(homedir(), ".codex"), "hooks.json") : join(cwd, ".codex", "hooks.json");
   if (agent === "antigravity") return scope === "user" ? join(homedir(), ".gemini", "config", "hooks.json") : join(cwd, ".agents", "hooks.json");
   if (scope === "user") return join(env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), "settings.json");
   return join(cwd, ".claude", scope === "project" ? "settings.json" : "settings.local.json");
@@ -178,15 +180,16 @@ export function handlerFor(o: Pick<InstallOpts, "mode" | "command" | "entry" | "
   const extra = (o.extraRules ?? []).flatMap((d) => [EXTRA_FLAG, d]);
   const args = [o.entry, "hook", "run", ...(o.agent && o.agent !== "claude_code" ? ["--agent", o.agent] : []), "--mode", o.mode, ...extra, ...(o.allowUnsafePath ? [UNSAFE_FLAG] : [])]; // flag is inert at run time; `status` reads it
   if (!o.agent || o.agent === "claude_code") return { type: "command", command: o.command, args, timeout: 5, ...(o.failClosed ? { onFailure: "block" as const } : {}) };
-  if (o.failClosed) throw new Error(`--fail-closed is not available for ${o.agent}: its hook docs define no fail-closed setting`);
-  if (o.agent === "codex" && o.mode === "confirm") throw new Error("codex does not support ask (Codex runs the tool when a hook answers ask); use --mode log or block");
+  if (o.failClosed) throw new InstallUsageError(`--fail-closed is not available for ${o.agent}: its hook docs define no fail-closed setting`);
+  if (o.agent === "codex" && o.mode === "confirm") throw new InstallUsageError("codex does not support ask (Codex runs the tool when a hook answers ask); use --mode log or block");
   const bad = [o.command, o.entry, ...(o.extraRules ?? [])].filter((p) => !PLAIN.test(p));
   if (bad.length) throw new UnsafePathError(`refusing to install: ${bad.join(", ")} would need shell quoting in a ${o.agent} hook command. Nothing was written. Install from a path without spaces or special characters.`);
   return { type: "command", command: [o.command, ...args].join(" "), timeout: 5 };
 }
 
-function readSettings(path: string): { text: string | undefined; obj: Json } {
+function readSettings(path: string, root = "hooks"): { text: string | undefined; obj: Json } {
   if (!existsSync(path)) return { text: undefined, obj: {} };
+  if (!statSync(path).isFile()) throw new Error(`${path} is not a regular file; refusing to touch it`); // a FIFO would hang the read
   const text = readFileSync(path, "utf8");
   let obj: unknown;
   try {
@@ -195,6 +198,9 @@ function readSettings(path: string): { text: string | undefined; obj: Json } {
     throw new Error(`${path} is not strict JSON (${(e as Error).message}); refusing to touch it`);
   }
   if (!obj || typeof obj !== "object" || Array.isArray(obj)) throw new Error(`${path} is not a JSON object; refusing to touch it`);
+  const r = (obj as Json)[root];
+  if (r !== undefined && (!r || typeof r !== "object" || Array.isArray(r))) throw new Error(`${path}: '${root}' is not a JSON object; refusing to touch it`);
+  if (r?.PreToolUse !== undefined && !Array.isArray(r.PreToolUse)) throw new Error(`${path}: '${root}.PreToolUse' is not an array; refusing to touch it`);
   return { text, obj: obj as Json };
 }
 
@@ -258,12 +264,12 @@ function verify(path: string, orig: Json, root = "hooks"): void {
 
 function change(o: InstallOpts, build: (orig: Json) => Json, countOurs: number): Outcome {
   const path = existsSync(o.path) ? realpathSync(o.path) : o.path;
+  const root = rootOf(o.agent);
   for (let attempt = 0; attempt < 3; attempt++) {
-    const { text, obj: orig } = readSettings(path);
+    const { text, obj: orig } = readSettings(path, root);
     const next = build(orig);
     const warnings: string[] = [];
     if (same(next, orig) && text !== undefined) return { status: countOurs ? "unchanged" : "absent", path, warnings, diff: "" };
-    const root = rootOf(o.agent);
     const diff = `${root}.PreToolUse: ${JSON.stringify(groupsOf(orig, root))}\n  -> ${JSON.stringify(groupsOf(next, root))}`;
     if (o.dryRun) return { status: countOurs ? "updated" : "installed", path, warnings, diff };
     const mode = text === undefined ? 0o600 : statSync(path).mode & 0o777;
@@ -278,6 +284,7 @@ function change(o: InstallOpts, build: (orig: Json) => Json, countOurs: number):
       if (backup) rmSync(backup, { force: true });
       continue;
     }
+    if (text === undefined) mkdirSync(dirname(path), { recursive: true, mode: 0o700 }); // e.g. no .codex/ in the repo yet
     atomicWrite(path, JSON.stringify(next, null, 2) + "\n", mode);
     try {
       o.afterWrite?.(path);
@@ -297,7 +304,7 @@ export function install(o: InstallOpts): Outcome {
   const bad = checkPaths(o.command, o.entry, o.safety, [...(o.rulesDir ? [o.rulesDir] : []), ...(o.extraRules ?? [])]);
   if (bad.length && !o.allowUnsafePath) throw new UnsafePathError(`refusing to install, the hook would run files others may be able to modify: ${describe(bad)}. Nothing was written. Fix the permissions or install from a user-owned path; ${UNSAFE_FLAG} overrides this check.`);
   const root = rootOf(o.agent);
-  const out = change(o, (orig) => withInstalled(orig, h, root), oursIn(readSettings(o.path).obj, root).length);
+  const out = change(o, (orig) => withInstalled(orig, h, root), oursIn(readSettings(o.path, root).obj, root).length);
   if (bad.length) out.warnings.push(`${UNSAFE_FLAG}: installed despite unsafe paths (${describe(bad)}); \`hook status\` keeps reporting this`);
   if (o.failClosed) out.warnings.push("--fail-closed: if retrohound is missing or crashes, Claude Code BLOCKS every tool call until you run `retrohound hook uninstall`");
   return out;
@@ -306,7 +313,7 @@ export function install(o: InstallOpts): Outcome {
 export function uninstall(o: InstallOpts): Outcome {
   if (!existsSync(o.path)) return { status: "absent", path: o.path, warnings: [], diff: "" };
   const root = rootOf(o.agent);
-  const had = oursIn(readSettings(o.path).obj, root).length;
+  const had = oursIn(readSettings(o.path, root).obj, root).length;
   const out = change(o, (orig) => removeOurs(structuredClone(orig), root), had);
   return { ...out, status: had ? "removed" : "absent" };
 }
@@ -317,7 +324,7 @@ export type Status = { installed: boolean; mode?: string; failClosed?: boolean; 
 
 /** `unsafe` re-runs the path check on the paths recorded in the handler, so a later chmod or file swap shows up. */
 export function status(path: string, managedPaths: string[] = MANAGED, safety?: SafetyEnv, agent: Agent = "claude_code", rulesDir?: string): Status {
-  const { obj } = readSettings(path);
+  const { obj } = readSettings(path, rootOf(agent));
   const h = oursIn(obj, rootOf(agent))[0];
   const p = h ? partsOf(h)! : undefined;
   const m = p ? p.args.indexOf("--mode") : -1;

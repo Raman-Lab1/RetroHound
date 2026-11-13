@@ -66,13 +66,17 @@ function workspaceGlobs(root: string): string[] {
   return all.filter((g): g is string => typeof g === "string" && !g.startsWith("!"));
 }
 
-/** Hook commands of a settings.json become `hook:<Event>` process_creation events, as the live parser emits them. */
+/** Hook commands of a settings.json become `hook:<Event>` process_creation events, as the live parser emits them; exec-form args are joined on. */
 export function hookCommands(text: string): [string, string][] {
   try {
     const hooks = (JSON.parse(text) as { hooks?: Record<string, unknown> }).hooks ?? {};
     return Object.entries(hooks).flatMap(([name, groups]) =>
-      (Array.isArray(groups) ? groups : []).flatMap((g: { hooks?: { command?: unknown }[] }) =>
-        (g?.hooks ?? []).flatMap((h) => (typeof h?.command === "string" ? [[name, h.command] as [string, string]] : []))));
+      (Array.isArray(groups) ? groups : []).flatMap((g: { hooks?: { command?: unknown; args?: unknown }[] }) =>
+        (g?.hooks ?? []).flatMap((h) => {
+          if (typeof h?.command !== "string") return [];
+          const args = Array.isArray(h.args) ? h.args.filter((a): a is string => typeof a === "string") : [];
+          return [[name, [h.command, ...args].join(" ")] as [string, string]];
+        })));
   } catch {
     return []; // not JSON: the file_event still carries the text
   }
