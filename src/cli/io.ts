@@ -7,18 +7,27 @@ export type Registrar = (program: Command, run: (fn: () => number | Promise<numb
 
 export class UsageError extends Error {}
 
-export const processIO = (): IO => ({
-  out: (s) => {
-    try {
-      process.stdout.write(s);
-    } catch (e) {
-      if ((e as { code?: string }).code !== "EPIPE") throw e; // reader went away (`| head`): nothing left to print to
-    }
-  },
-  err: (s) => void process.stderr.write(s),
-  isTTY: Boolean(process.stdout.isTTY),
-  env: process.env,
-});
+// The reader went away (`| head`): nothing left to print to, but the command still finishes and keeps its exit code.
+// Node reports EPIPE as an 'error' event on stdout, which crashes the process unless something listens.
+const ignoreEpipe = (e: Error) => {
+  if ((e as { code?: string }).code !== "EPIPE") throw e;
+};
+
+export function processIO(): IO {
+  if (!process.stdout.listeners("error").includes(ignoreEpipe)) process.stdout.on("error", ignoreEpipe);
+  return {
+    out: (s) => {
+      try {
+        process.stdout.write(s);
+      } catch (e) {
+        ignoreEpipe(e as Error); // a synchronous EPIPE
+      }
+    },
+    err: (s) => void process.stderr.write(s),
+    isTTY: Boolean(process.stdout.isTTY),
+    env: process.env,
+  };
+}
 
 export const useColor = (io: IO) => io.isTTY && !io.env.NO_COLOR;
 

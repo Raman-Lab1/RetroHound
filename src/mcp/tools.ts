@@ -116,11 +116,15 @@ function showSession(a: Args, c: Ctx) {
   });
 }
 
+// An MCP client may have no file access of its own: ATTACH would let it read any SQLite file on disk through us. A
+// read-only handle still runs VACUUM INTO, which writes a file: the CLI's query uses this check too.
+export const SELECT_ONLY = "only a read-only SELECT over the index is allowed (no ATTACH or PRAGMA)";
+export const isSelectOnly = (sql: string) => /^\s*(?:select|with)\b/i.test(sql) && !/\b(?:attach\b|pragma)/i.test(sql);
+
 function query(a: Args, c: Ctx) {
   const sql = str(a, "sql");
   if (!sql) throw new ToolError("sql is required");
-  // An MCP client may have no file access of its own: ATTACH would let it read any SQLite file on disk through us.
-  if (!/^\s*(?:select|with)\b/i.test(sql) || /\b(?:attach\b|pragma)/i.test(sql)) throw new ToolError("only a read-only SELECT over the index is allowed (no ATTACH or PRAGMA)");
+  if (!isSelectOnly(sql)) throw new ToolError(SELECT_ONLY);
   const n = limit(a, ROW_CAP, ROW_CAP);
   needIndex(c);
   const ms = c.queryMs ?? QUERY_MS;

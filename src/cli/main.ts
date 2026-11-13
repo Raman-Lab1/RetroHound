@@ -28,8 +28,7 @@ import { testRules } from "./rules-test.ts";
 import { registerConvert } from "./convert.ts";
 import { retentionDays, summaryLines } from "./summary.ts";
 import { defaultReportPath, writeFootprint } from "./footprint.ts";
-import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 type ScanFlags = {
   since?: string; agent: string; project?: string; rules: string; extraRules?: string[]; level?: string; format: string;
@@ -65,12 +64,14 @@ async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
   else if (format === "ndjson-ocsf") io.out(toNdjson(report, "ocsf"));
   else if (format === "attack-layer") io.out(toAttackLayer(report) + "\n");
   else {
-    const root = f.root ?? join(homedir(), ".claude");
+    // settings.json and history.jsonl sit in the config dir, also when --root names its projects dir
+    const given = f.root ?? COLLECTORS.claude_code!.defaultRoot();
+    const root = basename(resolve(given)) === "projects" ? dirname(resolve(given)) : given;
     // the retention summary reads Claude Code's own settings, so it only applies to that agent
-    const summary = agent === "claude_code" ? summaryLines(root, f.index ? f.db : undefined, report.scan.archived_sessions.length) : [];
+    const summary = agent === "claude_code" ? summaryLines(root, f.db, report.scan.archived_sessions.length) : [];
     if (f.index && f.report !== false) {
       const dbPath = f.db ?? defaultDbPath();
-      const claude = agent === "claude_code" ? root : join(homedir(), ".claude");
+      const claude = agent === "claude_code" ? root : COLLECTORS.claude_code!.defaultRoot();
       try {
         const url = writeFootprint({
           dbPath, out: f.report || defaultReportPath(dbPath), rulesDir: f.rules, extraRules: f.extraRules,
@@ -131,11 +132,11 @@ export function buildProgram(io: IO, setCode: (n: number) => void): Command {
     .option("--level <level>", `hide findings below this level (${LEVELS.join("|")})`)
     .option("--format <format>", "table, json, sarif, ndjson-ecs, ndjson-ocsf or attack-layer (ATT&CK Navigator)", "table")
     .option("--no-index", "evaluate in memory, write nothing")
-    .option("--report <file>", "where to write the offline footprint report (default: report.html next to the index)")
+    .option("--report <file>", "where to write the offline footprint report (default: <index name>.footprint.html next to the index)")
     .option("--no-report", "do not write the footprint report")
     .option("--fail-on <level>", "exit 1 when any finding is at or above this level")
     .option("--db <path>", "index database", defaultDbPath())
-    .option("--root <dir>", "Claude config dir or its projects dir (default ~/.claude)")
+    .option("--root <dir>", "the agent's data dir: Claude config dir or its projects dir (default $CLAUDE_CONFIG_DIR or ~/.claude), $CODEX_HOME or ~/.codex, ~/.gemini/antigravity-cli")
     .option("--ignore <file>", "ignore file (default ~/.retrohound/ignore.yml; a repo's own file is only read when passed here)")
     .action((f: ScanFlags) => run(() => scanCommand(f, io)));
 

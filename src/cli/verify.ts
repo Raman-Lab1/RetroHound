@@ -13,6 +13,9 @@ function verify(dbPath: string, head: string | undefined, io: IO): number {
   const db = openReadOnly(dbPath);
   try {
     const version = Number(db.prepare("PRAGMA user_version").get()?.user_version ?? 0);
+    // scan refuses another program's database too, so advising it to upgrade would be wrong
+    if (version === 0 || !db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'files_indexed'").get())
+      throw new UsageError(`${dbPath} is not a RetroHound index`);
     if (version !== MIGRATIONS.length) {
       const fix = version < MIGRATIONS.length ? ": run `retrohound scan` once to upgrade it, which starts the chain" : "";
       throw new UsageError(`index schema version ${version}, this RetroHound verifies ${MIGRATIONS.length}${fix}`);

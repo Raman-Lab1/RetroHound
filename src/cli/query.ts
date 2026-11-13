@@ -1,5 +1,6 @@
 // `retrohound query "<SQL>"`: read-only SQL over the index (ADR 0002). The handle is opened read-only, so a write
 // fails inside SQLite rather than by filtering text; every string is masked again on the way out (0007).
+import { isSelectOnly, SELECT_ONLY } from "../mcp/tools.ts";
 import { mask } from "../normalize/mask.ts";
 import { term } from "../outputs/table.ts";
 import { defaultDbPath, openReadOnly } from "../store/index.ts";
@@ -11,6 +12,7 @@ const cell = (v: Row[string]): string | number | null =>
 
 function runQuery(sql: string, format: string, dbPath: string, io: IO): number {
   const fmt = oneOf("format", format, ["table", "json"] as const);
+  if (!isSelectOnly(sql)) throw new UsageError(SELECT_ONLY);
   let rows: Record<string, string | number | null>[];
   try {
     const db = openReadOnly(dbPath);

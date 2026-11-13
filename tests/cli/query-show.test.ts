@@ -1,10 +1,12 @@
 // query and show over an index built by a real scan of hand-written defanged transcripts.
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { IO } from "../../src/cli/io.ts";
 import { main } from "../../src/cli/main.ts";
+import { COLLECTORS } from "../../src/collectors/index.ts";
 
 const base = mkdtempSync(join(tmpdir(), "rh-qs-"));
 afterAll(() => rmSync(base, { recursive: true, force: true }));
@@ -64,9 +66,10 @@ describe("query", () => {
     "INSERT INTO sessions VALUES ('x','claude_code',NULL,'a','b',0)",
     "DELETE FROM events",
     "DROP TABLE events",
+    "WITH x AS (SELECT 1) DELETE FROM events", // passes the SELECT/WITH check: the read-only handle refuses it
   ])("write attempt fails and changes nothing: %s", async (sql) => {
     expect(await run("query", sql, "--db", db)).toBe(2);
-    expect(err).toContain("query failed");
+    expect(err).toMatch(sql.startsWith("WITH") ? /query failed/ : /only a read-only SELECT/);
     out = "";
     await run("query", "SELECT count(*) AS n FROM events", "--db", db, "--format", "json");
     expect(JSON.parse(out)).toEqual([{ n: 3 }]);
@@ -78,6 +81,23 @@ describe("query", () => {
     expect(await run("query", `SELECT '${key}' AS k`, "--db", db, "--format", "json")).toBe(0);
     expect(out).not.toContain(key);
   });
+
+  test("VACUUM INTO is refused before it can write a copy of the index", async () => {
+    const copy = join(dir, "copy.db");
+    expect(await run("query", `VACUUM INTO '${copy}'`, "--db", db)).toBe(2);
+    expect(err).toContain("only a read-only SELECT");
+    expect(existsSync(copy)).toBe(false);
+  });
+
+  test("a reader that closes early (`| head`) ends the command quietly with its own exit code", async () => {
+    const sql = "WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n LIMIT 100000) SELECT x FROM n";
+    const child = spawn(process.execPath, ["src/cli/bin.ts", "query", sql, "--db", db, "--format", "json"]);
+    let stderr = "";
+    child.stderr.on("data", (d) => (stderr += d));
+    child.stdout.once("data", () => child.stdout.destroy());
+    const code = await new Promise((done) => child.on("close", done));
+    expect({ code, stderr }).toEqual({ code: 0, stderr: "" });
+  }, 30_000);
 
   test("a missing index and a bad format exit 2", async () => {
     expect(await run("query", "SELECT 1", "--db", join(dir, "none.db"))).toBe(2);
@@ -109,6 +129,38 @@ describe("show", () => {
     await scan();
     out = "";
     expect(await run("show", "abcd1", "--db", db)).toBe(0);
-    expect(out).toContain("[archived");
+    expect(out).toContain("[archived: transcript deleted by Claude Code");
+  });
+
+  test.skipIf(process.platform === "win32")("show only reads: it works on a read-only copy of the index", async () => {
+    for (const s of ["", "-wal", "-shm"]) if (existsSync(db + s)) chmodSync(db + s, 0o444);
+    try {
+      expect(await run("show", "abcd1", "--db", db, "--rules", join(dir, "rules"))).toBe(0);
+      expect(out).toContain("Session abcd1111");
+    } finally {
+      for (const s of ["", "-wal", "-shm"]) if (existsSync(db + s)) chmodSync(db + s, 0o644);
+    }
+  });
+});
+
+describe("scan summary (Claude Code)", () => {
+  test("--root <config>/projects reads settings.json and history.jsonl from the config dir; --no-index uses --db", async () => {
+    writeFileSync(join(dir, "claude", "settings.json"), JSON.stringify({ cleanupPeriodDays: 90 }));
+    writeFileSync(join(dir, "claude", "history.jsonl"), ["abcd1111", "gone0000"].map((sessionId) => JSON.stringify({ sessionId })).join("\n"));
+    expect(await run("scan", "--root", join(dir, "claude", "projects"), "--db", db, "--rules", join(dir, "rules"), "--no-index")).toBe(0);
+    expect(out).toContain("History window: 90 days");
+    expect(out).not.toContain("Warning: Claude Code deletes");
+    expect(out).toContain("1 sessions in history.jsonl have no transcript");
+  });
+
+  test("the default root follows CLAUDE_CONFIG_DIR", () => {
+    const was = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = join(dir, "claude");
+    try {
+      expect(COLLECTORS.claude_code!.defaultRoot()).toBe(join(dir, "claude"));
+    } finally {
+      if (was === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = was;
+    }
   });
 });
