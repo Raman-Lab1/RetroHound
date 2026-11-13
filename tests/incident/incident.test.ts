@@ -174,6 +174,7 @@ describe("incident", () => {
     const fix = anonymizer([], []);
     expect(fix(`cat '~/My Projects/clientc/a.txt' | grep x`)).toMatch(/^cat '~\/anon-\w+\/anon-\w+\/a\.txt' \| grep x$/);
     expect(fix.path("C:\\Users\\bob\\Google Drive\\clientc\\a.txt")).toMatch(/^C:\\Users(\\anon-\w+){3}\\a\.txt$/);
+    expect(fix(`cat "~/Bob's Stuff/clientc/a.txt"`)).not.toContain("clientc"); // the other quote inside does not end it
     expect(fix("cat ~/My Projects/clientc/a.txt")).toContain("clientc"); // unquoted: stops at the space (docs/incident.md)
   });
 

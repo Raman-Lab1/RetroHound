@@ -24,7 +24,7 @@ const KEEP = new Set(["desktop", "documents", "downloads", "library", "applicati
 const HOME = String.raw`([\\/](?:Users|home)|(?<![\w~])~|\$\{?HOME\}?|%USERPROFILE%)`;
 const UNDER_HOME = new RegExp(HOME + String.raw`([\\/][^\s"'${"`"}<>|;&(),=:]*)`, "gi");
 // inside "..." or '...' a path runs to the closing quote, spaces included; unquoted it stops at the first space (a limit)
-const QUOTED_HOME = new RegExp(String.raw`(["'])` + HOME + String.raw`([\\/][^"'\n]*)(?=\1)`, "gi");
+const QUOTED_HOME = new RegExp(String.raw`(["'])` + HOME + String.raw`([\\/](?:(?!\1)[^\n])*)(?=\1)`, "gi"); // runs to the SAME quote: "Bob's Stuff"
 // a field that is only a path: everything after the home is path, spaces included
 const PATH_HOME = new RegExp(HOME + String.raw`([\\/].*)`, "is");
 export type Anonymizer = ((s: string) => string) & { host: (h: string) => string; path: (s: string) => string };
