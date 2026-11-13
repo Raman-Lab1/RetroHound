@@ -7,6 +7,13 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - The Homebrew formula and the Velociraptor artifact carry the SHA-256 of the 0.3.1 tarball.
+- Docs: `group-by: [project_path]` correlations and the `windash` modifier are documented; ADR 0001 notes that
+  `.jsonl.zst` needs Node 22.15; ADR 0005 amended (older sub-agent layouts are parsed); performance figures re-run.
+
+### Fixed
+- SARIF: Codex and Antigravity findings pointed under `CLAUDE_PROJECTS` with a truncated path (every Antigravity
+  finding shared one URI). Each agent now has its own `uriBaseId` (`CODEX_HOME`, `ANTIGRAVITY_HOME`) and URIs are
+  percent-encoded.
 
 ## [0.3.1] - 2026-11-12
 
