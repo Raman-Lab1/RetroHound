@@ -16,7 +16,7 @@ export function retentionDays(root: string): number {
 /** history.jsonl sessions that no indexed session matches: deleted before RetroHound saw them. Undefined without both files. */
 function untracked(root: string, dbPath: string | undefined): number | undefined {
   const file = join(root, "history.jsonl");
-  if (!existsSync(file)) return undefined;
+  if (!dbPath || !existsSync(file)) return undefined; // no index named: nothing to compare against
   const ids = new Set<string>();
   for (const line of readFileSync(file, "utf8").split("\n")) {
     try {

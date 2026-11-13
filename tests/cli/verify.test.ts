@@ -110,6 +110,9 @@ test("bad input is a usage error: a malformed head, a missing index, an index fr
   await expect(verify("--head", "not-a-hash")).rejects.toThrow(/bad --head/);
   for (const suffix of ["", "-wal", "-shm"]) rmSync(db + suffix, { force: true });
   await expect(verify()).rejects.toThrow(/no index at/);
+  sql("CREATE TABLE other (x)"); // another program's SQLite file: scan refuses it, so don't advise one
+  await expect(verify()).rejects.toThrow(/is not a RetroHound index$/);
+  sql("CREATE TABLE files_indexed (path TEXT)");
   sql("PRAGMA user_version = 2");
   await expect(verify()).rejects.toThrow(/run `retrohound scan` once to upgrade it/);
 });

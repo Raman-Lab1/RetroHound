@@ -1,6 +1,6 @@
 // Synthetic rollouts following docs/formats/codex.md. Defanged: example.invalid, fake uuids, placeholder keys.
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import * as zlib from "node:zlib";
@@ -8,6 +8,8 @@ import type { RawEvent } from "../../../src/normalize/types.ts";
 import { codex } from "../../../src/collectors/codex/index.ts";
 import { discover } from "../../../src/collectors/codex/discover.ts";
 import { groupKey, parseFile, parseFileWith } from "../../../src/collectors/codex/v1.ts";
+import { runScan } from "../../../src/scan.ts";
+import { openReadOnly } from "../../../src/store/index.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "rh-codex-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -329,6 +331,34 @@ describe("discover", () => {
   });
 
   test("collector shape", () => {
-    expect([codex.agent, codex.parserVersion]).toEqual(["codex", "codex/v6"]);
+    expect([codex.agent, codex.parserVersion]).toEqual(["codex", "codex/v7"]);
+  });
+
+  test("`codex archive` moving a rollout keeps its events: same ids, no duplicate rows", async () => {
+    const home = join(dir, "archive-home");
+    const from = write(`archive-home/sessions/2026/11/07/rollout-m-${ROOT}.jsonl`, rootThread());
+    const db = join(dir, "archive.db");
+    const opts = { agent: "codex", root: home, dbPath: db };
+    const count = () => {
+      const d = openReadOnly(db);
+      try {
+        return d.prepare("SELECT count(*) AS n, count(DISTINCT source_file) AS files FROM events").get();
+      } finally {
+        d.close();
+      }
+    };
+    await runScan(opts);
+    const before = count();
+    mkdirSync(join(home, "archived_sessions"));
+    renameSync(from, join(home, `archived_sessions/rollout-m-${ROOT}.jsonl`));
+    await runScan(opts);
+    expect(count()).toEqual(before);
+    const d = openReadOnly(db);
+    try {
+      expect(d.prepare("SELECT path FROM files_indexed WHERE gone_at IS NOT NULL").all().map((r) => String(r.path))).toEqual([from.replace(/\\/g, "/")]);
+      expect(d.prepare("SELECT DISTINCT source_file FROM events").all().map((r) => String(r.source_file))[0]).toContain("archived_sessions/");
+    } finally {
+      d.close();
+    }
   });
 });

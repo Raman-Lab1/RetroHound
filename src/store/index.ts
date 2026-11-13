@@ -51,7 +51,7 @@ const UPSERT_EVENT = `INSERT INTO events (${EVENT_COLUMNS.join(", ")}) VALUES ($
   ON CONFLICT(id) DO UPDATE SET ${SETS.map(([c, v]) => `${c} = ${v}`).join(", ")}
   WHERE (${SETS.map(([c]) => `events.${c}`).join(", ")}) IS NOT (${SETS.map(([, v]) => v).join(", ")}) RETURNING *`;
 
-const SESSION_SELECT = `SELECT s.*, NOT EXISTS (
+export const SESSION_SELECT = `SELECT s.*, NOT EXISTS (
     SELECT 1 FROM events e JOIN files_indexed f ON f.path = e.source_file
     WHERE e.session_id = s.session_id AND f.gone_at IS NULL
   ) AS archived FROM sessions s`;
@@ -71,7 +71,7 @@ function eventParams(sourceFile: string, e: AgentEvent): SqlValue[] {
   ];
 }
 
-function rowToEvent(row: Row): AgentEvent {
+export function rowToEvent(row: Row): AgentEvent {
   const event: AgentEvent = {
     id: row.id as string,
     schema_version: row.schema_version as AgentEvent["schema_version"],
@@ -88,11 +88,11 @@ function rowToEvent(row: Row): AgentEvent {
   return event;
 }
 
-function rowToSession(row: Row): SessionRow {
+export function rowToSession(row: Row): SessionRow {
   return { ...plain<SessionRow>(row), archived: Boolean(row.archived) };
 }
 
-function rowToFinding(row: Row): Finding {
+export function rowToFinding(row: Row): Finding {
   return { ...plain<Finding>(row), events: JSON.parse(row.events as string) as AgentEvent[] };
 }
 

@@ -7,7 +7,7 @@ import { groupKey, parseFile } from "./v1.ts";
 
 export const codex: Collector = {
   agent: "codex",
-  parserVersion: "codex/v6", // v4: MCP tool calls; v5: file changes; v6: a bad line no longer drops the file
+  parserVersion: "codex/v7", // v4: MCP tool calls; v5: file changes; v6: a bad line no longer drops the file; v7: ids hash the file name, not the path
   defaultRoot: () => process.env.CODEX_HOME || join(homedir(), ".codex"),
   discover,
   parseFile,

@@ -118,7 +118,7 @@ Code (ADR 0006, 0007).
 - Whether a denied escalation writes anything when the user picks "No" in the approval prompt (this run had none).
 - The Codex Desktop "legacy" imports of Claude Code sessions must be skipped to avoid double counting.
 
-## Collector mapping (`codex/v5`, src/collectors/codex)
+## Collector mapping (`codex/v7`, src/collectors/codex)
 
 Checked on the 4 local rollouts: 522 lines, 0 malformed, 0 crashes, 2 root sessions (sub-agent and guardian threads
 grouped under their root). Counts only; no real text is reproduced here or in the tests. v2 on the same files: the same
@@ -166,7 +166,7 @@ grouped under their root). Counts only; no real text is reproduced here or in th
   read with `outcome: unknown`. Untested on real data.
 - **Compressed files:** `.jsonl.zst` is read with `node:zlib` `zstdDecompressSync` (present in Bun 1.4.4 and Node 24).
   Without it `parseFile` throws "needs Node >= 22.15 to read .jsonl.zst", which the scan reports as a failed file. Ids use
-  the path without `.zst`.
+  the file name without `.zst` (codex/v7), so `codex archive` moving a rollout keeps its ids.
 - **Legacy Claude imports:** `discover` skips rollouts whose uuid is an `imported_thread_id` in
   `external_agent_session_imports.json` (field names from R2; no such ledger on the local machine, so unverified).
 
