@@ -185,8 +185,7 @@ only a non-generating correlation references emits nothing alone (`rules list` m
 Map = AND, list = OR. A plain value matches the whole field, case-insensitive, with `*` and `?` globs. Modifiers:
 `contains`, `startswith`, `endswith`, `all`, `re`, `cased`, `exists`, `gt`/`gte`/`lt`/`lte`, `fieldref`, `windash` (a
 `-` or `/` that starts a flag, such as `-enc` or `/c`, also matches the other one, an en dash, an em dash or a
-horizontal bar). Anything else,
-keyword lists, `timeframe` and `|` aggregation reject the rule.
+horizontal bar; not with `re`). Anything else, keyword lists, `timeframe` and `|` aggregation reject the rule.
 
 `re` limits:
 

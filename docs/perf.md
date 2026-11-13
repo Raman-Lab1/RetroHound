@@ -5,10 +5,10 @@ Targets: a warm scan of 1,000 sessions in under 5 s, and rule evaluation at 50k 
 ## Method
 
 - Machines: the synthetic rows below were measured on an Apple M5 (arm64), macOS 27.2, Bun 1.4.4, two runs, not
-  idle (other agents' work ran alongside). The real-transcript row, the cost-per-rule table and the "What made it faster" figures were measured
-  earlier on a Windows 10 machine, Bun 1.4.4. Wall times swing 2x to 10x between runs of the same code when other work
-  runs alongside, so CPU time and before/after ratios are more reliable than single wall times. "Idle" below means
-  nothing else running.
+  idle (other work ran alongside). The real-transcript row, the cost-per-rule table and the "What made it faster"
+  figures were measured earlier on a Windows 10 machine, Bun 1.4.4. Wall times swing 2x to 10x between runs of the
+  same code when other work runs alongside, so CPU time and before/after ratios are more reliable than single wall
+  times.
 - `tests/perf.test.ts` synthesizes N defanged sessions (about 100 events each, 1.3 KB payloads, `example.invalid`) in a
   temp dir and measures parse, evaluate, cold scan and warm scan, all in-process. `bun test` runs it at 5 sessions as a
   smoke test; `PERF=1 bun test tests/perf.test.ts` runs 1,000 (`PERF_SESSIONS=n`; `PERF_KEEP=1` keeps the dir for
@@ -96,9 +96,9 @@ initialising the hook's modules, 4.3 ms loading the enforce rules from the cache
 
 ## False-positive review (historical: one real developer history, 38 rules)
 
-Not re-run on the current rule set. A read-only scan of one developer's `~/.claude/projects` (temp DB, deleted afterwards): 9 sessions, 3,272 events,
-41 findings from 8 of the 38 rules shipped at that time. The sessions were mostly work on RetroHound itself, so the
-history is self-referential. Counts only:
+Not re-run on the current rule set. A read-only scan of one developer's `~/.claude/projects` (temp DB, deleted
+afterwards): 9 sessions, 3,272 events, 41 findings from 8 of the 38 rules shipped at that time. The sessions were
+mostly work on RetroHound itself, so the history is self-referential. Counts only:
 
 | Rule | Level | Hits | Sessions | Verdict |
 |---|---|---|---|---|
