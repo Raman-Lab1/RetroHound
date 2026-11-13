@@ -33,12 +33,13 @@ export function parseTags(tags: string[]): Attack {
       add(a.techniques, tech[1]!.toUpperCase());
       if (tech[2]) add(a.subtechniques, `${tech[1]!.toUpperCase()}.${tech[2]}`);
     } else if (t.startsWith("attack.")) {
-      add(a.tactics, t.slice(7).split("_").map((w) => w[0]!.toUpperCase() + w.slice(1)).join(" "));
+      add(a.tactics, t.slice(7).split("_").map((w) => (w === "and" ? w : w[0]!.toUpperCase() + w.slice(1))).join(" ")); // Command and Control
     } else a.other.push(t);
   }
   return a;
 }
 
+const PROVIDER: Partial<Record<AgentEvent["agent"], string>> = { claude_code: "anthropic", codex: "openai", antigravity: "gcp.gemini" };
 const baseName = (p: string) => p.split(/[\\/]/).pop() ?? p;
 const dirName = (p: string) => p.replace(/[\\/][^\\/]*$/, "");
 
@@ -53,7 +54,7 @@ function ecsEvent(e: AgentEvent) {
     },
     gen_ai: {
       agent: { name: e.agent, id: e.agent_id },
-      provider: e.agent === "claude_code" ? { name: "anthropic" } : undefined,
+      provider: PROVIDER[e.agent] ? { name: PROVIDER[e.agent] } : undefined,
       tool: e.tool_name ? { name: e.tool_name, type: e.mcp_server ? "mcp" : undefined } : undefined,
     },
     process: e.command_line ? { command_line: e.command_line, working_directory: e.project_path } : undefined,
@@ -125,10 +126,10 @@ function ocsfLine(f: Finding, rule: ReportRule | undefined, report: ScanReport) 
   const time = Date.parse(dateOr(f.ts, report.scan.finished_at));
   const attacks = [
     ...atk.tactics.map((n) => ({ tactic: { name: n } })),
-    ...atk.techniques.map((t) => ({
-      technique: { uid: t },
-      ...(atk.subtechniques.find((s) => s.startsWith(t)) ? { sub_technique: { uid: atk.subtechniques.find((s) => s.startsWith(t)) } } : {}),
-    })),
+    ...atk.techniques.flatMap((t) => {
+      const subs = atk.subtechniques.filter((s) => s.startsWith(`${t}.`));
+      return subs.length ? subs.map((uid) => ({ technique: { uid: t }, sub_technique: { uid } })) : [{ technique: { uid: t } }];
+    }),
   ];
   return {
     class_uid: 2004, category_uid: 2, activity_id: 1, type_uid: 200401, time, severity_id: SEVERITY[f.level].id,

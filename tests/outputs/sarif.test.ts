@@ -143,6 +143,19 @@ describe("toNdjson", () => {
     expect(o.evidences[0].ai_agent).toEqual({ name: "claude_code", instance_uid: "aaaaaaaa-1111", type_id: 1 });
     expect(o.evidences[0].api).toBeUndefined();
   });
+  test("every sub-technique gets an OCSF attack, 'and' stays lower case, provider per agent", () => {
+    const r = report([finding({ events: [ev({ agent: "codex" })] })]);
+    r.rules[0]!.tags = ["attack.command_and_control", "attack.t1552.001", "attack.t1552.004", "attack.t1041"];
+    const o = JSON.parse(toNdjson(r, "ocsf").trim());
+    expect(o.finding_info.attacks).toEqual([
+      { tactic: { name: "Command and Control" } }, { technique: { uid: "T1552" }, sub_technique: { uid: "T1552.001" } },
+      { technique: { uid: "T1552" }, sub_technique: { uid: "T1552.004" } }, { technique: { uid: "T1041" } },
+    ]);
+    const e = JSON.parse(toNdjson(r, "ecs").trim());
+    expect([e.threat.tactic.name, e.gen_ai.provider]).toEqual([["Command and Control"], { name: "openai" }]);
+    const ag = JSON.parse(toNdjson(report([finding({ events: [ev({ agent: "antigravity" })] })]), "ecs").trim());
+    expect(ag.gen_ai.provider).toEqual({ name: "gcp.gemini" });
+  });
   test("OCSF evidence per event: agent version, MCP server and tool as api", () => {
     const mcp = ev({ id: "e2", category: "mcp", agent: "codex", agent_version: "0.50.0", tool_name: "mcp__docs__fetch", mcp_server: "docs", mcp_tool: "fetch" });
     const o = JSON.parse(toNdjson(report([finding({ events: [ev(), mcp] })]), "ocsf").trim());
