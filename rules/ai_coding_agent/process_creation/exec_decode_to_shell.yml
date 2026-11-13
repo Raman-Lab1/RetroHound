@@ -10,7 +10,6 @@ level: high
 tags: [attack.defense_evasion, attack.t1140, attack.execution, attack.t1059, owasp_agentic.asi05]
 falsepositives:
   - Tooling that legitimately ships an -EncodedCommand argument (some CI or management scripts).
-  - A command line that names powershell or pwsh and later passes -e to another tool (grep -e).
 x-retrohound: { lane: enforce }
 logsource: { product: ai_coding_agent, category: process_creation }
 detection:
@@ -30,14 +29,7 @@ detection:
       - 'invoke-expression*frombase64string'
       - 'frombase64string*| iex'
   ps_encoded_flag:
-    # -e and -ec are aliases of -EncodedCommand. The spaces on both sides keep -ep, -ExecutionPolicy and foo-e out.
-    command_line|windash|contains:
-      - 'powershell* -e '
-      - 'powershell* -ec '
-      - 'powershell* -enc '
-      - 'powershell* -encodedcommand '
-      - 'pwsh* -e '
-      - 'pwsh* -ec '
-      - 'pwsh* -enc '
-      - 'pwsh* -encodedcommand '
+    # -e/-ec/-enc: only flags (each with at most one bare-word value) between the executable and it, so a later
+    # grep -e, sed -e or robocopy /E is not it.
+    command_line|re|i: '\b(?:powershell|pwsh)(?:\.exe)?[\x22\x27]?(?:\s{1,5}[-/\u2013\u2014\u2015]\w{1,30}(?:\s{1,5}\w{1,30})?){0,8}\s{1,5}[-/\u2013\u2014\u2015](?:e|ec|enc|encodedcommand)\s{1,5}[\x22\x27]?[a-z0-9+/]{4}'
   condition: 1 of posix_* or 1 of ps_*

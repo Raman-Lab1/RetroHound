@@ -10,3 +10,4 @@
 {"category":"process_creation","tool_name":"PowerShell","command_line":"pwsh -NoProfile -ec ZQBjAGgAbwA="}
 {"category":"process_creation","tool_name":"PowerShell","command_line":"powershell.exe /enc ZQBjAGgAbwA="}
 {"category":"process_creation","tool_name":"Bash","command_line":"sh <(echo ZWNobyBoaQ== | base64 -d)"}
+{"category": "process_creation", "tool_name": "PowerShell", "command_line": "powershell.exe -NoP -W Hidden -ExecutionPolicy Bypass -ec ZQBjAGgAbwA="}
