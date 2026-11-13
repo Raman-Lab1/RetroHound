@@ -14,20 +14,29 @@ export const SEVERITY: Record<Level, { sarif: SarifLevel; score?: string; id: nu
   critical: { sarif: "error", score: "9.5", id: 5, risk: 99 },
 };
 
-const BASE = "CLAUDE_PROJECTS";
+/** Per agent: the uriBaseId and the part of the path kept under it (last match wins: `.*` is greedy). */
+const BASES: Partial<Record<AgentEvent["agent"], [string, RegExp]>> = {
+  claude_code: ["CLAUDE_PROJECTS", /.*\/projects\/+(.+)$/],
+  codex: ["CODEX_HOME", /.*\/((?:archived_)?sessions\/.+)$/],
+  antigravity: ["ANTIGRAVITY_HOME", /.*\/(brain\/.+)$/],
+};
 
-/** Path under the Claude projects dir, forward slashes, so no home path or username is published (R9 1.4). */
-function relUri(file: string): string {
-  const p = file.replace(/\\/g, "/");
-  const m = /\/projects\/+(.+)$/.exec(p);
-  return m ? m[1]! : p.split("/").slice(-2).join("/");
+/** Path under the agent's transcript root, forward slashes, so no home path or username is published (R9 1.4). */
+function artifact(e: AgentEvent): { uri: string; uriBaseId: string } {
+  const p = e.raw_ref.file.replace(/\\/g, "/");
+  const hit = BASES[e.agent];
+  const m = hit?.[1].exec(p);
+  // Unknown agent or layout: the last two segments under a generic base, never the full path.
+  const [uri, uriBaseId] = m ? [m[1]!, hit![0]] : [p.split("/").slice(-2).join("/"), "TRANSCRIPTS"];
+  // Percent-encode each segment: a space or a drive letter ("C:") would make it an invalid or absolute URI (§3.4.4).
+  return { uri: uri.split("/").map(encodeURIComponent).join("/"), uriBaseId };
 }
 
 const location = (e: AgentEvent, message?: string, id?: number) => ({
   ...(id === undefined ? {} : { id }),
   ...(message ? { message: { text: message } } : {}),
   physicalLocation: {
-    artifactLocation: { uri: relUri(e.raw_ref.file), uriBaseId: BASE },
+    artifactLocation: artifact(e),
     region: { startLine: e.raw_ref.line, startColumn: 1, endLine: e.raw_ref.line },
   },
 });

@@ -18,7 +18,7 @@ const names = (dir: string): string[] => {
   }
 };
 
-/** `brain/<conv>/.system_generated/logs/transcript_full.jsonl` under `root` (~/.antigravity-cli), sorted. */
+/** `brain/<conv>/.system_generated/logs/transcript_full.jsonl` under `root` (~/.gemini/antigravity-cli), sorted. */
 export function discover(root: string): string[] {
   const brain = join(root, "brain");
   return names(brain)

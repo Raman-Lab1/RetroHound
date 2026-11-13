@@ -73,6 +73,33 @@ describe("toSarif", () => {
     for (const w of [TOKEN, "C0NTENT", "T1NPUT"]) expect(out).not.toContain(w);
     expect(out).toContain("ghp_…[masked]");
   });
+  test("per-agent base and URI, related locations too; no home path or username", () => {
+    const loc = (e: AgentEvent) => {
+      const out = toSarif(report([finding({ events: [ev({ id: "p" }), e] })]));
+      expect(out).not.toContain("/home/example");
+      expect(out).not.toContain("example-user");
+      return JSON.parse(out).runs[0].results[0].relatedLocations[0].physicalLocation.artifactLocation;
+    };
+    const codex = (f: string) => loc(ev({ agent: "codex", raw_ref: { file: f, line: 1 } }));
+    expect(codex("/home/example-user/.codex/sessions/2026/09/14/rollout-x.jsonl.zst"))
+      .toEqual({ uri: "sessions/2026/09/14/rollout-x.jsonl.zst", uriBaseId: "CODEX_HOME" });
+    expect(codex("C:\\Users\\example-user\\.codex\\archived_sessions\\2026\\09\\14\\rollout-y.jsonl"))
+      .toEqual({ uri: "archived_sessions/2026/09/14/rollout-y.jsonl", uriBaseId: "CODEX_HOME" });
+    const ag = (conv: string) => loc(ev({ agent: "antigravity", raw_ref: {
+      file: `/home/example-user/.gemini/antigravity-cli/brain/${conv}/.system_generated/logs/transcript_full.jsonl`, line: 1 } }));
+    const a = ag("conv-aaaa"), b = ag("conv-bbbb");
+    expect(a).toEqual({ uri: "brain/conv-aaaa/.system_generated/logs/transcript_full.jsonl", uriBaseId: "ANTIGRAVITY_HOME" });
+    expect(b.uri).not.toBe(a.uri);
+    // Unknown agent or layout: generic base, last two segments only.
+    expect(loc(ev({ agent: "cursor", raw_ref: { file: "/home/example-user/x/y/z.jsonl", line: 1 } })))
+      .toEqual({ uri: "y/z.jsonl", uriBaseId: "TRANSCRIPTS" });
+    expect(loc(ev({ agent: "codex", raw_ref: { file: "/home/example-user/elsewhere/r.jsonl", line: 1 } })))
+      .toEqual({ uri: "elsewhere/r.jsonl", uriBaseId: "TRANSCRIPTS" });
+    // Segments are percent-encoded: a space or a drive root never makes an invalid or absolute URI.
+    expect(loc(ev({ agent: "cursor", raw_ref: { file: "C:\\x.jsonl", line: 1 } })).uri).toBe("C%3A/x.jsonl");
+    expect(loc(ev({ agent: "cursor", raw_ref: { file: "/home/example-user/My Logs/a b.jsonl", line: 1 } })).uri)
+      .toBe("My%20Logs/a%20b.jsonl");
+  });
   test("empty report is a valid run with no results", () => {
     const run = JSON.parse(toSarif(report([]))).runs[0];
     expect(run.results).toEqual([]);
