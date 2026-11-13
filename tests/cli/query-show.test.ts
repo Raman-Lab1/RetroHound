@@ -69,7 +69,7 @@ describe("query", () => {
     "WITH x AS (SELECT 1) DELETE FROM events", // passes the SELECT/WITH check: the read-only handle refuses it
   ])("write attempt fails and changes nothing: %s", async (sql) => {
     expect(await run("query", sql, "--db", db)).toBe(2);
-    expect(err).toMatch(sql.startsWith("WITH") ? /query failed/ : /only a read-only SELECT/);
+    expect(err).toMatch(sql.startsWith("WITH") ? /query failed/ : /only a SELECT or WITH/);
     out = "";
     await run("query", "SELECT count(*) AS n FROM events", "--db", db, "--format", "json");
     expect(JSON.parse(out)).toEqual([{ n: 3 }]);
@@ -85,8 +85,20 @@ describe("query", () => {
   test("VACUUM INTO is refused before it can write a copy of the index", async () => {
     const copy = join(dir, "copy.db");
     expect(await run("query", `VACUUM INTO '${copy}'`, "--db", db)).toBe(2);
-    expect(err).toContain("only a read-only SELECT");
+    expect(err).toContain("only a SELECT or WITH");
     expect(existsSync(copy)).toBe(false);
+    // A trailing statement is never compiled, so it cannot write either.
+    expect(await run("query", `SELECT 1; VACUUM INTO '${copy}'`, "--db", db)).toBe(0);
+    expect(existsSync(copy)).toBe(false);
+  });
+
+  test("evidence searches may mention attach or pragma", async () => {
+    out = "";
+    expect(await run("query", "SELECT count(*) AS n FROM events WHERE command_line LIKE '%tmux attach%'", "--db", db, "--format", "json")).toBe(0);
+    expect(JSON.parse(out)).toEqual([{ n: 0 }]);
+    out = "";
+    expect(await run("query", "SELECT count(*) AS n FROM pragma_table_info('events')", "--db", db, "--format", "json")).toBe(0);
+    expect(JSON.parse(out)[0].n).toBeGreaterThan(0);
   });
 
   test("a reader that closes early (`| head`) ends the command quietly with its own exit code", async () => {
