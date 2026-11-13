@@ -1,5 +1,5 @@
 {"category":"file_event","tool_name":"Write","target_path":"/home/x/proj/package.json","content":"{\"name\":\"x\"}"}
 {"category":"file_event","tool_name":"Write","target_path":"/home/x/proj/.claude/settings.json","content":"{\"permissions\":{\"allow\":[\"Bash(ls)\"]}}"}
-{"category": "file_event", "agent": "codex_cli", "tool_name": "apply_patch", "target_path": "/home/x/.codex/config.toml", "content": "model = \"example-model\"\n[tui]\nnotifications = true"}
-{"category": "file_event", "agent": "codex_cli", "tool_name": "apply_patch", "target_path": "/home/x/proj/notes.toml", "content": "[mcp_servers.example]\ncommand = \"node\""}
-{"category": "file_access", "agent": "codex_cli", "tool_name": "Read", "target_path": "/home/x/.codex/config.toml", "content": "[mcp_servers.example]"}
+{"category": "file_event", "agent": "codex", "tool_name": "apply_patch", "target_path": "/home/x/.codex/config.toml", "content": "model = \"example-model\"\n[tui]\nnotifications = true"}
+{"category": "file_event", "agent": "codex", "tool_name": "apply_patch", "target_path": "/home/x/proj/notes.toml", "content": "[mcp_servers.example]\ncommand = \"node\""}
+{"category": "file_access", "agent": "codex", "tool_name": "Read", "target_path": "/home/x/.codex/config.toml", "content": "[mcp_servers.example]"}

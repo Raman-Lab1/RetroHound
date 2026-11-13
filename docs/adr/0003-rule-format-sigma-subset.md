@@ -53,3 +53,7 @@ means connections and DNS. Other projects use Sigma for agents too, under `produ
   are applied by the exporters (0014), so rules keep snake_case.
 - Rejection by name keeps the engine small and honest, at the cost of some Sigma rules not loading unchanged.
 - Renaming the product later is one line per rule plus a load-time alias.
+
+## Amendment 2026-11-13
+- `service` also takes `gemini_cli` and `cursor`, one value per collector (the event's `agent`). Any other value
+  rejects the rule (`unknown-service`).

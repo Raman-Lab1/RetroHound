@@ -16,7 +16,8 @@ rules/tests/<name>/negative.jsonl
 - `name` is the file stem and the test directory name. Prefixes in use: `exec_`, `files_`, `secrets_`, `control_plane_`,
   `network_`, `blocked_`.
 - A file may hold several documents separated by `---` (helpers plus a correlation). Each needs its own `name`.
-  A helper that should not alert alone is silenced by being referenced only by a correlation.
+  A helper that should not alert alone is silenced by being referenced only by non-generating correlations, and at
+  least one of them must be in the helper's own file.
 
 ## Required metadata
 
@@ -39,6 +40,7 @@ partial event; missing contract fields are filled in (category defaults to `tool
 - Include match-only fields (`content`, `tool_input`, ...) in the line if the rule reads them.
 - `first_seen_*` are computed over the file, and stay false unless its `ts` values span 14 days: give such a file an
   old baseline line, for example `"ts":"2025-12-10T00:00:00.000Z"` (lines default to 2026-01-01, one second apart).
+  Positive lines inside the 14-day cold start (the baseline) are not required to fire; at least one later line is.
 
 ```
 {"category":"process_creation","tool_name":"Bash","command_line":"git push --force origin main"}
@@ -64,7 +66,8 @@ From [docs/perf.md](docs/perf.md): the engine is fast, the cost is in rules.
 - **Give every rule a category.** A rule with none runs on every event; the slowest bundled rules were all category-less.
   If a rule needs two categories, write one rule per category.
 - **Prefer `contains`, `startswith`, `endswith` over `re`.** Use `re` only when you need structure, and keep it bounded:
-  `[^;&|]{0,200}`, not `.*`. One `.*` or `.+` at most (enforced). `re` only sees the first 8 KiB of a field.
+  `[^;&|]{0,200}`, not `.*`. One `.*` or `.+` at most (enforced). A bounded pattern (no `*`, `+`, `{n,}`) sees the
+  whole field; an unbounded one only 8 KiB windows over the first 256 KiB plus the last 8 KiB (docs/logsource.md).
 - Avoid long `contains` lists on one field; and avoid `tool_response` / `tool_input` / `content` without a category.
 - Check the effect: `PERF=1 bun test tests/perf.test.ts` runs 1,000 synthetic sessions. Measured on a Windows laptop,
   evaluation was 25k-43k events/s against a 50k target, so every extra slow rule matters.
