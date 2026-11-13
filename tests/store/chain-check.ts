@@ -141,9 +141,10 @@ export const CASES: [name: string, run: (dir: string) => Promise<void>][] = [
     await fill(store, join(dir, "s1.jsonl"));
     store.close();
     const downgrade = () => {
-      sql(db, "DROP TABLE chain"); // the v2 shape: v3 only adds the chain, v4 the config snapshots
+      sql(db, "DROP TABLE chain"); // the v2 shape: v3 only adds the chain, v4 the config snapshots, v5 the run scope
       sql(db, "DROP TABLE config_snapshots");
       sql(db, "ALTER TABLE rule_runs DROP COLUMN config_items");
+      sql(db, "ALTER TABLE rule_runs DROP COLUMN scope"); // v5
       sql(db, "PRAGMA user_version = 2");
     };
     downgrade();
