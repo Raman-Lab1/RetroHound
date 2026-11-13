@@ -98,7 +98,9 @@ Fields may be added to `0.1` documents. Removing or renaming a field, or changin
 | `claude_code` | `CLAUDE_PROJECTS` | the path after `~/.claude/projects/`: `<encoded-project>/<session>.jsonl` |
 | `codex` | `CODEX_HOME` | `sessions/YYYY/MM/DD/rollout-*.jsonl[.zst]` or `archived_sessions/...` |
 | `antigravity` | `ANTIGRAVITY_HOME` | `brain/<conversation-id>/.system_generated/...` |
-| other agent, or a path outside these layouts | `TRANSCRIPTS` | the last two path segments |
+| other agent, or a path without that agent's folder name | `TRANSCRIPTS` | the last two path segments |
+
+Each `uri` segment is percent-encoded (a space becomes `%20`), so the `uri` is always a relative reference.
 
 | Sigma level | SARIF level | security-severity |
 |---|---|---|

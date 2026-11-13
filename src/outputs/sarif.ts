@@ -27,7 +27,9 @@ function artifact(e: AgentEvent): { uri: string; uriBaseId: string } {
   const hit = BASES[e.agent];
   const m = hit?.[1].exec(p);
   // Unknown agent or layout: the last two segments under a generic base, never the full path.
-  return m ? { uri: m[1]!, uriBaseId: hit![0] } : { uri: p.split("/").slice(-2).join("/"), uriBaseId: "TRANSCRIPTS" };
+  const [uri, uriBaseId] = m ? [m[1]!, hit![0]] : [p.split("/").slice(-2).join("/"), "TRANSCRIPTS"];
+  // Percent-encode each segment: a space or a drive letter ("C:") would make it an invalid or absolute URI (§3.4.4).
+  return { uri: uri.split("/").map(encodeURIComponent).join("/"), uriBaseId };
 }
 
 const location = (e: AgentEvent, message?: string, id?: number) => ({

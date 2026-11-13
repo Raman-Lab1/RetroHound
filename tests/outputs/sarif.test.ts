@@ -95,6 +95,10 @@ describe("toSarif", () => {
       .toEqual({ uri: "y/z.jsonl", uriBaseId: "TRANSCRIPTS" });
     expect(loc(ev({ agent: "codex", raw_ref: { file: "/home/example-user/elsewhere/r.jsonl", line: 1 } })))
       .toEqual({ uri: "elsewhere/r.jsonl", uriBaseId: "TRANSCRIPTS" });
+    // Segments are percent-encoded: a space or a drive root never makes an invalid or absolute URI.
+    expect(loc(ev({ agent: "cursor", raw_ref: { file: "C:\\x.jsonl", line: 1 } })).uri).toBe("C%3A/x.jsonl");
+    expect(loc(ev({ agent: "cursor", raw_ref: { file: "/home/example-user/My Logs/a b.jsonl", line: 1 } })).uri)
+      .toBe("My%20Logs/a%20b.jsonl");
   });
   test("empty report is a valid run with no results", () => {
     const run = JSON.parse(toSarif(report([]))).runs[0];
