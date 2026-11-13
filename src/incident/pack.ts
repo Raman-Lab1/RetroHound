@@ -3,7 +3,7 @@
 // sorted, so the same index gives the same bytes. Strings are masked again here (0007).
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { anonymizer } from "../cli/wrapped.ts";
+import { anonymizer, type Anonymizer } from "../cli/wrapped.ts";
 import type { Rule } from "../engine/load.ts";
 import { mask } from "../normalize/mask.ts";
 import { GENESIS } from "../store/chain.ts";
@@ -22,19 +22,21 @@ type PackFinding = { id: string; rule_id: string; rule_name?: string; level: str
 export type Pack = ReturnType<typeof buildPack>;
 
 const IN = "IN (SELECT value FROM json_each(?))";
-const PATHS = new Set(["project_path", "command_line", "target_path", "url", "source_file", "path"]); // what --anonymize rewrites
+// what --anonymize rewrites: free text (a tool or MCP server can be named after the project), and fields that are only a path
+const FREE = new Set(["command_line", "url", "tool_name", "attribution"]);
+const PATHS = new Set(["project_path", "target_path", "source_file", "path"]);
 const LISTS = new Set(["secret_kinds", "secret_fps"]);
 const OUTCOMES = ["success", "error", "blocked", "unknown"] as const;
 const sha256 = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
 
 /** A row as a plain object: nulls dropped, JSON lists parsed, strings masked, path-like fields through `fix`. */
-function clean<T>(row: Row, fix: (s: string) => string): T {
+function clean<T>(row: Row, fix: Pick<Anonymizer, "path"> & ((s: string) => string)): T {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(row)) {
     if (v === null) continue;
     if (typeof v !== "string") out[k] = Number(v);
     else if (LISTS.has(k)) out[k] = (JSON.parse(v) as string[]).map(mask).sort();
-    else out[k] = PATHS.has(k) ? fix(mask(v)) : mask(v);
+    else out[k] = PATHS.has(k) ? fix.path(mask(v)) : FREE.has(k) ? fix(mask(v)) : mask(v);
   }
   return out as T;
 }
@@ -62,7 +64,7 @@ function build(db: Db, sel: Selection, rules: Rule[], anonymize: boolean) {
       SELECT 1 FROM events e JOIN files_indexed f ON f.path = e.source_file WHERE e.session_id = s.session_id AND f.gone_at IS NULL
     ) AS archived FROM sessions s WHERE session_id ${IN} ORDER BY first_ts, session_id`).all(ids);
   const projects = sessionRows.flatMap((s) => (typeof s.project_path === "string" ? [s.project_path] : []));
-  const fix = anonymize ? anonymizer(files.map((f) => ({ raw_ref: { file: String(f.path), line: 0 } })), projects) : (s: string) => s;
+  const fix = anonymize ? anonymizer(files.map((f) => ({ raw_ref: { file: String(f.path), line: 0 } })), projects) : Object.assign((s: string) => s, { path: (s: string) => s });
 
   const sessions = sessionRows.map((r) => ({ ...clean<Session>(r, fix), archived: Boolean(r.archived) }));
   const timeline = db.prepare(`SELECT id, session_id, ts, seq, agent_id, parent_tool_use_id, category, tool_name, command_line,

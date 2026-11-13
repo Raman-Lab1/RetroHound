@@ -21,7 +21,13 @@ const KEEP = new Set(["desktop", "documents", "downloads", "library", "applicati
   "work", "workspace", "repos", "git", "src", "lib", "test", "tests", "docs", "bin", "dist", "build", "node_modules",
   // credential files with no extension: the reads an investigator most needs to see
   "credentials", "config", "known_hosts", "authorized_keys", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"]);
-const UNDER_HOME = /([\\/](?:Users|home)|(?<![\w~])~|\$\{?HOME\}?|%USERPROFILE%)([\\/][^\s"'`<>|;&(),=:]*)/gi;
+const HOME = String.raw`([\\/](?:Users|home)|(?<![\w~])~|\$\{?HOME\}?|%USERPROFILE%)`;
+const UNDER_HOME = new RegExp(HOME + String.raw`([\\/][^\s"'${"`"}<>|;&(),=:]*)`, "gi");
+// inside "..." or '...' a path runs to the closing quote, spaces included; unquoted it stops at the first space (a limit)
+const QUOTED_HOME = new RegExp(String.raw`(["'])` + HOME + String.raw`([\\/](?:(?!\1)[^\n])*)(?=\1)`, "gi"); // runs to the SAME quote: "Bob's Stuff"
+// a field that is only a path: everything after the home is path, spaces included
+const PATH_HOME = new RegExp(HOME + String.raw`([\\/].*)`, "is");
+export type Anonymizer = ((s: string) => string) & { host: (h: string) => string; path: (s: string) => string };
 
 const LOCAL = /^(localhost|127\.\d+\.\d+\.\d+|\[?::1\]?|0\.0\.0\.0)$/i;
 const FORGE = /(github|gitlab|bitbucket|codeberg|sr\.ht)/i;
@@ -36,13 +42,14 @@ const SSH_RE = /\b(ssh|sftp)((?:\s+-[iplJoFLRDEeBbcmWwOSQ]\s*\S+|\s+-[A-Za-z]+)*
 /** Project names, the user name, the encoded project dir (ADR 0014) and other dirs under a home replaced by hashes,
  * longest first. Keyed with a random key per call, so ids are stable in one pack or card but cannot be confirmed with
  * a word list or linked across shares. */
-export function anonymizer(events: Pick<AgentEvent, "raw_ref">[], projects: string[]): ((s: string) => string) & { host: (h: string) => string } {
+export function anonymizer(events: Pick<AgentEvent, "raw_ref">[], projects: string[]): Anonymizer {
   const key = randomBytes(32);
   const hash = (s: string) => `anon-${createHmac("sha256", key).update(s.toLowerCase()).digest("hex").slice(0, 12)}`;
   // a dotfile or a name with an extension (.env, x.ts) is kept: generic, and what an investigator needs
   const part = (c: string) => (c.includes(".") || c.startsWith("anon-") || KEEP.has(c.toLowerCase()) ? c : hash(c));
-  const dirs = (s: string) => s.replace(UNDER_HOME, (_m, head: string, rest: string) =>
-    head + rest.split(/([\\/]+)/).map((c, i) => (i % 2 || !c ? c : part(c))).join(""));
+  const under = (head: string, rest: string) => head + rest.split(/([\\/]+)/).map((c, i) => (i % 2 || !c ? c : part(c))).join("");
+  const dirs = (s: string) => s.replace(QUOTED_HOME, (_m, q: string, head: string, rest: string) => q + under(head, rest))
+    .replace(UNDER_HOME, (_m, head: string, rest: string) => under(head, rest));
   const tokens = new Set<string>([basename(homedir()), userInfo().username]);
   for (const p of projects) {
     tokens.add(p);
@@ -70,7 +77,9 @@ export function anonymizer(events: Pick<AgentEvent, "raw_ref">[], projects: stri
     .replace(BARE_RE, (_m, cmd: string, args: string) => cmd + args.replace(BARE_ARG, (_a, sp: string, h: string, rest: string) => `${sp}${host(h)}:${repo(h, rest)}`))
     .replace(SSH_RE, (_m, cmd: string, opts: string, user: string | undefined, h: string) =>
       `${cmd}${opts.replace(OPT_RE, (_o, f: string, sp: string, v: string) => `${f}${sp}${optVal(f, v)}`)} ${user === undefined ? "" : `${hash(user)}@`}${host(h)}`);
-  return Object.assign((s: string) => hosts(dirs(re ? s.replace(re, hash) : s)), { host });
+  const names = (s: string) => (re ? s.replace(re, hash) : s);
+  const path = (s: string) => hosts(names(s).replace(PATH_HOME, (_m, head: string, rest: string) => under(head, rest)));
+  return Object.assign((s: string) => hosts(dirs(names(s))), { host, path });
 }
 
 function riskiest(findings: Finding[]): { session: string; findings: number; level: Level } | undefined {
@@ -89,7 +98,8 @@ export function collect(dbPath: string, rulesDir: string, since: string, anonymi
     const events = sessions.flatMap((s) => store.sessionEvents(s.session_id));
     const findings = store.listFindings().filter((f) => ids.has(f.session_id));
     const names = new Map(loadRuleDir(rulesDir, extras).rules.map((r) => [r.id, r.name ?? r.title]));
-    const fix = anonymize ? anonymizer(events, sessions.map((s) => s.project_path ?? "").filter(Boolean)) : Object.assign((s: string) => s, { host: (h: string) => h });
+    const same = (s: string) => s;
+    const fix = anonymize ? anonymizer(events, sessions.map((s) => s.project_path ?? "").filter(Boolean)) : Object.assign(same, { host: same, path: same });
     const domains = new Map<string, number>();
     const rules = new Map<string, number>();
     const levels = new Map<string, string>();
@@ -114,7 +124,7 @@ export function collect(dbPath: string, rulesDir: string, since: string, anonymi
       subagentPct: events.length ? Math.round((stats.subagent * 100) / events.length) : 0,
       domains: top(domains, 10).map(([name, count]) => ({ name: fix.host(name), count })),
       rules: top(rules, 5).map(([name, count]) => ({ name: fix(name), level: levels.get(name) ?? "", count })),
-      riskiest: r && { ...r, session: r.session.slice(0, 8), project: fix(proj ?? "-") },
+      riskiest: r && { ...r, session: r.session.slice(0, 8), project: fix.path(proj ?? "-") },
       spiciest: hot && { command: fix(hot.events[0]!.command_line!), rule: fix(names.get(hot.rule_id) ?? hot.rule_id), level: hot.level },
     };
   } finally {

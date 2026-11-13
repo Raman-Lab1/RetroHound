@@ -20,10 +20,14 @@ to. A prefix matching more than one id is a usage error (exit 2) that lists the 
 - **Index only.** The pack reads the index read-only and never the transcripts, so it works the same for sessions
   whose transcripts the agent already deleted (ADR 0008).
 - **Masked.** Every string is masked again on the way out (ADR 0007). Secrets appear as kind and fingerprint only.
-  Paths are as the index holds them; `--anonymize` hashes project names, the user name and project dirs in paths and
-  commands, as `wrapped --anonymize` does.
+  Paths are as the index holds them; `--anonymize` hashes project names, the user name and project dirs in paths,
+  commands, tool names and attribution (an MCP server named after a project), as `wrapped --anonymize` does. In a
+  path field every dir under a home is hashed, spaces included; in a command a dir with a space is hashed whole only
+  inside quotes. An unquoted `cat ~/My Projects/clientc/a.txt` is a known limit: the hashing stops at the space, so
+  `clientc` stays.
 - **New folder only.** `--out` (default `./retrohound-incident-<first 8 chars of the id>`) must not exist or be empty:
   a pack never overwrites or mixes with other files, so the manifest describes the whole folder. Files are written
   0600 in a 0700 folder.
-- **Reproducible.** No generation time, every list sorted: the same index gives byte-identical files. A later scan
+- **Reproducible.** No generation time, every list sorted: the same index gives byte-identical files, except with
+  `--anonymize` (a random key per run, by design, so hashes cannot be linked across packs). A later scan
   changes `last_seen`, so a pack is tied to the index state it was built from.

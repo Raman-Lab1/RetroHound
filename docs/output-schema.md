@@ -71,7 +71,8 @@ type AgentEvent = {
 - Every string is run through the secret mask again on output (ADR 0007).
 - The match-only fields `content`, `tool_input`, `tool_response` and `text` never appear (ADR 0006), even if a caller
   left them on an event object.
-- List fields are absent, not `[]`, when empty.
+- Event list fields (`secret_kinds`, `result_secret_kinds`, `secret_fps`) are absent, not `[]`, when empty. Document
+  lists (`scan.archived_sessions`, `rules`, `findings`) are always present and can be `[]`.
 - The scan makes no network calls.
 
 ## Stability
@@ -86,7 +87,7 @@ Fields may be added to `0.1` documents. Removing or renaming a field, or changin
 
 | Document | SARIF |
 |---|---|
-| `rules[]` | `tool.driver.rules[]`: `id`, `name`, `shortDescription` (title), `fullDescription` (description or title), `help.text` (includes `falsepositives`), `defaultConfiguration.level`, `properties.tags` (`security` + Sigma tags, max 10) and `properties["security-severity"]` |
+| `rules[]` | `tool.driver.rules[]`: `id`, `name`, `shortDescription` (title), `fullDescription` (description or title), `help.text` (includes `falsepositives`), `defaultConfiguration.level`, `properties.tags` (`security` + Sigma tags, max 10), `properties["security-severity"]` and `properties.author` (when the rule has one, DRL 1.1 credit) |
 | `findings[]` | `results[]`: `ruleId`, `ruleIndex`, `level`, `message.text` |
 | `events[0].raw_ref` | `locations[0]`: `uri` relative to the agent's transcript root, `uriBaseId` per agent (below), `region.startLine` = line, `startColumn` 1 |
 | `events[1..]` | `relatedLocations[]` with a one-line message, same `uri` and `uriBaseId` rules |
@@ -137,9 +138,16 @@ stripped before output. For ECS the primary event's attributes are copied into t
 | `finding.id` / level | `event.id`, `event.severity`, `event.risk_score` (1/0, 2/21, 3/47, 4/73, 5/99); `event.kind: alert`, `event.dataset: retrohound.finding` |
 | rule | `rule.id`, `rule.uuid`, `rule.name`, `rule.description`, `rule.ruleset: retrohound` |
 | Sigma tags | `attack.tNNNN[.NNN]` to `threat.technique.id` / `.subtechnique.id`; other `attack.*` to `threat.tactic.name`; the rest to `tags[]` |
-| primary event | `@timestamp`, `event.category/type/action/outcome/sequence`, `process.command_line`, `file.*`, `url.*`, `destination.domain`, `log.file.path`, `message` |
-| agent | `gen_ai.agent.name`, `gen_ai.agent.id` (sub-agent id), `gen_ai.provider.name`, `gen_ai.tool.name`; copies in `retrohound.{session_id,agent_id,parent_session_id,agent_version,project_path,outcome,raw_ref.line,mcp}` |
+| primary event | `@timestamp`, `event.category/type/action/outcome/sequence`, `process.command_line`, `file.*`, `url.*`, `destination.domain`, `log.file.path`; `message` is the finding's message, not the event's excerpt |
+| agent | `gen_ai.agent.name`, `gen_ai.agent.id` (sub-agent id), `gen_ai.provider.name` (`anthropic`, `openai` for Codex, `gcp.gemini` for Antigravity), `gen_ai.tool.name`; copies in `retrohound.{session_id,agent_id,parent_session_id,agent_version,project_path,outcome,raw_ref.line,mcp}` |
 | finding | `retrohound.finding.{id,event_ids}` |
+
+Absolute paths: unlike SARIF, which writes `uri` relative to the agent's transcript root, NDJSON keeps paths as the
+index holds them. ECS `log.file.path` and OCSF `unmapped.retrohound.raw_ref.file` are the transcript's absolute path,
+and ECS `process.working_directory` and `retrohound.project_path` (OCSF `unmapped.retrohound.project_path`) are the
+session's working directory, so they carry the home path and the user name (`/Users/<name>/...`). `file.path` and
+commands carry them too when the agent touched files under the home. Strip or rewrite these fields in the SIEM pipeline
+if the user name must not be indexed.
 
 ### OCSF 1.9.0
 
