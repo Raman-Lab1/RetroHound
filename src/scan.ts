@@ -307,6 +307,8 @@ function buildReport(opts: ScanOptions, view: View, rules: Rule[], root: string,
   const ids = new Set(kept.map((s) => s.id));
   const min = opts.level ? LEVELS.indexOf(opts.level) : 0;
   const { kept: findings, suppressed } = applyIgnore(view.findings.filter((f) => ids.has(f.session_id) && LEVELS.indexOf(f.level) >= min), ignore);
+  // The order store.listFindings gives, so --no-index output matches an indexed scan's.
+  findings.sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const fired = new Set(findings.map((f) => f.rule_id));
   const { blocked, subagent } = view.stats([...ids]);
   const projectOf = new Map(kept.map((s) => [s.id, s.project_path])); // the session's project, not a sub-folder cwd

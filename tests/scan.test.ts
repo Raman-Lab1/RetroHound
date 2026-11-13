@@ -176,6 +176,18 @@ describe("runScan", () => {
     ro.close();
   });
 
+  test("noIndex orders findings like the index, by (ts, id), in JSON and SARIF", async () => {
+    put(join(root, "projects", "-home-x-acme", "a9.jsonl"), [cmd("a9", 40), cmd("a9", 41), cmd("a9", 42)]); // read before s1
+    const mem = await runScan({ ...opts, noIndex: true });
+    const idx = await runScan(opts);
+    expect(mem.findings.map((f) => f.session_id)).toEqual(["s1", "a9"]);
+    const jsonIds = (r: typeof mem) => JSON.parse(toJson(r)).findings.map((f: { id: string }) => f.id);
+    const sarifIds = (r: typeof mem) => JSON.parse(toSarif(r)).runs[0].results.map((x: { partialFingerprints: Record<string, string> }) => x.partialFingerprints["retrohound/v1"]);
+    expect(jsonIds(mem)).toEqual(jsonIds(idx));
+    expect(sarifIds(mem)).toEqual(sarifIds(idx));
+    expect(sarifIds(mem)).toEqual(jsonIds(mem));
+  });
+
   test("noIndex evaluates everything and writes nothing", async () => {
     const r = await runScan({ ...opts, noIndex: true });
     expect(r.findings.length).toBe(1);
