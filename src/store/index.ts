@@ -23,7 +23,10 @@ export type SessionRow = {
   event_count: number;
   archived: boolean; // every source file is gone (0008)
 };
-export type RuleRun = { rule_set_hash: string; started_at: string; finished_at: string; events: number; findings: number };
+export type RuleRun = {
+  rule_set_hash: string; started_at: string; finished_at: string; events: number; findings: number;
+  scope?: string[]; // the (agent, root) scopes the run evaluated; recorded, not read back
+};
 
 const EVENT_COLUMNS = [
   "source_file",
@@ -197,10 +200,12 @@ export function openStore(path: string = defaultDbPath()) {
         coalesce(sum(agent_id IS NOT NULL), 0) AS subagent FROM events
       WHERE (? IS NULL OR session_id IN (SELECT value FROM json_each(?)))`), // plain ? twice: Node 22.13 can't bind ?NNN
     listFindings: db.prepare("SELECT * FROM findings WHERE (? IS NULL OR session_id = ?) ORDER BY ts, id"),
-    insertRuleRun: db.prepare(`INSERT INTO rule_runs (rule_set_hash, started_at, finished_at, events, findings)
-      VALUES (?, ?, ?, ?, ?)`),
-    lastRuleRun: db.prepare(`SELECT rule_set_hash, started_at, finished_at, events, findings
-      FROM rule_runs ORDER BY id DESC LIMIT 1`),
+    insertRuleRun: db.prepare(`INSERT INTO rule_runs (rule_set_hash, started_at, finished_at, events, findings, scope)
+      VALUES (?, ?, ?, ?, ?, ?)`),
+    lastRuleRun: db.prepare(`SELECT rule_set_hash, started_at, finished_at, events, findings FROM rule_runs
+      WHERE (? IS NULL OR EXISTS (SELECT 1 FROM json_each(scope) WHERE value = ?)) ORDER BY id DESC LIMIT 1`),
+    sessionFiles: db.prepare(`SELECT DISTINCT source_file FROM events WHERE session_id IN
+      (SELECT session_id FROM events WHERE source_file IN (SELECT value FROM json_each(?)))`),
     // ADR 0016: the earliest (ts, id) event per (kind, value) and per (project, kind, value). The keys must match
     // engine/first-seen.ts, which does the same over in-memory events for --no-index.
     firstSeen: db.prepare(`WITH k AS (
@@ -348,7 +353,14 @@ export function openStore(path: string = defaultDbPath()) {
     },
 
     recordRuleRun(run: RuleRun): void {
-      q.insertRuleRun.run(run.rule_set_hash, run.started_at, run.finished_at, run.events, run.findings);
+      const scope = run.scope ? JSON.stringify(run.scope.map(mask)) : null;
+      q.insertRuleRun.run(run.rule_set_hash, run.started_at, run.finished_at, run.events, run.findings, scope);
+    },
+
+    /** Every indexed file (masked path) holding events of a session that one of `paths` holds: a session can span
+     * groups of files (a legacy flat `agent-*.jsonl` next to its main transcript), and is re-read whole. */
+    sessionFiles(paths: string[]): string[] {
+      return q.sessionFiles.all(JSON.stringify(paths.map(mask))).map((r) => r.source_file as string);
     },
 
     /** Ids of the events that first carried a domain, MCP server, hook command or skill/plugin, at or after `cutoff`
@@ -362,8 +374,10 @@ export function openStore(path: string = defaultDbPath()) {
       return fs;
     },
 
-    lastRuleRun(): RuleRun | undefined {
-      const row = q.lastRuleRun.get();
+    /** The last run, or the last that evaluated `scope`. */
+    lastRuleRun(scope?: string): RuleRun | undefined {
+      const s = scope === undefined ? null : mask(scope);
+      const row = q.lastRuleRun.get(s, s);
       return row && plain<RuleRun>(row);
     },
 

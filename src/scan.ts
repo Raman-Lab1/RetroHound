@@ -2,6 +2,7 @@
 // session, never per file: a session is its main transcript plus its sub-agent files (and set-aside copies), and
 // event_count correlations must see all of them at once (ADR 0004). Zero network, nothing raw is persisted.
 import { createHash } from "node:crypto";
+import { resolve } from "node:path";
 import { COLLECTORS, type Collector } from "./collectors/index.ts";
 import { evaluate, type Match } from "./engine/evaluate.ts";
 import { coldStartCutoff, FIRST_SEEN_FIELDS, firstSeenOf, setFirstSeen, type FirstSeen } from "./engine/first-seen.ts";
@@ -36,7 +37,9 @@ export type ScanOptions = {
 };
 
 type Sess = { id: string; agent: string; project_path?: string; last_ts: string; events: number; archived: boolean };
-type Job = { c: Collector; paths: string[] };
+type Job = { c: Collector; root: string; paths: string[] };
+/** What one job evaluates: its rule-run check and record are per scope (0006), or another agent's scan would mark it current. */
+const scopeOf = (j: Job) => `${j.c.agent}:${resolve(j.root)}`;
 const BLOCKED_FIELDS = ["session_id", "agent_id", "attribution", "denial_kind", "denial_category"] as const;
 type BlockedRow = Partial<Record<(typeof BLOCKED_FIELDS)[number] | "project_path", string | null>>; // DB rows carry null
 type View = {
@@ -167,14 +170,13 @@ function indexedBlocked(dbPath?: string): BlockedRow[] {
 
 async function scanIndexed(jobs: Job[], store: Store, rules: Rule[], hash: string, dbPath?: string): Promise<View> {
   const started = new Date().toISOString();
-  // Once, before any agent runs: each agent's untouched files need the same answer (the run is recorded at the end).
-  const full = store.lastRuleRun()?.rule_set_hash !== hash;
   const lines = noLines(); // only files the indexer parses this run; re-reads for evaluation are not counted twice
   const files = { indexed: 0, skipped: 0, gone: 0, failed: 0 };
-  const dirty: { c: Collector; sessions: Sessions }[] = [];
-  for (const { c, paths } of jobs) {
-    const { index, sessions } = await indexAgent(c, store, paths, full, lines);
-    dirty.push({ c, sessions });
+  const dirty: { c: Collector; sessions: Sessions; full: boolean }[] = [];
+  for (const job of jobs) {
+    const full = store.lastRuleRun(scopeOf(job))?.rule_set_hash !== hash; // the run is recorded at the end
+    const { index, sessions } = await indexAgent(job.c, store, job.paths, full, lines);
+    dirty.push({ c: job.c, sessions, full });
     files.indexed += index.indexed;
     files.skipped += index.skipped;
     files.gone += index.gone;
@@ -182,10 +184,11 @@ async function scanIndexed(jobs: Job[], store: Store, rules: Rule[], hash: strin
   }
   // Every agent is indexed before any evaluates, so the first-seen query sees all of this scan's events (ADR 0016).
   withFirstSeen(rules, () => store.firstSeen(coldStartCutoff(store.listSessions().map((s) => s.first_ts))), () => {
-    for (const { c, sessions } of dirty) evaluateAgent(c, store, rules, sessions, full);
+    for (const { c, sessions, full } of dirty) evaluateAgent(c, store, rules, sessions, full);
   });
   const events = store.listSessions().reduce((n, s) => n + s.event_count, 0);
-  store.recordRuleRun({ rule_set_hash: hash, started_at: started, finished_at: new Date().toISOString(), events, findings: store.listFindings().length });
+  store.recordRuleRun({ rule_set_hash: hash, started_at: started, finished_at: new Date().toISOString(), events, findings: store.listFindings().length,
+    scope: jobs.map(scopeOf) });
   snapshotConfig(store); // what the agents' config files set up now, for the footprint's "changed since last scan"
   const agents = new Set(jobs.map((j) => j.c.agent as string)); // one DB holds every agent
   return {
@@ -211,7 +214,10 @@ async function indexAgent(c: Collector, store: Store, paths: string[], full: boo
     return parsed;
   };
   const index = await indexFiles(store, paths, parse, c.parserVersion);
-  const dirty = [...groupPaths(c, paths).values()].filter((g) => full || g.some((p) => touched.has(p)));
+  // A touched file dirties every group holding events of its sessions, so a session split over groups is re-read
+  // whole: replaceFindings would otherwise swap its findings for those of a partial parse (0008).
+  const held = new Set(full ? [] : store.sessionFiles([...touched]));
+  const dirty = [...groupPaths(c, paths).values()].filter((g) => full || g.some((p) => touched.has(p) || held.has(mask(p))));
   const sessions = await collect(dirty, safeParse(c, cache));
   cache.clear();
   return { index, sessions };
@@ -244,7 +250,7 @@ export async function runScan(opts: ScanOptions = {}): Promise<ScanReport> {
   const { rules, hash, rejected } = loadRuleSet(opts.rulesDir ?? DEFAULT_RULES_DIR, opts.extraRules);
   opts.onRejected?.(rejected);
   const ignore = loadIgnore(rules, { file: opts.ignore }); // before any work: a bad file is a usage error
-  const jobs = collectors.map((c, i) => ({ c, paths: c.discover(roots[i]!) }));
+  const jobs = collectors.map((c, i) => ({ c, root: roots[i]!, paths: c.discover(roots[i]!) }));
   const root = roots.join(", ");
   const agents = all ? collectors.map((c) => c.agent as string) : undefined;
   if (opts.noIndex) return buildReport(opts, await scanMemory(jobs, rules), rules, root, started_at, ignore, agents);

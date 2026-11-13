@@ -9,7 +9,9 @@ import { toJson } from "../src/outputs/json.ts";
 import { toSarif } from "../src/outputs/sarif.ts";
 import { toTable } from "../src/outputs/table.ts";
 import { runScan, type ScanOptions } from "../src/scan.ts";
+import { verifyChain } from "../src/store/chain.ts";
 import { openReadOnly } from "../src/store/index.ts";
+import { open } from "../src/store/sqlite.ts";
 
 const base = mkdtempSync(join(tmpdir(), "rh-scan-"));
 afterAll(() => rmSync(base, { recursive: true, force: true }));
@@ -129,6 +131,49 @@ describe("runScan", () => {
     const r = await runScan(opts);
     expect(r.scan.files.skipped).toBe(3);
     expect(r.findings).toEqual([]);
+  });
+
+  test("a session split over groups (legacy flat agent-*.jsonl) is re-read whole when one of its files changes", async () => {
+    // "many" fires on the main file's hits, "sub" on the sub-agent file's: each finding needs the other group re-read.
+    writeFileSync(join(dir, "rules", "sub.yml"), "title: Sub\nname: sub\nlevel: low\nlogsource: { product: ai_coding_agent }\n"
+      + "detection:\n    selection: { agent_id: b1 }\n    condition: selection\n");
+    const proj = join(root, "projects", "-home-x-acme");
+    put(join(proj, "s3.jsonl"), [cmd("s3", 1), cmd("s3", 2), cmd("s3", 3)]);
+    put(join(proj, "agent-b1.jsonl"), [cmd("s3", 11, { agentId: "b1" })]);
+    const s3 = (r: Awaited<ReturnType<typeof runScan>>) => [...new Set(r.findings.filter((f) => f.session_id === "s3").map((f) => f.rule_id))].sort();
+    expect(s3(await runScan(opts))).toEqual(["many", "sub"]);
+    appendFileSync(join(proj, "agent-b1.jsonl"), JSON.stringify(cmd("s3", 20, { agentId: "b1" })) + "\n");
+    expect(s3(await runScan(opts))).toEqual(["many", "sub"]);
+    appendFileSync(join(proj, "s3.jsonl"), JSON.stringify(cmd("s3", 21)) + "\n");
+    const r = await runScan(opts);
+    expect(r.scan.files).toMatchObject({ indexed: 1 });
+    expect(s3(r)).toEqual(["many", "sub"]);
+  });
+
+  test("a scan of another root under new rules does not mark this root's findings current (0006)", async () => {
+    const other = { ...opts, root: join(dir, "other") };
+    put(join(other.root, "projects", "-home-x-b", "s9.jsonl"), [cmd("s9", 1)]);
+    expect((await runScan(opts)).findings.length).toBe(1);
+    writeFileSync(join(dir, "rules", "r.yml"), HIT + RULE(9));
+    await runScan(other);
+    expect((await runScan(opts)).findings).toEqual([]);
+  });
+
+  test("an index from before run scopes re-evaluates once after the upgrade, and its chain verifies", async () => {
+    writeFileSync(join(dir, "rules", "r.yml"), HIT + RULE(9));
+    await runScan({ ...opts, root: join(dir, "empty") });
+    writeFileSync(join(dir, "rules", "r.yml"), HIT + RULE(3));
+    expect((await runScan(opts)).findings.length).toBe(1);
+    // The v4 shape, its last run under RULE(9): the state a scan of another root left behind before this fix.
+    const db = open(opts.dbPath!);
+    db.exec(`UPDATE rule_runs SET rule_set_hash = (SELECT rule_set_hash FROM rule_runs ORDER BY id LIMIT 1);
+      ALTER TABLE rule_runs DROP COLUMN scope; PRAGMA user_version = 4`);
+    db.close();
+    writeFileSync(join(dir, "rules", "r.yml"), HIT + RULE(9));
+    expect((await runScan(opts)).findings).toEqual([]);
+    const ro = openReadOnly(opts.dbPath!);
+    expect(verifyChain(ro).ok).toBe(true);
+    ro.close();
   });
 
   test("noIndex evaluates everything and writes nothing", async () => {
