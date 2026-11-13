@@ -1,6 +1,6 @@
 # 0009. Live guard: a PreToolUse hook with a JSON decision, failing open
 
-- Status: Accepted, amended 2026-11-07 (Codex CLI and Antigravity CLI targets)
+- Status: Accepted, amended 2026-11-07 (Codex CLI and Antigravity CLI targets), 2026-11-13 (what `--fail-closed` covers)
 - Date: 2026-11-07
 - Related: 0001, 0005 (shared tool-call mapping), 0008
 
@@ -25,6 +25,9 @@ careful: attackers abuse exactly this file.
 - Only `lane: enforce` single-event rules decide; hunt-lane rules and correlations never block. Hook-run events
   themselves only report, since there is no tool call to deny.
 - Fail open by default, including on any internal error. `--fail-closed` sets `onFailure: "block"`, with a warning.
+  *Amended 2026-11-13:* `hook run` catches every error itself and exits 0 with no decision, so `onFailure: "block"`
+  only takes effect when the hook cannot run: the runtime or entry file is missing, it crashes before `hookRun`
+  starts, or it times out. An internal error (bad payload, rules that do not load) still fails open.
 - Scope: user settings by default; `--scope project|local` only when asked.
 - **Installer:** strict JSON parse or abort; find its own entry by marker and update it; no-op if unchanged; a
   timestamped backup with the file's mode (0600 for a new file); re-check the file before writing; write a temp file,

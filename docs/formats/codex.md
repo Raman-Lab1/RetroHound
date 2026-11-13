@@ -194,9 +194,10 @@ inline tables, dotted keys outside a header and multi-line hook commands are not
 and locally it matched 1 of 4 configured servers by name; one more server in use is a built-in no config file sets up.
 Names with `-` or `.` (2 of the 4 configured) were never seen in a rollout, so whether Codex keeps them as written there
 is unchecked; if it does not, those servers read "never seen used".
-**Live hook versus rollout.** The hook (`retrohound hook`, src/hooks/agents.ts) maps Codex's `apply_patch` with
-`mapToolUse`, which does not know it, so live it is a `tool_call`, while the rollout gives `file_event`s: file rules fire
-on `scan`, not in `hook --mode log|block`. The hook's `tool_input` for `apply_patch` has not been seen yet (R2: patch
-text with `*** Add/Update/Delete File:` headers), so no parser is written for it.
+**Live hook versus rollout.** The hook (`retrohound hook`, src/hooks/agents.ts) turns Codex's `apply_patch` into the
+same `file_event`s as the rollout: `patchChanges` reads the `*** Add/Update/Delete File:` headers (and `*** Move to:`)
+from any string in `tool_input` and hands them to the rollout's FileChange mapping, so file rules decide live in
+`hook --mode log|block` as well as on `scan`. A patch with no file header stays one `tool_call`. The live
+`tool_input` shape for `apply_patch` has not been seen yet (R2), which is why any string field is searched.
 Hooks, skills and plugins: checked, not recorded in rollouts (see "What is not in the rollout"), so the collector fills
 no `attribution` or `hook:` event for Codex and the page says their use is not recorded.

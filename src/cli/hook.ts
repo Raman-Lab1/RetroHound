@@ -6,8 +6,8 @@ import { loadIgnore, NO_IGNORE, type Ignore } from "../suppress.ts";
 import type { Rule } from "../engine/load.ts";
 import { AGENTS, type Agent } from "../hooks/agents.ts";
 import { mask } from "../normalize/mask.ts";
-import { install, settingsPath, status, uninstall, UnsafePathError, type InstallOpts, type Scope } from "../hooks/install.ts";
-import { readFileSync, statSync } from "node:fs";
+import { install, InstallUsageError, settingsPath, status, uninstall, type InstallOpts, type Scope } from "../hooks/install.ts";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { EXTRA_HELP, loadRuleDir, repeat } from "./rules.ts";
@@ -34,17 +34,19 @@ function manageOpts(f: ManageFlags): InstallOpts {
   return { ...target(f), mode, command: process.execPath, entry: resolve(process.argv[1] ?? ""), failClosed: f.failClosed, dryRun: f.dryRun, allowUnsafePath: f.allowUnsafePath, extraRules, rulesDir: DEFAULT_RULES_DIR };
 }
 
+const WOULD: Record<string, string> = { installed: "would install", updated: "would update", removed: "would remove" };
+
 function manage(fn: typeof install, f: ManageFlags, io: IO): number {
   let r;
   try {
     r = fn(manageOpts(f));
   } catch (e) {
-    if (e instanceof UnsafePathError) throw new UsageError(e.message); // exit 2
+    if (e instanceof InstallUsageError) throw new UsageError(e.message); // exit 2
     throw e;
   }
-  io.out(mask(`${r.status}: ${r.path}\n${r.diff ? `  ${r.diff}\n` : ""}${r.backup ? `  backup: ${r.backup}\n` : ""}`));
+  io.out(mask(`${(f.dryRun && WOULD[r.status]) || r.status}: ${r.path}\n${r.diff ? `  ${r.diff}\n` : ""}${r.backup ? `  backup: ${r.backup}\n` : ""}`));
   r.warnings.forEach((w) => io.err(mask(`warning: ${w}\n`)));
-  if (r.status === "installed" || r.status === "updated") io.out(`${CHECK[(f.agent ?? "claude_code") as Agent]}\n`);
+  if (!f.dryRun && (r.status === "installed" || r.status === "updated")) io.out(`${CHECK[(f.agent ?? "claude_code") as Agent]}\n`);
   return 0;
 }
 
@@ -95,6 +97,14 @@ function hookIgnore(rules: Rule[], file: string | undefined, io: IO): Ignore {
 
 type RunFlags = { agent?: string; mode?: string; rules?: string; extraRules?: string[]; log?: string; cache?: string; ignore?: string };
 
+const noEntries = (d: string) => {
+  try {
+    return !readdirSync(d).length;
+  } catch {
+    return true; // missing, not a dir, unreadable
+  }
+};
+
 export async function hookRun(f: RunFlags, io: IO, stdin: () => Promise<string> = readStdin): Promise<number> {
   try {
     const mode = (f.mode ?? "log") as Mode;
@@ -104,6 +114,7 @@ export async function hookRun(f: RunFlags, io: IO, stdin: () => Promise<string> 
     const text = await stdin();
     const dir = f.rules ?? DEFAULT_RULES_DIR;
     const extras = f.extraRules ?? [];
+    if (noEntries(dir)) io.err(mask(`retrohound hook: --rules ${dir} is missing or empty; deciding without it`) + "\n");
     // A missing extra dir must not switch off the shipped rules: say so and decide with the rules that do load.
     for (const d of extras) if (!statSync(d, { throwIfNoEntry: false })?.isDirectory()) io.err(mask(`retrohound hook: --extra-rules ${d} is not a directory; deciding without it`) + "\n");
     const rules = loadEnforceRules(dir, f.cache, extras);

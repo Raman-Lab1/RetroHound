@@ -63,7 +63,7 @@ export function decide(stdin: string, rules: Rule[], ignore: Ignore = NO_IGNORE,
 }
 
 export function logTrial(path: string, rec: Record<string, string>): void {
-  mkdirSync(dirname(path), { recursive: true });
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   appendFileSync(path, mask(JSON.stringify(rec)) + "\n", { mode: 0o600 });
   try {
     chmodSync(path, 0o600);
@@ -118,7 +118,7 @@ function writeCache(path: string, key: string, paths: string[], docs: ParsedDoc[
     if (docs.some((f) => f.some((d) => d.error !== undefined))) return; // a rejection is reported from the YAML every time
     const json = JSON.stringify([paths, docs], jsonSafe);
     const [p, d] = JSON.parse(json) as [string[], ParsedDoc[][]];
-    mkdirSync(dirname(path), { recursive: true });
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     const tmp = `${path}.${process.pid}.tmp`;
     writeFileSync(tmp, JSON.stringify({ key, sum: sha(json), paths: p, docs: d } satisfies CacheFile), { mode: 0o600 });
     renameSync(tmp, path);
