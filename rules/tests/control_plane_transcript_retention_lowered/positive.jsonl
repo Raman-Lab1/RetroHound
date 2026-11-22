@@ -1,0 +1,3 @@
+{"category":"file_event","tool_name":"Edit","target_path":"/home/dev/.claude/settings.json","content":"  \"cleanupPeriodDays\": 0,"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/.claude/settings.local.json","content":"{\n  \"cleanupPeriodDays\": 1\n}"}
+{"category":"file_event","tool_name":"apply_patch","agent":"codex","target_path":"/home/dev/.codex/config.toml","content":"[history]\npersistence = \"none\"\n"}

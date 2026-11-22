@@ -1,0 +1,9 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s http://169.254.169.254/latest/meta-data/iam/security-credentials/"}
+{"category":"process_creation","tool_name":"Bash","command_line":"TOKEN=$(curl -X PUT http://169.254.169.254/latest/api/token -H 'X-aws-ec2-metadata-token-ttl-seconds: 60')"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -H 'Metadata-Flavor: Google' http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s http://[fd00:ec2::254]/latest/meta-data/"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s 169.254.170.2$AWS_CONTAINER_CREDENTIALS_RELATIVE_URI"}
+{"category":"process_creation","tool_name":"Bash","command_line":"wget -qO- http://2852039166/latest/meta-data/"}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"Invoke-RestMethod -Headers @{Metadata='true'} 'http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01'"}
+{"category":"process_creation","tool_name":"Bash","command_line":"python3 -c \"import urllib.request as u; print(u.urlopen('http://169.254.169.254/latest/meta-data/').read())\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"grep -rn x src; curl -s http://169.254.169.254/latest/user-data"}

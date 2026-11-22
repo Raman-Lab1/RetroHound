@@ -1,0 +1,9 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"ls -la ~/.claude/projects"}
+{"category":"process_creation","tool_name":"Bash","command_line":"rm -rf .claude/worktrees/old"}
+{"category":"process_creation","tool_name":"Bash","command_line":"rm -rf .claude"}
+{"category":"process_creation","tool_name":"Bash","command_line":"rm -f .retrohound-ignore.yml"}
+{"category":"process_creation","tool_name":"Bash","command_line":"rm ~/.claude/projects/-home-dev-app/memory/old-note.md"}
+{"category":"process_creation","tool_name":"Bash","command_line":"retrohound purge"}
+{"category":"process_creation","tool_name":"Bash","command_line":"claude config set -g cleanupPeriodDays 60"}
+{"category":"process_creation","tool_name":"Bash","command_line":"cat ~/.codex/sessions/2026/01/01/rollout.jsonl > /tmp/copy.jsonl"}
+{"category":"process_creation","tool_name":"Bash","command_line":"rm -rf ~/.claude/plugins/cache/old"}

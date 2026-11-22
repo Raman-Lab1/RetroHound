@@ -1,0 +1,4 @@
+{"category":"file_event","tool_name":"Edit","target_path":"/home/dev/.claude/settings.json","content":"  \"cleanupPeriodDays\": 90,"}
+{"category":"file_event","tool_name":"Edit","target_path":"/home/dev/.claude/settings.json","content":"  \"cleanupPeriodDays\": 30,"}
+{"category":"file_event","tool_name":"Write","target_path":"/home/dev/app/docs/settings.md","content":"Set \"cleanupPeriodDays\": 0 to stop keeping transcripts."}
+{"category":"file_event","tool_name":"apply_patch","agent":"codex","target_path":"/home/dev/.codex/config.toml","content":"[history]\npersistence = \"save-all\"\n"}
