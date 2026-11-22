@@ -1,0 +1,5 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"npm install example-pkg"}
+{"category":"mcp","tool_name":"mcp__tracker__get_issue","mcp_server":"tracker","mcp_tool":"get_issue","outcome":"blocked"}
+{"category":"process_creation","tool_name":"Bash","command_line":"pip install example-pkg"}
+{"category":"web_request","tool_name":"WebFetch","url":"https://docs.example.invalid/","domain":"docs.example.invalid"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm install --frozen-lockfile"}

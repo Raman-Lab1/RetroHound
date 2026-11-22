@@ -1,0 +1,2 @@
+{"category":"mcp","tool_name":"mcp__tracker__get_issue","mcp_server":"tracker","mcp_tool":"get_issue"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm install example-pkg"}

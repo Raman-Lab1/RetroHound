@@ -1,0 +1,28 @@
+title: Untrusted content read, then a named package installed
+id: 708311a1-8ca2-4011-89a2-bc81a1838d7e
+name: injection_untrusted_then_package_install
+author: Raman Kumar
+status: experimental
+description: >-
+  Within one session and ten minutes, the agent took in content it did not write (untrusted_content_received: a web
+  page or search, an MCP tool result, gh issue/PR/repo text) and then installed a named package
+  (exec_package_install_new). An issue, page or tool result that names a package the agent then installs is how
+  injected and hallucinated (slopsquatted) names get onto a machine. The package name is not compared with the text.
+tags:
+  - attack.initial_access
+  - attack.t1195.001
+  - owasp_agentic.asi01
+  - owasp_agentic.asi04
+correlation:
+  type: temporal_ordered
+  rules:
+    - untrusted_content_received
+    - exec_package_install_new
+  group-by:
+    - session_id
+  timespan: 10m
+falsepositives:
+  - Reading a library's docs, then installing it; common, so check the package name against what the user asked for
+level: low
+x-retrohound:
+  lane: hunt
