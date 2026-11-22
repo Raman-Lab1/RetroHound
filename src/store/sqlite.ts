@@ -37,6 +37,9 @@ type EngineClass = new (path: string, options?: object) => Engine;
 
 const require = createRequire(import.meta.url);
 
+// What Bun throws when a WAL copy has no -wal/-shm to open beside it.
+const NO_SHM = /unable to open|readonly|disk I\/O|shm/i;
+
 function connect(path: string, readonly: boolean): Engine {
   if (process.versions.bun) {
     // On macOS Bun uses the system SQLite, which keeps -wal/-shm after close; a read-only open needs them there.
@@ -47,6 +50,7 @@ function connect(path: string, readonly: boolean): Engine {
       db.prepare("SELECT 1 FROM sqlite_master LIMIT 1").get(); // the open is lazy: the failure shows on the first read
       return db;
     } catch (e) {
+      if (!NO_SHM.test(String((e as Error)?.message))) throw e; // SQLITE_BUSY or locked: a live WAL, an immutable open would read it stale
       // A WAL index copied without its -wal/-shm cannot be opened read-only (the shm cannot be created). It has no
       // writer, so an immutable open reads it as it is; a live index that fails here (missing file, not a database) fails the same way.
       try {
@@ -90,7 +94,7 @@ const cell = (v) => (typeof v === "bigint" ? Number(v) : v instanceof Uint8Array
 try {
   const bun = (p) => { const d = new (require("bun:sqlite").Database)(p, { readonly: true }); d.prepare("SELECT 1 FROM sqlite_master LIMIT 1").get(); return d; };
   // a WAL copy without -wal/-shm does not open read-only on Bun: retry immutable (same fallback as connect())
-  const db = process.versions.bun ? (() => { try { return bun(p); } catch (e) { try { return bun(require("node:url").pathToFileURL(p).href + "?immutable=1"); } catch { throw e; } } })() : new (require("node:sqlite").DatabaseSync)(p, { readOnly: true });
+  const db = process.versions.bun ? (() => { try { return bun(p); } catch (e) { if (!/unable to open|readonly|disk I\\/O|shm/i.test(String(e && e.message))) throw e; try { return bun(require("node:url").pathToFileURL(p).href + "?immutable=1"); } catch { throw e; } } })() : new (require("node:sqlite").DatabaseSync)(p, { readOnly: true });
   const rows = [];
   for (const r of db.prepare(sql).iterate()) {
     rows.push(Object.fromEntries(Object.entries(r).map(([k, v]) => [k, cell(v)])));
