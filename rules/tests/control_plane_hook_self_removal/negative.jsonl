@@ -1,0 +1,9 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"retrohound hook status"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npx retrohound hook install --mode block"}
+{"category":"process_creation","tool_name":"Bash","command_line":"grep -n 'retrohound hook uninstall' README.md"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm uninstall left-pad && retrohound scan"}
+{"category":"process_creation","tool_name":"Bash","command_line":"pre-commit uninstall --hook-type pre-push"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git commit -m \"docs: explain retrohound hook uninstall\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"rg -n \"retrohound hook uninstall\" README.md docs/"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh pr create --body \"Run retrohound hook uninstall to remove it\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"sed -n '/retrohound hook uninstall/p' README.md"}

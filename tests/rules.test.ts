@@ -52,6 +52,16 @@ test("secrets_read_for_egress reads variable-anchored Windows paths, not a quote
   for (const c of ["grep '\\.env' .gitignore", 'grep -nE "^\\.env|/\\.env" .gitignore']) expect(reads(c)).toBe(false);
 });
 
+test("untrusted_content_received takes web, search, MCP and gh reads, not gh writes or failed calls", () => {
+  const rule = loadRuleDir("rules/ai_coding_agent").rules.find((r) => r.name === "untrusted_content_received") as DetectionRule;
+  const gh = (c: string, outcome: "success" | "blocked" = "success") => rule.matches(event({ category: "process_creation", command_line: c, outcome }));
+  for (const c of ["gh pr diff 7", "cd app && gh repo view example/app", "gh release view v1", "gh api repos/example/app/readme"]) expect(gh(c)).toBe(true);
+  for (const c of ["gh pr create --fill", "gh issue comment 4 -b ok", "echo gh"]) expect(gh(c)).toBe(false);
+  expect(gh("gh issue view 4", "blocked")).toBe(false);
+  expect(rule.matches(event({ category: "tool_call", tool_name: "WebSearch" }))).toBe(true);
+  expect(rule.matches(event({ category: "tool_call", tool_name: "Grep" }))).toBe(false);
+});
+
 // A non-silenced first_seen rule passes with the documented baseline line, which is cold-start and cannot fire.
 test("rules test skips a first_seen rule's baseline lines, and needs a line after them", () => {
   const root = mkdtempSync(join(tmpdir(), "rh-fs-"));

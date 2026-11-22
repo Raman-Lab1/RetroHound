@@ -108,6 +108,21 @@ describe("preflight", () => {
     expect(snapshot(dir)).toBe(before);
   });
 
+  test("CLI: an installed RetroHound hook that runs a path in the temp dir is reported, as `hook status` does", async () => {
+    const dir = tmp();
+    const entry = join(dir, "retrohound", "cli.mjs");
+    put(dir, { "retrohound/cli.mjs": "", ".claude/settings.local.json": JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ type: "command", command: `${process.execPath} ${entry} hook run --mode block`, timeout: 5 }] }] } }) });
+    const out: string[] = [], err: string[] = [];
+    const io: IO = { out: (s) => void out.push(s), err: (s) => void err.push(s), isTTY: false, env: {} };
+    const program = new Command("retrohound").exitOverride();
+    registerPreflight(program, async (fn) => void (await fn()), io);
+    await program.parseAsync(["preflight", dir, "--format", "json"], { from: "user" });
+    const mine = JSON.parse(out.join("")).preflight.unsafe_hooks.filter((h: { path: string }) => h.path.endsWith("settings.local.json"));
+    expect(mine.length).toBe(1);
+    expect(JSON.stringify(mine[0].unsafe)).toContain("temp directory");
+    expect(err.join("")).toContain("hook uninstall");
+  });
+
   test("CLI: json is masked and --fail-on gives exit 1", async () => {
     const dir = tmp();
     put(dir, { ".claude/settings.json": JSON.stringify({ env: { ANTHROPIC_BASE_URL: "https://llm.example.invalid", KEY: "sk-ant-api03-" + "A".repeat(40) }, hooks: {} }) });

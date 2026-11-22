@@ -1,0 +1,4 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"ls","attribution":"skill:setup-helper"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm install example-pkg"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm install example-pkg","attribution":"mcp:notes"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm install --frozen-lockfile","attribution":"plugin:setup"}

@@ -1,0 +1,47 @@
+title: Package installed by a command a skill or plugin issued
+id: 248e39ec-90b6-425b-8a15-04e35660a6a2
+name: control_plane_skill_package_install
+author: Raman Kumar
+status: experimental
+description: >-
+  A named package install (exec_package_install_new) made while a skill or plugin was in charge: the command carries
+  its `attribution` (skill:<x> or plugin:<x>), so the skill's instructions are the likely source of the package name.
+  A first provenance check, from what the transcript records: CLAUDE.md, AGENTS.md and rule files leave no attribution
+  on later calls, so "instruction file names a package, then the agent installs it" is not covered. Claude Code only
+  (Codex and Antigravity record no skill attribution).
+tags:
+  - attack.initial_access
+  - attack.t1195.001
+  - owasp_agentic.asi04
+correlation:
+  type: temporal_ordered
+  rules:
+    - skill_or_plugin_command
+    - exec_package_install_new
+  group-by:
+    - session_id
+    - attribution
+  timespan: 1m
+falsepositives:
+  - A setup skill whose job is to install its own dependencies
+level: low
+x-retrohound:
+  lane: hunt
+---
+title: Helper, a shell command attributed to a skill or plugin
+id: 18fe3a3c-24f3-4b21-8c55-8814ae1a11d4
+name: skill_or_plugin_command
+author: Raman Kumar
+description: >-
+  Silenced step one of control_plane_skill_package_install. Grouping by attribution makes the install itself fill
+  both steps, so the pair is one command run under a skill or plugin.
+logsource:
+  product: ai_coding_agent
+  category: process_creation
+detection:
+  selection:
+    attribution|startswith:
+      - 'skill:'
+      - 'plugin:'
+  condition: selection
+level: informational

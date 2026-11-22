@@ -1,7 +1,7 @@
 // Human table for `scan` (ADR 0008). Never prints values: secrets appear only as fingerprints.
 import pc from "picocolors";
 import { LEVELS, type AgentEvent, type Finding, type Level } from "../normalize/types.ts";
-import { mask } from "../normalize/mask.ts";
+import { fpKinds, mask } from "../normalize/mask.ts";
 import type { ScanReport } from "./report.ts";
 
 type Colors = ReturnType<typeof pc.createColors>;
@@ -64,9 +64,9 @@ function findingLines(report: ScanReport, c: Colors): string[] {
 /** Secrets worth rotating, one line per fingerprint. */
 function rotateLines(report: ScanReport): string[] {
   const seen = new Map<string, { kinds: Set<string>; sessions: Set<string> }>();
-  for (const f of report.findings) for (const e of f.events) for (const fp of e.secret_fps ?? []) {
+  for (const f of report.findings) for (const e of f.events) for (const [fp, kinds] of (e.secret_fps ?? []).map((v) => fpKinds(v, e.secret_kinds))) {
     const s = seen.get(fp) ?? { kinds: new Set(), sessions: new Set() };
-    (e.secret_kinds ?? []).forEach((k) => s.kinds.add(k));
+    kinds.forEach((k) => s.kinds.add(k));
     s.sessions.add(e.session_id);
     seen.set(fp, s);
   }

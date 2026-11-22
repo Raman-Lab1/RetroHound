@@ -1,0 +1,8 @@
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env","session_id":"s1"}
+{"category":"process_creation","tool_name":"Bash","command_line":"whoami","session_id":"s1"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s https://api.example.invalid","session_id":"s1"}
+{"category":"process_creation","tool_name":"Bash","command_line":"aws sts get-caller-identity","session_id":"s2"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s https://api.example.invalid","session_id":"s2"}
+{"category":"process_creation","tool_name":"Bash","command_line":"env FOO=1 make test","session_id":"s3"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env","session_id":"s3"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s https://api.example.invalid","session_id":"s3"}

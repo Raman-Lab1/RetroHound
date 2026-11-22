@@ -1,0 +1,30 @@
+title: Agent tried to uninstall RetroHound's own hook
+id: 3f6c2a91-8d4e-4b7a-a5c0-9e1d7b2f4c68
+name: control_plane_hook_self_removal
+author: Raman Kumar
+status: experimental
+description: >-
+  The agent runs `retrohound hook uninstall` (also through npx, bunx, a versioned package or a path to the CLI), which
+  removes the live hook that is watching it. Only agent tool calls reach this rule (the hook sees PreToolUse calls,
+  `scan` reads tool_use blocks), so the user running the same command in their own terminal is not an event. A Write or
+  Edit of the settings file that empties or drops the hook entry is control_plane_agent_config_risky_write; rm, mv or
+  sed -i of it is control_plane_agent_config_risky_shell_write. This detects same-user tampering by the agent, it does
+  not prevent it: code that already runs as you can switch a same-user hook off in ways no rule sees.
+tags:
+  - attack.defense_evasion
+  - attack.t1562.001
+  - owasp_agentic.asi03
+logsource:
+  product: ai_coding_agent
+  category: process_creation
+detection:
+  # Unquoted, so `'hook' un''install` reads as the command. retrohound only in command position (line start or after
+  # ; & | ( ` $( , optionally behind a runner and its flags), so a commit message, grep or PR body naming it is not it.
+  selection:
+    command_line_unquoted|re|i: '(?:^|[;&|\n(`]|\$\()\s{0,5}(?:(?:npx|bunx|pnpm\s{1,5}dlx|node|bun|sudo|exec|command)\s{1,5}(?:-\S{1,30}\s{1,5}){0,4})?\S{0,200}retrohound[^\s;&|]{0,200}\s(?:[^;&|\n]{0,200}\s)?hook\s{1,5}uninstall\b'
+  condition: selection
+falsepositives:
+  - You asked the agent to remove the hook; run `retrohound hook uninstall` yourself in a terminal instead
+level: high
+x-retrohound:
+  lane: enforce

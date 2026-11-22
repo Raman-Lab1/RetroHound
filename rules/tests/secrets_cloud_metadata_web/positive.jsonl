@@ -1,0 +1,4 @@
+{"category":"web_request","tool_name":"WebFetch","url":"http://169.254.169.254/latest/meta-data/iam/security-credentials/","domain":"169.254.169.254"}
+{"category":"web_request","tool_name":"mcp__browser__navigate","url":"http://metadata.google.internal/computeMetadata/v1/","domain":"metadata.google.internal"}
+{"category":"web_request","tool_name":"WebFetch","url":"http://[fd00:ec2::254]/latest/meta-data/","domain":"[fd00:ec2::254]"}
+{"category":"web_request","tool_name":"WebFetch","url":"http://169.254.170.2/v2/credentials/x","domain":"169.254.170.2"}

@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { anonymizer, type Anonymizer } from "../cli/wrapped.ts";
 import type { Rule } from "../engine/load.ts";
-import { mask } from "../normalize/mask.ts";
+import { fpKinds, mask } from "../normalize/mask.ts";
 import { GENESIS } from "../store/chain.ts";
 import type { Db, Row } from "../store/sqlite.ts";
 import { TOOL_VERSION } from "../version.ts";
@@ -85,9 +85,9 @@ function build(db: Db, sel: Selection, rules: Rule[], anonymize: boolean) {
   });
 
   const secrets = new Map<string, { kinds: Set<string>; sessions: Set<string>; events: string[] }>();
-  for (const e of timeline) for (const fp of e.secret_fps ?? []) {
+  for (const e of timeline) for (const [fp, kinds] of (e.secret_fps ?? []).map((v) => fpKinds(v, e.secret_kinds))) {
     const s = secrets.get(fp) ?? { kinds: new Set(), sessions: new Set(), events: [] };
-    e.secret_kinds?.forEach((k) => s.kinds.add(k));
+    kinds.forEach((k) => s.kinds.add(k));
     s.sessions.add(e.session_id);
     s.events.push(e.id);
     secrets.set(fp, s);
@@ -96,6 +96,14 @@ function build(db: Db, sel: Selection, rules: Rule[], anonymize: boolean) {
   // The chain head the pack was built at (ADR 0015): `verify --head` later shows the index still holds it. null on an
   // index from before the chain, opened read-only so never upgraded.
   const chained = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'chain'").get();
+  // The last run that evaluated every source of these sessions: a run's scope is `agent:root` (scan.ts), so a session
+  // file is in it when `agent:file` sits under one. An older run (no scope) never matches, as in Store.lastRuleRun.
+  const scoped = db.prepare("SELECT 1 FROM pragma_table_info('rule_runs') WHERE name = 'scope'").get();
+  const sources = db.prepare(`SELECT DISTINCT s.agent || ':' || e.source_file AS v FROM events e JOIN sessions s
+    ON s.session_id = e.session_id WHERE e.session_id ${IN}`).all(ids).map((r) => String(r.v));
+  const under = (v: string, scope: string) => v.startsWith(scope) && ["/", "\\"].includes(v[scope.length] ?? "");
+  const run = !scoped || !sources.length ? undefined : db.prepare("SELECT rule_set_hash, scope FROM rule_runs WHERE scope IS NOT NULL ORDER BY id DESC")
+    .all().find((r) => sources.every((v) => (JSON.parse(String(r.scope)) as string[]).some((sc) => under(v, sc))));
   const head = chained ? ((db.prepare("SELECT hash FROM chain ORDER BY seq DESC LIMIT 1").get()?.hash as string | undefined) ?? GENESIS) : null;
 
   return {
@@ -104,7 +112,7 @@ function build(db: Db, sel: Selection, rules: Rule[], anonymize: boolean) {
     selected: { kind: sel.kind, id: sel.id },
     anonymized: anonymize,
     index_head: head,
-    rule_set_hash: (db.prepare("SELECT rule_set_hash FROM rule_runs ORDER BY id DESC LIMIT 1").get()?.rule_set_hash as string | undefined) ?? null,
+    rule_set_hash: run ? String(run.rule_set_hash) : null,
     rules: rulesUsed,
     sessions,
     counts: {

@@ -13,6 +13,7 @@ import type { Pack } from "../../src/incident/pack.ts";
 import { runScan } from "../../src/scan.ts";
 import { verifyChain } from "../../src/store/chain.ts";
 import { openReadOnly } from "../../src/store/index.ts";
+import { open } from "../../src/store/sqlite.ts";
 
 const base = mkdtempSync(join(tmpdir(), "rh-incident-"));
 afterAll(() => rmSync(base, { recursive: true, force: true }));
@@ -198,5 +199,17 @@ describe("incident", () => {
     expect(p.sessions[0]!.archived).toBe(true);
     expect(p.provenance[0]!.gone_at).not.toBeNull();
     expect(p.counts.events).toBe(readPack(first).counts.events);
+  });
+
+  test("rule_set_hash is the last run that scanned the session's scope, not another root's newer run", async () => {
+    const mine = readPack(first).rule_set_hash;
+    expect(mine).toMatch(/^[0-9a-f]{64}$/);
+    const w = open(db);
+    w.prepare("INSERT INTO rule_runs (rule_set_hash, started_at, finished_at, events, findings, scope) VALUES (?, ?, ?, 0, 0, ?)")
+      .run("other", ts(1), ts(2), JSON.stringify(["codex:/elsewhere"]));
+    w.close();
+    const d = fresh();
+    expect(await cli(A, "--out", d)).toBe(0);
+    expect(readPack(d).rule_set_hash).toBe(mine);
   });
 });

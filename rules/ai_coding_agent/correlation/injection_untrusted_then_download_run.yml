@@ -1,0 +1,58 @@
+title: Untrusted content read, then a downloaded file run
+id: aae00ee9-8b4a-43f2-b2f6-45c6cdd51c4c
+name: injection_untrusted_then_download_run
+author: Raman Kumar
+status: experimental
+description: >-
+  Within one session and ten minutes, the agent took in content it did not write (a web page or search, an MCP tool
+  result, a GitHub issue, PR or repo view through gh) and then ran a command that downloads a file and runs it
+  (exec_download_then_run). The shape of an indirect prompt injection: text from outside tells the agent to fetch and
+  run something. Main agent and sub-agents count as one session. The untrusted step is untrusted_content_received.
+tags:
+  - attack.execution
+  - attack.t1059
+  - attack.t1105
+  - owasp_agentic.asi01
+  - owasp_agentic.asi05
+correlation:
+  type: temporal_ordered
+  rules:
+    - untrusted_content_received
+    - exec_download_then_run
+  group-by:
+    - session_id
+  timespan: 10m
+falsepositives:
+  - Following a vendor's install page the user asked for (read the docs, then run the installer)
+level: medium
+x-retrohound:
+  lane: hunt
+---
+title: Helper, content from outside the project entered the session
+id: 2a03d99c-29d1-43a2-a602-10295afb8d5f
+name: untrusted_content_received
+author: Raman Kumar
+description: >-
+  Silenced step one of the injection_untrusted_then_* correlations. WebFetch or an MCP call with a URL (web_request),
+  WebSearch, any other MCP call, or a gh command that prints issue, PR, release or repo text. A blocked or failed call
+  brought nothing in. Shell downloads (curl, wget) are left out: piped to a shell they are the risky step itself. Not
+  covered: a README or instruction file read from a just-cloned repo (needs a path link between the clone and the read).
+logsource:
+  product: ai_coding_agent
+detection:
+  selection_web:
+    category: web_request
+  selection_search:
+    category: tool_call
+    tool_name: WebSearch
+  selection_mcp:
+    category: mcp
+  selection_gh:
+    category: process_creation
+    command_line|re|i: '(?:^|[\s;&|(`])gh\s{1,5}(?:(?:issue|pr)\s{1,5}(?:view|list|diff)|(?:repo|release)\s{1,5}view|api\s{1,5}[^\s;&|]{0,200}(?:issues|pulls|comments|discussions|readme|contents))\b'
+  filter_failed:
+    outcome:
+      - blocked
+      - error
+  condition: 1 of selection_* and not filter_failed
+level: informational

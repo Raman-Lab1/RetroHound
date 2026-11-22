@@ -116,6 +116,20 @@ describe("runScan", () => {
     expect(warm.findings).toEqual(first.findings);
   });
 
+  test("--mask-entropy re-parses every file when turned on, masks the token in the index, and is off again after", async () => {
+    const token = "aB3dE5gH7jK9mN1p" + "Q2rS4tU6vW8xY0zC"; // defanged placeholder
+    appendFileSync(join(root, "projects", "-home-x-acme", "s1.jsonl"), JSON.stringify(cmd("s1", 5, { message: { content: [
+      { type: "tool_use", id: "te", name: "Bash", input: { command: `curl -H "X-Api: ${token}" https://example.invalid` } }] } })) + "\n");
+    await runScan(opts);
+    const on = await runScan({ ...opts, maskEntropy: true });
+    expect(on.scan.files).toMatchObject({ indexed: 3, skipped: 0 });
+    const db = openReadOnly(opts.dbPath!);
+    const row = db.prepare("SELECT command_line, secret_kinds FROM events WHERE command_line LIKE '%X-Api%'").get();
+    db.close();
+    expect(row).toEqual({ command_line: 'curl -H "X-Api: …[masked]" https://example.invalid', secret_kinds: '["high_entropy"]' });
+    expect((await runScan(opts)).scan.files).toMatchObject({ indexed: 3 }); // off again: the plain parse comes back
+  });
+
   test("a changed file re-evaluates its whole session", async () => {
     await runScan(opts);
     appendFileSync(join(root, "projects", "-home-x-acme", "s1.jsonl"), JSON.stringify(cmd("s1", 5)) + "\n");

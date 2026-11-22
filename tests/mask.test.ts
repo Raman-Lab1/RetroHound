@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { createHash } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
+import { createHmac } from "node:crypto";
+import { mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { mask, scrubHome, secretFingerprints, secretKinds } from "../src/normalize/mask.ts";
+import { fpKinds, mask, readKey, scrubHome, secretFingerprints, secretKinds, setMaskEntropy } from "../src/normalize/mask.ts";
 
 // Defanged placeholders, built by concatenation so no secret-shaped literal lands in the repo.
 const BODY = "A1b2C3d4E5".repeat(4);
@@ -160,9 +161,33 @@ describe("secretKinds", () => {
 
 describe("secretFingerprints", () => {
   const key = "sk" + "-ant-" + BODY;
-  const fp = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 16);
+  const keyFile = join(homedir(), ".retrohound", "fp.key"); // HOME is a temp dir (tests/preload.ts)
+  const fp = (s: string) => createHmac("sha256", readFileSync(keyFile)).update(s).digest("hex").slice(0, 16);
 
-  test("is the first 16 hex of the sha256 of the token", () => expect(secretFingerprints(key)).toEqual([fp(key)]));
+  test("is kind/first 16 hex of the HMAC-SHA256 of the token under the per-install key", () => {
+    expect(secretFingerprints(key)).toEqual([`sk_key/${fp(key)}`]);
+    expect(statSync(keyFile).mode & 0o777).toBe(0o600);
+    expect(statSync(join(homedir(), ".retrohound")).mode & 0o777).toBe(0o700);
+    expect(fpKinds(secretFingerprints(key)[0]!, ["jwt"])).toEqual([fp(key), ["sk_key"]]);
+    expect(fpKinds("0123456789abcdef", ["jwt"])).toEqual(["0123456789abcdef", ["jwt"]]); // an index from before 0.3.2
+    expect(fpKinds("0123456789abcdef")).toEqual(["0123456789abcdef", []]);
+  });
+  test("the mask leaves every kind/fp pair alone", () => {
+    for (const [kind, token] of STRONG) expect(mask(`${kind}/${fp(token)}`)).toBe(`${kind}/${fp(token)}`);
+  });
+  test("a token also matched by bearer_token keeps its specific kind", () => {
+    expect(secretFingerprints("Bearer " + key)).toEqual([`sk_key/${fp(key)}`]);
+  });
+  test("the key is made once, 32 bytes, and a symlink or a short file is refused", () => {
+    const d = mkdtempSync(join(tmpdir(), "rh-key-"));
+    const k = readKey(join(d, "k"));
+    expect(k).toHaveLength(32);
+    expect(readKey(join(d, "k"))).toEqual(k);
+    symlinkSync(join(d, "k"), join(d, "link"));
+    expect(() => readKey(join(d, "link"))).toThrow("symlink");
+    writeFileSync(join(d, "short"), "x");
+    expect(() => readKey(join(d, "short"))).toThrow("32-byte");
+  });
   test("one secret typed many times is one fingerprint", () => {
     expect(secretFingerprints(`${key} x ${key} y ${key}`)).toHaveLength(1);
   });
@@ -178,6 +203,47 @@ describe("secretFingerprints", () => {
   });
   test.each(MASK_ONLY)("never for mask-only %s", (plain) => expect(secretFingerprints(plain)).toEqual([]));
   test.each(NEGATIVE)("none for %s", (s) => expect(secretFingerprints(s)).toEqual([]));
+});
+
+describe("--mask-entropy (opt-in)", () => {
+  const PLACEHOLDER = "aB3dE5gH7jK9mN1p" + "Q2rS4tU6vW8xY0zC"; // 32 distinct characters, defanged
+  const BENIGN = [
+    ...NEGATIVE,
+    "550e8400e29b41d4a716446655440000550e8400", // hex, no case mix
+    "-Users-ramank029-Desktop-RetroHound-worktrees", // a Claude project dir name
+    "getUserAccountSettingsForWorkspaceV2Handler", // a long identifier
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1a", // base64 padding run
+  ];
+  const on = <T>(f: () => T): T => {
+    setMaskEntropy(true);
+    try {
+      return f();
+    } finally {
+      setMaskEntropy(false);
+    }
+  };
+
+  test("off by default: an unnamed placeholder key is left alone", () => {
+    expect(mask(`token ${PLACEHOLDER}`)).toBe(`token ${PLACEHOLDER}`);
+    expect(secretKinds(PLACEHOLDER)).toEqual([]);
+  });
+  test("on: an unnamed placeholder key is masked and flagged high_entropy, idempotently", () => on(() => {
+    expect(mask(`token ${PLACEHOLDER} done`)).toBe("token …[masked] done");
+    expect(mask(mask(PLACEHOLDER))).toBe("…[masked]");
+    expect(secretKinds(`x=${PLACEHOLDER}`)).toEqual(["high_entropy"]);
+  }));
+  test("on: a named secret keeps its own kind, not high_entropy too", () => on(() => {
+    expect(secretKinds("gh" + "p_" + PLACEHOLDER)).toEqual(["github_token"]);
+  }));
+  test.each(BENIGN)("on: hashes, UUIDs and identifiers stay: %s", (s) => on(() => {
+    expect(secretKinds(s)).not.toContain("high_entropy");
+    expect(mask(s)).not.toContain("…[masked]");
+  }));
+  test("on: linear on a long run", () => on(() => {
+    const t = performance.now();
+    mask("a".repeat(200_000) + " " + "aB3-".repeat(50_000));
+    expect(performance.now() - t).toBeLessThan(1000);
+  }));
 });
 
 describe("global regex state", () => {

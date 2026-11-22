@@ -32,7 +32,7 @@ import { basename, dirname, join, resolve } from "node:path";
 
 type ScanFlags = {
   since?: string; agent: string; project?: string; rules: string; extraRules?: string[]; level?: string; format: string;
-  index: boolean; failOn?: string; db?: string; root?: string; ignore?: string;
+  index: boolean; failOn?: string; db?: string; root?: string; ignore?: string; maskEntropy?: boolean;
   report?: string | false; // undefined: next to the index; false: --no-report
 };
 
@@ -53,7 +53,7 @@ async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
   }
   const opts: ScanOptions = {
     agent, root: f.root, dbPath: f.db, rulesDir: f.rules, extraRules: f.extraRules, project: f.project, level, noIndex: !f.index,
-    since: f.since ? parseSince(f.since) : undefined, ignore: f.ignore,
+    since: f.since ? parseSince(f.since) : undefined, ignore: f.ignore, maskEntropy: f.maskEntropy,
   };
   let rejected = 0;
   const report = await runScan({ ...opts, onRejected: (r) => (rejected = r.length) });
@@ -138,6 +138,7 @@ export function buildProgram(io: IO, setCode: (n: number) => void): Command {
     .option("--db <path>", "index database", defaultDbPath())
     .option("--root <dir>", "the agent's data dir: Claude config dir or its projects dir (default $CLAUDE_CONFIG_DIR or ~/.claude), $CODEX_HOME or ~/.codex, ~/.gemini/antigravity-cli")
     .option("--ignore <file>", "ignore file (default ~/.retrohound/ignore.yml; a repo's own file is only read when passed here)")
+    .option("--mask-entropy", "also mask and flag (secret kind high_entropy) unnamed random-looking strings; noisy, off by default")
     .action((f: ScanFlags) => run(() => scanCommand(f, io)));
 
   const rules = program.command("rules").description("Inspect the loaded detection rules");

@@ -6,7 +6,7 @@ import { loadIgnore, NO_IGNORE, type Ignore } from "../suppress.ts";
 import type { Rule } from "../engine/load.ts";
 import { AGENTS, type Agent } from "../hooks/agents.ts";
 import { mask } from "../normalize/mask.ts";
-import { install, InstallUsageError, settingsPath, status, uninstall, type InstallOpts, type Scope } from "../hooks/install.ts";
+import { install, InstallUsageError, scopesFor, settingsPath, status, uninstall, type InstallOpts } from "../hooks/install.ts";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
@@ -17,7 +17,7 @@ type ManageFlags = { agent?: string; mode?: string; scope: string; settings?: st
 
 function target(f: ManageFlags): { agent: Agent; path: string } {
   const agent = oneOf("agent", f.agent ?? "claude_code", AGENTS);
-  const scope = oneOf<Scope>("scope", f.scope, agent === "claude_code" ? ["user", "project", "local"] : ["user", "project"]);
+  const scope = oneOf("scope", f.scope, scopesFor(agent));
   return { agent, path: f.settings ? resolve(f.settings) : settingsPath(scope, undefined, undefined, agent) };
 }
 
