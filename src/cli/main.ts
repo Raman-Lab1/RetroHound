@@ -91,7 +91,7 @@ async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
 /** The hook log, rules caches and fingerprint key in the data dir; only regular files by those names, never a symlink or anything else. */
 export function dataFiles(dir = dirname(defaultLogPath())): string[] {
   if (!existsSync(dir)) return [];
-  return readdirSync(dir).filter((n) => n === "hook-log.jsonl" || n === "fp.key" || /^rules-cache-[0-9a-f]+\.json$/.test(n))
+  return readdirSync(dir).filter((n) => n === "hook-log.jsonl" || /^fp\.key(\.\d+\.tmp)?$/.test(n) || /^rules-cache-[0-9a-f]+\.json$/.test(n))
     .map((n) => join(dir, n)).filter((p) => lstatSync(p).isFile());
 }
 
