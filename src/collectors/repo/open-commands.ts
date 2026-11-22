@@ -37,11 +37,15 @@ export function openCommands(rel: string, text: string): [string, string][] {
   if (rel === ".vscode/tasks.json") {
     const tasks = (parseJsonc(text) as { tasks?: unknown } | undefined)?.tasks;
     // only tasks that start on folder open: the others run when the user picks them
-    return (Array.isArray(tasks) ? tasks : []).flatMap((t: { command?: unknown; args?: unknown; runOptions?: { runOn?: unknown } }) => {
-      if (t?.runOptions?.runOn !== "folderOpen" || typeof t.command !== "string") return [];
+    type Cmd = { command?: unknown; args?: unknown };
+    const one = (t: Cmd | undefined): [string, string][] => {
+      if (typeof t?.command !== "string") return [];
       const args = (Array.isArray(t.args) ? t.args : []).map((a) => (typeof a === "string" ? a : (a as { value?: unknown })?.value)).filter((a) => typeof a === "string");
-      return [["task", [t.command, ...args].join(" ")] as [string, string]];
-    });
+      return [["task", [t.command, ...args].join(" ")]];
+    };
+    // platform overrides run on that OS too; `dependsOn` tasks are not followed
+    return (Array.isArray(tasks) ? tasks : []).flatMap((t: Cmd & { runOptions?: { runOn?: unknown }; osx?: Cmd; linux?: Cmd; windows?: Cmd }) =>
+      t?.runOptions?.runOn === "folderOpen" ? [t, t.osx, t.linux, t.windows].flatMap(one) : []);
   }
   return [];
 }

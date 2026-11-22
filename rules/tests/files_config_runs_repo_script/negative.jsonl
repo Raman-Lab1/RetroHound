@@ -3,3 +3,6 @@
 {"category":"process_creation","tool_name":"open:envrc","command_line":"use flake"}
 {"category":"process_creation","tool_name":"open:hook:SessionStart","command_line":"node /usr/local/lib/tool.js"}
 {"category":"process_creation","tool_name":"Bash","command_line":"bash ./scripts/setup.sh"}
+{"category":"process_creation","tool_name":"open:envrc","command_line":"PATH_add ./bin"}
+{"category":"process_creation","tool_name":"open:envrc","command_line":"dotenv ./.env"}
+{"category":"process_creation","tool_name":"open:husky","command_line":"cd ../other && npm test"}

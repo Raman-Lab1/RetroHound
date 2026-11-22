@@ -10,7 +10,8 @@ description: >
   (`open:devcontainer:<key>`), a husky hook (`open:husky`), a line of .envrc (`open:envrc`) or a VS Code task set to
   run on folder open (`open:task`). The script is whatever the repo's author put there, run with your rights when you open the
   folder, create the container, commit or `cd` in (the "config runs a repo script on open" supply-chain pattern). Commands
-  that call only tools on PATH, and `./node_modules/.bin/` binaries, are not matched. Manual VS Code tasks are not read.
+  that call only tools on PATH, and `./node_modules/.bin/` binaries, are not matched. Manual VS Code tasks are not read, and `dependsOn` tasks are not followed. A hook that runs an interpreter on a `.claude/` path is
+  also reported by control_plane_hook_repo_script; the two findings may overlap.
 level: medium
 tags: [attack.execution, attack.persistence, attack.t1059, attack.t1195.002, owasp_agentic.asi05, owasp_agentic.asi04]
 falsepositives:
@@ -21,7 +22,8 @@ detection:
   selection_source:
     tool_name|startswith: 'open:'
   selection_script:
-    - command_line|re|i: '(?:^|[\s;&|(\x22\x27])(?:\.{1,2}/|\$\{?(?:claude_project_dir|containerworkspacefolder|workspacefolder|localworkspacefolder|pwd)\}?/)[\w@.-]'
+    # command position only: line start, after ; & | ( , or as the argument of source, `.`, exec or a shell. `PATH_add ./bin`, `dotenv ./.env`, `cd ../x` are data.
+    - command_line|re|i: '(?:^|[;&|(]\s*|\b(?:source|source_env|exec|bash|sh|zsh)\s+|\s\.\s+)[\x22\x27]?(?:\.{1,2}/|\$\{?(?:claude_project_dir|containerworkspacefolder|workspacefolder|localworkspacefolder|pwd)\}?/)[\w@.-]'
     - command_line|re|i: '\b(?:node|bun|deno|python3?|ruby|perl|pwsh|sh|bash|zsh)\s+(?:-[\w-]+\s+)?[\w@-][\w@./-]*\.(?:sh|bash|js|mjs|cjs|ts|py|rb|pl|ps1)\b'
   filter_node_modules_bin:
     command_line|re|i: '^(?:[^\s]+\s+)?\./node_modules/\.bin/'

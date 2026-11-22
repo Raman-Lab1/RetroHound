@@ -97,6 +97,18 @@ describe("preflight", () => {
     expect(hits.map((f) => f.events[0]!.command_line).sort()).toEqual(["./open.sh", "./scripts/stop.sh", "bash ./scripts/setup.sh", "node scripts/check.js", "source ./env.sh"]);
   });
 
+  test("benign .envrc/husky lines are not a script run; a folderOpen task's OS override is", () => {
+    const dir = tmp();
+    put(dir, {
+      ".envrc": "PATH_add ./bin\ndotenv ./.env",
+      ".husky/pre-commit": "cd ../other && npm test",
+      ".vscode/tasks.json": '{"tasks":[{"label":"a","command":"echo","runOptions":{"runOn":"folderOpen"},"osx":{"command":"./x.sh"}}]}',
+    });
+    const { report } = runPreflight(dir);
+    const hits = report.findings.filter((f) => report.rules.find((r) => r.id === f.rule_id)?.name === "files_config_runs_repo_script");
+    expect(hits.map((f) => f.events[0]!.command_line)).toEqual(["./x.sh"]);
+  });
+
   test("oversized instruction, config and hook-script files are a signal; package.json and normal sizes are not", () => {
     const dir = tmp();
     const big = "x".repeat(OVERSIZE_BYTES + 1);

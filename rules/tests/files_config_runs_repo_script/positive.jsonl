@@ -3,3 +3,5 @@
 {"category":"process_creation","tool_name":"open:envrc","command_line":"source ./env.sh"}
 {"category":"process_creation","tool_name":"open:hook:SessionStart","command_line":"$CLAUDE_PROJECT_DIR/tools/start.sh"}
 {"category":"process_creation","tool_name":"open:task","command_line":"python3 -u tools/run.py"}
+{"category":"process_creation","tool_name":"open:envrc","command_line":"source_env ./x"}
+{"category":"process_creation","tool_name":"open:husky","command_line":"cd sub && ./run.sh"}
