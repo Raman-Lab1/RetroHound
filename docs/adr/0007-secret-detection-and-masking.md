@@ -40,7 +40,11 @@ two separate pattern lists would drift apart.
 - One place to add a token type; detection and masking cannot drift.
 - Tests use defanged placeholder tokens per pattern (no real keys), a negative set (UUIDs, git SHAs, `$TOKEN`,
   `<your-key>`), and a check that no strong pattern appears in any snapshot or fixture.
-- Unnamed high-entropy strings in free text are a known gap.
+- Unnamed high-entropy strings in free text are a known gap by default. `scan --mask-entropy` (opt-in, 0.3.2) masks
+  any unnamed run of 32+ word characters that mixes upper case, lower case and digits at 4.5+ bits of Shannon entropy
+  per character, and adds the kind `high_entropy` (no fingerprint), so `secrets_literal_in_tool_input` fires on it.
+  Hex hashes and UUIDs never qualify; long random-looking identifiers and base64 blobs can, which is why it is off by
+  default and meant for hunting, not the hook. Turning it on or off re-parses every transcript still on disk.
 - Private IP addresses are not masked; `wrapped --anonymize` hides names for sharing.
 
 ## Amendment 2026-11-22: keyed fingerprints with their kind (0.3.2)

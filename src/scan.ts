@@ -9,7 +9,7 @@ import { coldStartCutoff, FIRST_SEEN_FIELDS, firstSeenOf, setFirstSeen, type Fir
 import { snapshotConfig } from "./footprint/snapshot.ts";
 import { type Rejection, type Rule } from "./engine/load.ts";
 import { loadSources, ruleSources } from "./cli/rules.ts";
-import { mask } from "./normalize/mask.ts";
+import { mask, maskEntropy, setMaskEntropy } from "./normalize/mask.ts";
 import { toStored } from "./normalize/stored.ts";
 import { LEVELS, type Finding, type Level, type ParsedFile, type RawEvent } from "./normalize/types.ts";
 import type { BlockedBreakdown, ReportRule, ScanReport } from "./outputs/report.ts";
@@ -33,6 +33,7 @@ export type ScanOptions = {
   level?: Level; // findings below it are left out
   ignore?: string; // --ignore file; else ~/.retrohound/ignore.yml (suppress.ts: a repo's own file is never implicit)
   noIndex?: boolean; // parse and evaluate everything, write nothing
+  maskEntropy?: boolean; // also mask and flag unnamed high-entropy strings (mask.ts); off by default, noisy
   onRejected?: (rejected: Rejection[]) => void; // called once with the rules the loader refused, so callers need not load them again
 };
 
@@ -217,7 +218,8 @@ async function indexAgent(c: Collector, store: Store, paths: string[], full: boo
     cache.set(path, parsed.events);
     return parsed;
   };
-  const index = await indexFiles(store, paths, parse, c.parserVersion);
+  // the stored text depends on --mask-entropy, so turning it on or off re-parses every file
+  const index = await indexFiles(store, paths, parse, c.parserVersion + (maskEntropy ? "+entropy" : ""));
   // A touched file dirties every group holding events of its sessions, so a session split over groups is re-read
   // whole: replaceFindings would otherwise swap its findings for those of a partial parse (0008).
   const held = new Set(full || !touched.size ? [] : store.sessionFiles([...touched]));
@@ -245,6 +247,7 @@ export const reportRule = (r: Rule): ReportRule => ({
 
 export async function runScan(opts: ScanOptions = {}): Promise<ScanReport> {
   const started_at = new Date().toISOString();
+  setMaskEntropy(Boolean(opts.maskEntropy));
   const all = opts.agent === "all";
   const one = COLLECTORS[opts.agent ?? "claude_code"];
   if (!all && !one) throw new Error(`unknown agent '${opts.agent}'`);
