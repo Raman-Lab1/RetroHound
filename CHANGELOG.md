@@ -5,13 +5,51 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-22
+
+### Added
+- Rules for cloud credential theft and cover-up:
+  - `secrets_cloud_metadata` and `secrets_cloud_metadata_web` (hunt): a command or web request to the instance metadata
+    service (169.254.169.254, fd00:ec2::254, metadata.google.internal, the ECS endpoint 169.254.170.2).
+  - `files_transcript_tamper_command` (enforce): deleting, moving away or truncating agent transcripts or history, or
+    `~/.retrohound`. A read-only grep/rg search of transcripts and an `mv` that restores one do not fire.
+  - `control_plane_transcript_retention_lowered` (enforce): agent settings that shorten transcript retention
+    (`cleanupPeriodDays` 0-9) or turn Codex history off. A settings Write that keeps or raises the current value passes.
+  - `control_plane_hook_self_removal` (enforce): the agent runs `retrohound hook uninstall`. A commit message, search
+    or PR body that only names the command does not fire.
+  - `secrets_recon_read_egress` (hunt): identity recon (`whoami`, `id`, `aws sts get-caller-identity` and similar),
+    then a secret-file read, then egress in one session within 1h.
+- Indirect prompt injection rules (hunt): `injection_untrusted_then_download_run`, `_pipe_to_shell`,
+  `_package_install` and `_secret_egress` fire when web, search, MCP or `gh` issue/PR text enters a session and a risky
+  action follows within 10 minutes. `control_plane_skill_package_install` flags a package install made while a skill
+  or plugin was in charge.
+- `scan --mask-entropy` (opt-in) also masks unnamed high-entropy strings as secret kind `high_entropy`. It is noisy:
+  long random-looking ids and base64 blobs can match.
+- `preflight` warns (stderr, and `preflight.unsafe_hooks` in JSON) when an installed RetroHound hook runs a runtime or
+  entry path that others can modify, the same check `hook status` runs.
+- A seeded fuzz test for every transcript parser, and a test that stops a placeholder tarball SHA-256 from shipping in
+  the Homebrew formula or the Velociraptor artifact.
+- SECURITY.md: threat model and limits (same-user tampering is detected, not prevented) and the advisory policy.
+  Private vulnerability reporting is on. CONTRIBUTING.md: how to donate a reduced, defanged sample transcript.
+
 ### Changed
+- Secret fingerprints are keyed per install: HMAC-SHA256 under a random key in `~/.retrohound/fp.key` (mode 0600).
+  A guessed weak secret can no longer be confirmed from an index or incident pack, and fingerprints no longer match
+  across machines. Each entry is now `kind/fingerprint`, so rotate lists show each secret's own kind. Parser versions
+  were bumped (Claude Code v4, Antigravity v5, Codex v8), so the next scan re-parses transcripts still on disk.
+- In the live hook, a full-file Write of agent settings that holds a hooks section trips
+  `control_plane_agent_config_risky_write`, so an agent cannot drop the hook entry silently.
+- README rewritten: shorter, plainer, with sections for people who code with agents and for security teams, and how
+  to check the package's provenance (`npm audit signatures`).
+- Docs: `event_count` suffix-window semantics for `lt`/`lte`/`eq`/`neq`; NDJSON keeps absolute paths on purpose.
+- The Homebrew formula and the Velociraptor artifact pin the latest published tarball; they move to a new version in
+  the commit after it is on npm, with its real hash.
 - The Homebrew formula and the Velociraptor artifact carry the SHA-256 of the 0.3.1 tarball.
 - Docs: `group-by: [project_path]` correlations and the `windash` modifier are documented; ADR 0001 notes that
   `.jsonl.zst` needs Node 22.15; ADR 0005 amended (older sub-agent layouts are parsed); performance figures re-run.
 - Index schema migration 5: rule runs are recorded per scope (agent plus root). After the upgrade each scope is
   re-evaluated once in full.
-- Codex parser `codex/v7`: event ids use the rollout's file name, so every Codex file is re-parsed once. Sessions that
+- Codex parser: event ids use the rollout's file name, so every Codex file is re-parsed once. Sessions that
   `codex archive` moved before this version keep their duplicate events.
 - Hook commands in exec form (`command` plus `args`) are read with their arguments. On the first scan after the upgrade
   the footprint shows each exec-form hook (RetroHound's own included) as removed and added once.
@@ -24,6 +62,9 @@ and versions follow [Semantic Versioning](https://semver.org/).
   Antigravity (`gcp.gemini`).
 
 ### Fixed
+- `exec_decode_to_shell` (enforce) matched an unrelated later ` -enc ` after `powershell`, and missed `-enc` after a
+  colon-separated or quoted flag value (`-ExecutionPolicy:Bypass`, `-WindowStyle "Hidden"`).
+- An incident pack's `rule_set_hash` came from the newest scan of any root, not the one that covered its sessions.
 - `hook install` failed when the settings folder did not exist yet (project scope in most repos); it now creates it.
   Codex user scope honours `CODEX_HOME`. Malformed `hooks` values and non-regular settings files are refused instead
   of being rewritten or hanging. `hook run` creates `~/.retrohound` with mode 0700.
