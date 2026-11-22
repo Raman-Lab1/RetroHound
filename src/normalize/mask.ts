@@ -53,15 +53,37 @@ const PATTERNS: { name: string; strong: boolean; re: RegExp }[] = [
 ];
 const STRONG = PATTERNS.filter((p) => p.strong);
 
-/** Masks every pattern, keeping a short type prefix. Idempotent. */
-export function mask(s: string): string {
+// Opt-in (`scan --mask-entropy`, ADR 0007): an unnamed run of 32+ word characters holding upper case, lower case and a
+// digit, at 4.5+ bits of Shannon entropy per character. Hex hashes (at most 4 bits) and UUIDs (hex) never qualify.
+// ponytail: plain threshold, no context; a long random-looking identifier or a base64 blob is masked too (the FP risk).
+const ENTROPY = /(?<![\w-])[\w-]{32,}(?![\w-])/g;
+export let maskEntropy = false;
+export const setMaskEntropy = (on: boolean) => void (maskEntropy = on);
+function highEntropy(t: string): boolean {
+  if (!/[a-z]/.test(t) || !/[A-Z]/.test(t) || !/\d/.test(t)) return false;
+  const counts = new Map<string, number>();
+  for (const c of t) counts.set(c, (counts.get(c) ?? 0) + 1);
+  let bits = 0;
+  for (const n of counts.values()) bits -= (n / t.length) * Math.log2(n / t.length);
+  return bits >= 4.5;
+}
+
+function named(s: string): string {
   for (const { re } of PATTERNS) s = s.replace(re, `$1${MARK}`);
   return s;
 }
 
-/** Names of the strong patterns in `s`, in table order. Never values. */
+/** Masks every pattern, keeping a short type prefix, and unnamed high-entropy tokens when opted in. Idempotent. */
+export function mask(s: string): string {
+  s = named(s);
+  return maskEntropy ? s.replace(ENTROPY, (t) => (highEntropy(t) ? MARK : t)) : s;
+}
+
+/** Names of the strong patterns in `s`, in table order, then `high_entropy` when opted in and an unnamed token
+ * qualifies. Never values. */
 export function secretKinds(s: string): string[] {
-  return STRONG.filter(({ re }) => s.search(re) >= 0).map(({ name }) => name);
+  const kinds = STRONG.filter(({ re }) => s.search(re) >= 0).map(({ name }) => name);
+  return maskEntropy && [...named(s).matchAll(ENTROPY)].some(([t]) => highEntropy(t)) ? [...kinds, "high_entropy"] : kinds;
 }
 
 // A token is the same secret with or without `Bearer `, and a key block the same in raw or JSON-escaped text.

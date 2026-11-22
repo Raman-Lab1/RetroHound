@@ -3,7 +3,7 @@ import { createHmac } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { mask, readKey, scrubHome, secretFingerprints, secretKinds, splitFp } from "../src/normalize/mask.ts";
+import { mask, readKey, scrubHome, secretFingerprints, secretKinds, setMaskEntropy, splitFp } from "../src/normalize/mask.ts";
 
 // Defanged placeholders, built by concatenation so no secret-shaped literal lands in the repo.
 const BODY = "A1b2C3d4E5".repeat(4);
@@ -202,6 +202,47 @@ describe("secretFingerprints", () => {
   });
   test.each(MASK_ONLY)("never for mask-only %s", (plain) => expect(secretFingerprints(plain)).toEqual([]));
   test.each(NEGATIVE)("none for %s", (s) => expect(secretFingerprints(s)).toEqual([]));
+});
+
+describe("--mask-entropy (opt-in)", () => {
+  const PLACEHOLDER = "aB3dE5gH7jK9mN1p" + "Q2rS4tU6vW8xY0zC"; // 32 distinct characters, defanged
+  const BENIGN = [
+    ...NEGATIVE,
+    "550e8400e29b41d4a716446655440000550e8400", // hex, no case mix
+    "-Users-ramank029-Desktop-RetroHound-worktrees", // a Claude project dir name
+    "getUserAccountSettingsForWorkspaceV2Handler", // a long identifier
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA1a", // base64 padding run
+  ];
+  const on = <T>(f: () => T): T => {
+    setMaskEntropy(true);
+    try {
+      return f();
+    } finally {
+      setMaskEntropy(false);
+    }
+  };
+
+  test("off by default: an unnamed placeholder key is left alone", () => {
+    expect(mask(`token ${PLACEHOLDER}`)).toBe(`token ${PLACEHOLDER}`);
+    expect(secretKinds(PLACEHOLDER)).toEqual([]);
+  });
+  test("on: an unnamed placeholder key is masked and flagged high_entropy, idempotently", () => on(() => {
+    expect(mask(`token ${PLACEHOLDER} done`)).toBe("token …[masked] done");
+    expect(mask(mask(PLACEHOLDER))).toBe("…[masked]");
+    expect(secretKinds(`x=${PLACEHOLDER}`)).toEqual(["high_entropy"]);
+  }));
+  test("on: a named secret keeps its own kind, not high_entropy too", () => on(() => {
+    expect(secretKinds("gh" + "p_" + PLACEHOLDER)).toEqual(["github_token"]);
+  }));
+  test.each(BENIGN)("on: hashes, UUIDs and identifiers stay: %s", (s) => on(() => {
+    expect(secretKinds(s)).not.toContain("high_entropy");
+    expect(mask(s)).not.toContain("…[masked]");
+  }));
+  test("on: linear on a long run", () => on(() => {
+    const t = performance.now();
+    mask("a".repeat(200_000) + " " + "aB3-".repeat(50_000));
+    expect(performance.now() - t).toBeLessThan(1000);
+  }));
 });
 
 describe("global regex state", () => {

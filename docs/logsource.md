@@ -58,7 +58,7 @@ absent, not `[]`, when empty, so `|exists` is true only when something was found
 | `denial_category` | Claude Code's classifier category, when it gave one (for example `credential_materialization`). |
 | `permission_mode`, `prompt_source`, `entrypoint` | Carried-forward mode; `typed`/`sdk`/`system`; `cli`/`claude-desktop`. |
 | `attribution` | `skill:<x>`, `mcp:<server>` or `plugin:<x>`. |
-| `secret_kinds` | Names of secret patterns found in tool input or content. Never values. |
+| `secret_kinds` | Names of secret patterns found in tool input or content (`high_entropy` with `scan --mask-entropy`). Never values. |
 | `result_secret_kinds` | Same, in the tool output. |
 | `secret_fps` | `kind/fp` per strong secret: fp is the first 16 hex of a per-install HMAC-SHA256 (ADR 0007), to group "rotate these". |
 | `text_excerpt` | Masked, at most 500 chars. |
