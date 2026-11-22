@@ -240,6 +240,17 @@ describe("seeded fuzz: malformed lines never escape a parser", () => {
   const strings = (v: unknown): string[] =>
     typeof v === "string" ? [v] : v !== null && typeof v === "object" ? Object.values(v).flatMap(strings) : [];
 
+  // A throw on a well-formed line is counted as malformed, which the fuzz bound below would let pass: so each clean line alone must parse.
+  test.each(Object.keys(SEEDS))("%s: every clean seed line parses with malformed == 0", async (agent) => {
+    const { file, lines } = SEEDS[agent]!;
+    const path = join(dir, "clean", file);
+    mkdirSync(dirname(path), { recursive: true });
+    for (const [i, l] of lines.entries()) {
+      writeFileSync(path, JSON.stringify(l) + "\n");
+      expect({ agent, line: i, malformed: (await COLLECTORS[agent]!.parseFile(path)).stats.malformed }).toEqual({ agent, line: i, malformed: 0 });
+    }
+  });
+
   test.each(Object.keys(SEEDS))("%s", async (agent) => {
     const { file, lines } = SEEDS[agent]!;
     const c = COLLECTORS[agent]!;
