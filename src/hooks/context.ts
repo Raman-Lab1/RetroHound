@@ -61,14 +61,17 @@ const olds = (input: string | undefined): string[] => {
   }
 };
 
-/** The event with IN_HOOKS in its content when an Edit/MultiEdit old_string overlaps a hook section of the current file. */
+/**
+ * The event with IN_HOOKS in its content when an Edit/MultiEdit old_string overlaps a hook section of the current file, or
+ * a Write replaces a file that has one (a Write that keeps its hooks fires on `"hooks"` anyway; one that drops them would not).
+ */
 export function markHooksEdit(e: RawEvent): RawEvent {
-  if (e.category !== "file_event" || !e.target_path || !CONFIG.test(e.target_path) || !/^(?:Multi)?Edit$/.test(e.tool_name ?? "")) return e;
+  if (e.category !== "file_event" || !e.target_path || !CONFIG.test(e.target_path) || !/^(?:(?:Multi)?Edit|Write)$/.test(e.tool_name ?? "")) return e;
   try {
     if (statSync(e.target_path).size > MAX) return e;
     const text = readFileSync(e.target_path, "utf8");
     const spans = hookSpans(text, e.target_path.toLowerCase().endsWith(".toml"));
-    const hit = olds(e.tool_input).some((o) => {
+    const hit = e.tool_name === "Write" ? spans.length > 0 : olds(e.tool_input).some((o) => {
       for (let at = text.indexOf(o); at >= 0; at = text.indexOf(o, at + 1)) if (spans.some(([s, end]) => at < end && at + o.length > s)) return true;
       return false;
     });

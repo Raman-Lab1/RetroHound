@@ -59,6 +59,12 @@ describe("old_string inside a hook section", () => {
     expect(edit(big, "npm test").rule).toBeUndefined();
     expect(edit(put("e/notes.json", JSON_CFG), "npm test").rule).toBeUndefined();
   });
+  test("a Write that drops the hooks entry is marked; a Write of a file without hooks is not", () => {
+    const write = (file_path: string) => runHook(JSON.stringify({ session_id: "s", cwd: dir, tool_name: "Write", tool_use_id: "t",
+      tool_input: { file_path, content: `{"model": "opus"}` } }), "block", rules, log).rule;
+    expect(write(put("w/.claude/settings.json", JSON_CFG))).toBe("control_plane_agent_config_risky_write");
+    expect(write(put("x/.claude/settings.json", `{"model": "sonnet"}`))).toBeUndefined();
+  });
   test("hookSpans closes a nested value and skips braces inside strings", () => {
     const t = `{"hooks": {"a": "}"}, "z": 1}`;
     const [s, e] = hookSpans(t, false)[0]!;
