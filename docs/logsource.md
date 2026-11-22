@@ -179,6 +179,13 @@ the `correlation:` block (Sigma) or at the top level of the document; the block 
   correlation (`bad-x-retrohound` there). It is the only known value; anything else rejects the rule.
 - `event_count`: at most one finding per session per rule. `temporal_ordered`: order of `rules:`, non-strict, so one
   event can satisfy consecutive steps; one finding per first-step event.
+- `event_count` uses suffix windows for every condition (owner decision A1, `eventCount` in `src/engine/correlate.ts`).
+  The group's matches are taken in order; each one anchors a window that runs forward to the last match still within
+  `timespan` (and `max_events_between`) of it. The first window, in anchor order, whose size meets the condition fires.
+  The last match always anchors a window of size 1, and when all k matches fall in one `timespan` the windows hold
+  k, k-1, ... 1. So with at least one match, `lt: N` (N > 1), `lte: N` (N >= 1) and `neq: N` (N != 1) always fire, and
+  `eq: N` fires whenever N is at most the largest window, not only when the group holds exactly N. A group with no
+  matches has no window and never fires, so "fewer than N" can never mean "none". Write "many" rules with `gt`/`gte`.
 - A missing or bad `ts` sorts first and never fits a window, so clock skew between streams can hide a match.
 - `aliases` and the `value_*` types are rejected.
 
