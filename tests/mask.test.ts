@@ -3,7 +3,7 @@ import { createHmac } from "node:crypto";
 import { mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { mask, readKey, scrubHome, secretFingerprints, secretKinds, setMaskEntropy, splitFp } from "../src/normalize/mask.ts";
+import { fpKinds, mask, readKey, scrubHome, secretFingerprints, secretKinds, setMaskEntropy } from "../src/normalize/mask.ts";
 
 // Defanged placeholders, built by concatenation so no secret-shaped literal lands in the repo.
 const BODY = "A1b2C3d4E5".repeat(4);
@@ -168,8 +168,9 @@ describe("secretFingerprints", () => {
     expect(secretFingerprints(key)).toEqual([`sk_key/${fp(key)}`]);
     expect(statSync(keyFile).mode & 0o777).toBe(0o600);
     expect(statSync(join(homedir(), ".retrohound")).mode & 0o777).toBe(0o700);
-    expect(splitFp(secretFingerprints(key)[0]!)).toEqual([fp(key), "sk_key"]);
-    expect(splitFp("0123456789abcdef")).toEqual(["0123456789abcdef", undefined]); // an index from before 0.3.2
+    expect(fpKinds(secretFingerprints(key)[0]!, ["jwt"])).toEqual([fp(key), ["sk_key"]]);
+    expect(fpKinds("0123456789abcdef", ["jwt"])).toEqual(["0123456789abcdef", ["jwt"]]); // an index from before 0.3.2
+    expect(fpKinds("0123456789abcdef")).toEqual(["0123456789abcdef", []]);
   });
   test("the mask leaves every kind/fp pair alone", () => {
     for (const [kind, token] of STRONG) expect(mask(`${kind}/${fp(token)}`)).toBe(`${kind}/${fp(token)}`);

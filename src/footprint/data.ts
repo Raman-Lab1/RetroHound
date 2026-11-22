@@ -2,7 +2,7 @@
 // incident pack, so archived sessions count (ADR 0008). Columns are named, never `*`; counting is SQL GROUP BY, so no
 // event list is loaded into JS. Every list is sorted and capped, and every string is masked again on the way out (0007).
 import type { Rule } from "../engine/load.ts";
-import { mask, splitFp } from "../normalize/mask.ts";
+import { fpKinds, mask } from "../normalize/mask.ts";
 import { LEVELS, type Level } from "../normalize/types.ts";
 import { GENESIS } from "../store/chain.ts";
 import type { Db, SqlValue } from "../store/sqlite.ts";
@@ -156,9 +156,10 @@ export function collectFootprint(db: Db, opts: { rules: Rule[]; retentionDays?: 
   for (const e of all<{ s: string; agent_id: string | null; ts: string; fps: string; kinds: string | null }>(
     "SELECT session_id AS s, agent_id, ts, secret_fps AS fps, secret_kinds AS kinds FROM events WHERE secret_fps IS NOT NULL",
   )) {
-    for (const [fp, kind] of (JSON.parse(e.fps) as string[]).map(splitFp)) {
+    const fallback = e.kinds ? (JSON.parse(e.kinds) as string[]) : [];
+    for (const [fp, kinds] of (JSON.parse(e.fps) as string[]).map((v) => fpKinds(v, fallback))) {
       const r = reach.get(fp) ?? { kinds: new Set(), sessions: new Set(), agents: new Set(), first: e.ts, last: e.ts };
-      for (const k of kind ? [kind] : e.kinds ? (JSON.parse(e.kinds) as string[]) : []) r.kinds.add(k);
+      for (const k of kinds) r.kinds.add(k);
       r.sessions.add(e.s);
       if (e.agent_id) r.agents.add(e.agent_id);
       if (e.ts < r.first) r.first = e.ts;

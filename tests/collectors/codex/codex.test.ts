@@ -331,7 +331,7 @@ describe("discover", () => {
   });
 
   test("collector shape", () => {
-    expect([codex.agent, codex.parserVersion]).toEqual(["codex", "codex/v7"]);
+    expect([codex.agent, codex.parserVersion]).toEqual(["codex", "codex/v8"]);
   });
 
   test("`codex archive` moving a rollout keeps its events: same ids, no duplicate rows", async () => {

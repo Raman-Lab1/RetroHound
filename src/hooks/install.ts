@@ -12,6 +12,8 @@ import type { Agent } from "./agents.ts";
 import type { Mode } from "./run.ts";
 
 export type Scope = "user" | "project" | "local";
+/** The settings scopes an agent has: only Claude Code has a `local` file. */
+export const scopesFor = (agent: Agent): Scope[] => (agent === "claude_code" ? ["user", "project", "local"] : ["user", "project"]);
 // Codex and Antigravity hook handlers take one shell command string; no args array is documented for either.
 export type Handler = { type: "command"; command: string; args?: string[]; timeout: number; onFailure?: "block" };
 type Json = Record<string, any>;

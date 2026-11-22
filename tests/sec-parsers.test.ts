@@ -245,7 +245,7 @@ describe("seeded fuzz: malformed lines never escape a parser", () => {
     const c = COLLECTORS[agent]!;
     const path = join(dir, file);
     mkdirSync(dirname(path), { recursive: true });
-    const r = rng(0x5eed + agent.length);
+    const r = rng(0x5eed + Object.keys(SEEDS).indexOf(agent)); // a seed per agent
     for (let round = 0; round < 150; round++) {
       // round 0 is the clean seed: it must give an event carrying the key, or the masking check below proves nothing
       const body = lines.map((l) => (round && r() < 0.5 ? mutate(l, r) : Buffer.from(JSON.stringify(l))));

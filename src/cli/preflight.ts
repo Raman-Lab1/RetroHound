@@ -1,7 +1,7 @@
 // `retrohound preflight [dir]`: scan a cloned repo's agent surface before opening it with a coding agent.
 import { statSync } from "node:fs";
 import { AGENTS } from "../hooks/agents.ts";
-import { settingsPath, status, type Finding as PathFinding } from "../hooks/install.ts";
+import { scopesFor, settingsPath, status, type Finding as PathFinding } from "../hooks/install.ts";
 import { mask } from "../normalize/mask.ts";
 import { LEVELS, type Level } from "../normalize/types.ts";
 import { maskDeep, toJson } from "../outputs/json.ts";
@@ -10,11 +10,9 @@ import { DEFAULT_RULES_DIR } from "../scan.ts";
 import { EXTRA_HELP, repeat } from "./rules.ts";
 import { oneOf, UsageError, type IO, type Registrar } from "./io.ts";
 
-const SCOPES = { claude_code: ["user", "project", "local"], codex: ["user", "project"], antigravity: ["user", "project"] } as const;
-
 /** Installed RetroHound hooks (yours, and this repo's project/local files) that run a path others can modify: `hook status`'s check. */
-export function unsafeHooks(dir: string, env: IO["env"]): { path: string; unsafe: PathFinding[] }[] {
-  return AGENTS.flatMap((agent) => SCOPES[agent].flatMap((scope) => {
+function unsafeHooks(dir: string, env: IO["env"]): { path: string; unsafe: PathFinding[] }[] {
+  return AGENTS.flatMap((agent) => scopesFor(agent).flatMap((scope) => {
     const path = settingsPath(scope, dir, env, agent);
     try {
       const unsafe = status(path, [], undefined, agent, DEFAULT_RULES_DIR).unsafe ?? [];
