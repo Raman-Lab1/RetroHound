@@ -18,7 +18,8 @@ Evidence of what an agent did disappears unless something keeps it.
 
 ## Decision
 - **Append-only:** indexing never deletes events because a source file disappeared; it sets `files_indexed.gone_at`.
-  RetroHound never modifies or deletes transcripts.
+  RetroHound never modifies or deletes transcripts. A session split over files with one gone is re-evaluated from the
+  remaining files plus the stored rows of the gone ones (masked, only ids the parse lacks), so its findings survive.
 - `files_indexed` records each file's SHA-256 (recomputed when size or mtime change), `first_seen` and `last_seen`.
 - Changed files are re-parsed whole and upserted by event id (0002). Set-aside copies (`.superseded-*`,
   `.orphaned-*`) map onto the original's events, so a trimmed rewrite cannot drop indexed events. Only a parser

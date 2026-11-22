@@ -5,6 +5,7 @@
 // Rows from Node have a null prototype: read fields, don't compare whole rows.
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 
 export type SqlValue = string | number | bigint | Uint8Array | null;
 export type Row = Record<string, SqlValue>;
@@ -40,7 +41,20 @@ function connect(path: string, readonly: boolean): Engine {
   if (process.versions.bun) {
     // On macOS Bun uses the system SQLite, which keeps -wal/-shm after close; a read-only open needs them there.
     const { Database } = require("bun:sqlite") as { Database: EngineClass };
-    return readonly ? new Database(path, { readonly: true }) : new Database(path);
+    if (!readonly) return new Database(path);
+    try {
+      const db = new Database(path, { readonly: true });
+      db.prepare("SELECT 1 FROM sqlite_master LIMIT 1").get(); // the open is lazy: the failure shows on the first read
+      return db;
+    } catch (e) {
+      // A WAL index copied without its -wal/-shm cannot be opened read-only (the shm cannot be created). It has no
+      // writer, so an immutable open reads it as it is; a live index that fails here (missing file, not a database) fails the same way.
+      try {
+        return new Database(`${pathToFileURL(path).href}?immutable=1`, { readonly: true });
+      } catch {
+        throw e;
+      }
+    }
   }
   const m = require("node:sqlite") as { Database?: EngineClass; DatabaseSync: EngineClass };
   return new (m.Database ?? m.DatabaseSync)(path, { readOnly: readonly }); // DEP0210 rename
@@ -74,7 +88,9 @@ export function open(path: string, { readonly = false }: { readonly?: boolean } 
 const CHILD = `const [p, sql, max] = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
 const cell = (v) => (typeof v === "bigint" ? Number(v) : v instanceof Uint8Array ? "<blob>" : v);
 try {
-  const db = process.versions.bun ? new (require("bun:sqlite").Database)(p, { readonly: true }) : new (require("node:sqlite").DatabaseSync)(p, { readOnly: true });
+  const bun = (p) => { const d = new (require("bun:sqlite").Database)(p, { readonly: true }); d.prepare("SELECT 1 FROM sqlite_master LIMIT 1").get(); return d; };
+  // a WAL copy without -wal/-shm does not open read-only on Bun: retry immutable (same fallback as connect())
+  const db = process.versions.bun ? (() => { try { return bun(p); } catch (e) { try { return bun(require("node:url").pathToFileURL(p).href + "?immutable=1"); } catch { throw e; } } })() : new (require("node:sqlite").DatabaseSync)(p, { readOnly: true });
   const rows = [];
   for (const r of db.prepare(sql).iterate()) {
     rows.push(Object.fromEntries(Object.entries(r).map(([k, v]) => [k, cell(v)])));
