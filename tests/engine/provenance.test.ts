@@ -17,7 +17,9 @@ describe("installed", () => {
   });
   test("a bare install and a manifest path name nothing", () => {
     expect(installed("npm install")).toEqual([]);
-    expect(installed("pip install -r requirements.txt ./local")).toEqual(["requirements.txt"]); // a file name is a harmless extra
+    expect(installed("pip install -r requirements.txt ./local")).toEqual([]);
+    expect(installed("pip install -c constraints.txt -e . --target libs pkg")).toEqual(["pkg"]);
+    expect(installed("npm install --registry https://registry.example.invalid/ foo")).toEqual(["foo"]);
   });
 });
 

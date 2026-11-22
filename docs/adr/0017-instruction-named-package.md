@@ -43,6 +43,8 @@ instruction files load at every session start, so "instruction then install" wou
   the instruction text, so the field is false there and the rule runs only while a transcript is parsed (a first scan,
   or a changed file or rule set).
 - Ceilings: only the install verbs above are read, so a package named in prose without backticks, or installed by
-  another tool, is missed. A flag that takes a value (`--registry URL`) adds that value to the set, which can only
-  cause an extra match in a session whose text already holds that value next to an install.
+  another tool, is missed. The value after a known value-taking flag (`-r`, `-c`, `-e`, `--registry` and similar) and
+  names ending `.txt`, `.json`, `.lock`, `.toml` are skipped; an unlisted value flag still leaks its value into the set.
+  Sub-agent events order after the main agent's (contract order), so a sub-agent instruction followed by a main-agent
+  install is missed: false negatives only. Install matching is textual, so `echo npm install x` also matches.
 - A project whose CLAUDE.md lists its dependencies fires on their ordinary install; the level is `low`.

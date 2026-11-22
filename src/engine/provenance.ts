@@ -6,20 +6,24 @@ type Row = Record<string, unknown>;
 
 export const PROVENANCE_FIELD = "instruction_named_package";
 
-// ponytail: the installers of exec_package_install_new, first operand run only; flags with values (`--registry URL`)
-// leak the value as a name, which can only add a token to the set.
+// ponytail: the installers of exec_package_install_new, first operand run only; the value after a value-taking flag
+// (`-r file`, `--registry URL`) is skipped, other flags are assumed boolean.
 const INSTALL = /\b(?:npm\s+(?:install|i|add)|pnpm\s+(?:add|install|i)|yarn\s+add|bun\s+add|pip3?\s+install|uv\s+add|cargo\s+add|go\s+get|gem\s+install)\s+([^\n;&|)`]*)/gi;
 const NOUN = /`([@\w][\w.\-/]*)`\s+(?:package|library|module|dependency)\b/gi; // "the `left-pad` package"
-const NAME = /^@?[\w][\w.\-/]*$/;
+const VALUE_FLAG = /^(?:-[rcetf]|--(?:requirement|constraint|registry|index-url|extra-index-url|prefix|target|editable))$/;
+const MANIFEST = /\.(?:txt|json|lock|toml)$/;
+const NAME =/^@?[\w][\w.\-/]*$/;
 
 /** Package-like names an install command line carries: version, extras and flags dropped, lower-cased. */
 export function installed(text: string): string[] {
   const out: string[] = [];
   for (const m of text.matchAll(INSTALL)) {
+    let skip = false;
     for (const raw of m[1]!.split(/\s+/)) {
-      if (raw.startsWith("-")) continue;
+      if (skip) { skip = false; continue; }
+      if (raw.startsWith("-")) { skip = VALUE_FLAG.test(raw); continue; }
       const name = raw.replace(/["']/g, "").replace(/\[.*$/, "").replace(/(?<=.)(@|==|>=|<=|~=).*$/, "").toLowerCase();
-      if (NAME.test(name) && !name.startsWith("/")) out.push(name);
+      if (NAME.test(name) && !MANIFEST.test(name) && !name.startsWith("/")) out.push(name);
     }
   }
   return out;
