@@ -1,0 +1,20 @@
+name: files_oversized_agent_file
+author: Raman Kumar
+id: 2f947c2c-1020-4ea6-a8bd-03dd142381c2
+title: Oversized agent instruction, config or hook script
+status: experimental
+description: >
+  `preflight` only (tool_name `preflight:oversized`). An instruction file (CLAUDE.md, AGENTS.md, Copilot, Cursor or skill
+  files), an agent or editor config, or a hook script (.claude/hooks, .husky) is larger than 100000 bytes. Real ones
+  are a few KB; a huge file can bury an injected instruction or a payload far below what a reviewer scrolls to. Files
+  over 1 MiB are not read at all, so this is the only signal for them. package.json is not checked.
+level: low
+tags: [attack.defense_evasion, attack.t1027, owasp_agentic.asi01]
+falsepositives:
+  - A generated or vendored instruction file, or a long hand-written one.
+x-retrohound: { lane: hunt }
+logsource: { product: ai_coding_agent, category: file_event }
+detection:
+  selection:
+    tool_name: 'preflight:oversized'
+  condition: selection
