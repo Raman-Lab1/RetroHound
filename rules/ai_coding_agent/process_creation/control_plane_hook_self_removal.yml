@@ -18,12 +18,11 @@ logsource:
   product: ai_coding_agent
   category: process_creation
 detection:
-  # Unquoted, so `'hook' un''install` reads as the command.
+  # Unquoted, so `'hook' un''install` reads as the command. retrohound only in command position (line start or after
+  # ; & | ( ` $( , optionally behind a runner and its flags), so a commit message, grep or PR body naming it is not it.
   selection:
-    command_line_unquoted|re|i: 'retrohound[^\s;&|]{0,200}\s(?:[^;&|\n]{0,200}\s)?hook\s{1,5}uninstall\b'
-  filter_discuss:
-    command_line|re|i: '^\s{0,5}(?:echo|grep|cat)\s(?:[^;&|\n\r`<>$]|\$[^(;&|\n\r`<>$])*$'
-  condition: selection and not filter_discuss
+    command_line_unquoted|re|i: '(?:^|[;&|\n(`]|\$\()\s{0,5}(?:(?:npx|bunx|pnpm\s{1,5}dlx|node|bun|sudo|exec|command)\s{1,5}(?:-\S{1,30}\s{1,5}){0,4})?\S{0,200}retrohound[^\s;&|]{0,200}\s(?:[^;&|\n]{0,200}\s)?hook\s{1,5}uninstall\b'
+  condition: selection
 falsepositives:
   - You asked the agent to remove the hook; run `retrohound hook uninstall` yourself in a terminal instead
 level: high

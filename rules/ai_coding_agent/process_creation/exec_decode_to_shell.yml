@@ -27,7 +27,8 @@ detection:
       - 'invoke-expression*frombase64string'
       - 'frombase64string*| iex'
   ps_encoded_flag:
-    # -e/-ec/-enc (a bare contains 'powershell*-enc ' also hit a later ffmpeg -enc): only flags (each with at most one bare-word value) between the executable and it, so a later
-    # grep -e, sed -e or robocopy /E is not it.
-    command_line|re|i: '\b(?:powershell|pwsh)(?:\.exe)?[\x22\x27]?(?:\s{1,5}[-/\u2013\u2014\u2015]\w{1,30}(?:\s{1,5}\w{1,30})?){0,8}\s{1,5}[-/\u2013\u2014\u2015](?:e|ec|enc|encodedcommand)\s{1,5}[\x22\x27]?[a-z0-9+/]{4}'
+    # -e/-ec/-enc (a bare contains 'powershell*-enc ' also hit a later ffmpeg -enc): only flags (each with at most one
+    # word value, after a space or `:`, maybe quoted) between the executable and it, so a later grep -e, sed -e or
+    # robocopy /E is not it.
+    command_line|re|i: '\b(?:powershell|pwsh)(?:\.exe)?[\x22\x27]?(?:\s{1,5}[-/\u2013\u2014\u2015]\w{1,30}(?:(?::|\s{1,5})[\x22\x27]?\w{1,30}[\x22\x27]?)?){0,8}\s{1,5}[-/\u2013\u2014\u2015](?:e|ec|enc|encodedcommand)\s{1,5}[\x22\x27]?[a-z0-9+/]{4}'
   condition: 1 of posix_* or 1 of ps_*

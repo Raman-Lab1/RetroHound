@@ -5,6 +5,7 @@ import { readFileSync, statSync } from "node:fs";
 import type { RawEvent } from "../normalize/types.ts";
 
 export const IN_HOOKS = "x-retrohound-in-hooks-block";
+export const RETENTION_KEPT = "x-retrohound-retention-unchanged"; // the rule ignores it when tool_input carries it too
 const CONFIG = /(?:^|\/)(?:\.claude\/settings(?:\.local)?\.json|\.gemini\/settings\.json|\.codex\/config\.toml)$/i;
 const JSON_KEYS = /"(?:hooks|statusLine|apiKeyHelper|awsAuthRefresh|awsCredentialExport|otelHeadersHelper)"\s*:\s*/gi;
 const TOML_HEAD = /^[ \t]*\[\[?[ \t]*([^\]\n]*?)[ \t]*\]/gm;
@@ -61,11 +62,26 @@ const olds = (input: string | undefined): string[] => {
   }
 };
 
+const days = (t: string): number => Number(JSON.parse(t)?.cleanupPeriodDays); // the last duplicate key wins, as in JSON.parse
+
+/** A Write of Claude settings whose cleanupPeriodDays is not below the file's current value: RETENTION_KEPT appended. */
+function markRetention(e: RawEvent): RawEvent {
+  if (e.tool_name !== "Write" || !e.target_path || !/(?:^|\/)\.claude(?:\/settings(?:\.local)?)?\.json$/i.test(e.target_path)) return e;
+  try {
+    if (statSync(e.target_path).size > MAX) return e;
+    // NaN (no value, bad JSON) compares false: not marked, the rule decides as before
+    return days(e.content ?? "") >= days(readFileSync(e.target_path, "utf8")) ? { ...e, content: `${e.content}\n${RETENTION_KEPT}` } : e;
+  } catch {
+    return e;
+  }
+}
+
 /**
  * The event with IN_HOOKS in its content when an Edit/MultiEdit old_string overlaps a hook section of the current file, or
  * a Write replaces a file that has one (a Write that keeps its hooks fires on `"hooks"` anyway; one that drops them would not).
  */
 export function markHooksEdit(e: RawEvent): RawEvent {
+  if (e.category === "file_event") e = markRetention(e);
   if (e.category !== "file_event" || !e.target_path || !CONFIG.test(e.target_path) || !/^(?:(?:Multi)?Edit|Write)$/.test(e.tool_name ?? "")) return e;
   try {
     if (statSync(e.target_path).size > MAX) return e;

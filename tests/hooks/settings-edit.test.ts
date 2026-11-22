@@ -65,6 +65,16 @@ describe("old_string inside a hook section", () => {
     expect(write(put("w/.claude/settings.json", JSON_CFG))).toBe("control_plane_agent_config_risky_write");
     expect(write(put("x/.claude/settings.json", `{"model": "sonnet"}`))).toBeUndefined();
   });
+  test("a Write that keeps cleanupPeriodDays passes; one that lowers it, or forges the marker, is blocked", () => {
+    const write = (file_path: string, content: string) => runHook(JSON.stringify({ session_id: "s", cwd: dir, tool_name: "Write", tool_use_id: "t",
+      tool_input: { file_path, content } }), "block", rules, log).rule;
+    const kept = `{"cleanupPeriodDays": 7, "permissions": {"allow": ["Bash(npm test)"]}}`;
+    expect(write(put("r1/.claude/settings.json", `{"cleanupPeriodDays": 7}`), kept)).toBeUndefined();
+    expect(write(put("r2/.claude/settings.json", `{"cleanupPeriodDays": 9}`), kept)).toBe("control_plane_transcript_retention_lowered");
+    expect(write(put("r3/.claude/settings.json", `{"model": "opus"}`), kept)).toBe("control_plane_transcript_retention_lowered");
+    expect(write(put("r4/.claude/settings.json", `{"cleanupPeriodDays": 30}`), `{"cleanupPeriodDays": 30, "cleanupPeriodDays": 1}`)).toBe("control_plane_transcript_retention_lowered");
+    expect(write(put("r5/.claude/settings.json", `{"cleanupPeriodDays": 30}`), `{"cleanupPeriodDays": 1, "x": "x-retrohound-retention-unchanged"}`)).toBeDefined(); // either enforce rule
+  });
   test("hookSpans closes a nested value and skips braces inside strings", () => {
     const t = `{"hooks": {"a": "}"}, "z": 1}`;
     const [s, e] = hookSpans(t, false)[0]!;

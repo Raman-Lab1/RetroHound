@@ -6,7 +6,8 @@ status: experimental
 description: >
   A Write/Edit (or Codex apply_patch) of agent settings that sets Claude Code `cleanupPeriodDays` to 0-9 days (the
   default is 30; 0 stops transcripts being kept) or Codex `[history] persistence = "none"`. Short retention deletes the
-  transcripts RetroHound audits before anyone scans them. Shell edits and deletions are files_transcript_tamper_command.
+  transcripts RetroHound audits before anyone scans them. The live hook lets a Write through that keeps or raises the
+  value already in the file. Shell edits and deletions are files_transcript_tamper_command.
 tags: [attack.defense_evasion, attack.t1070, attack.t1562, owasp_agentic.asi10]
 falsepositives:
   - The user asked for shorter retention for privacy; the change should still come from the user, not the agent.
@@ -23,4 +24,10 @@ detection:
   selection_codex:
     target_path|contains: .codex/config.toml
     content|re|i: 'persistence\s{0,3}=\s{0,3}[\x22\x27]none[\x22\x27]'
-  condition: selection_claude or selection_codex
+  # The live hook appends this to a Write that keeps or raises the file's current value (src/hooks/context.ts);
+  # the same text in tool_input means the agent wrote it, so it does not count.
+  filter_kept:
+    content|contains: x-retrohound-retention-unchanged
+  forged_kept:
+    tool_input|contains: x-retrohound-retention-unchanged
+  condition: (selection_claude and not (filter_kept and not forged_kept)) or selection_codex
