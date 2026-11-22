@@ -1,0 +1,3 @@
+{"category":"web_request","tool_name":"WebFetch","url":"https://docs.example.invalid/ec2/169.254.169.254","domain":"docs.example.invalid"}
+{"category":"web_request","tool_name":"WebFetch","url":"http://192.0.2.10/latest/meta-data/","domain":"192.0.2.10"}
+{"category":"web_request","tool_name":"WebFetch","url":"http://metadata.google.internal.example.invalid/","domain":"metadata.google.internal.example.invalid"}

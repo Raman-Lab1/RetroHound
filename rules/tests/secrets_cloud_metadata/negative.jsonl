@@ -1,0 +1,6 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"grep -rn 169.254.169.254 src/"}
+{"category":"process_creation","tool_name":"Bash","command_line":"rg -n 'metadata.google.internal' ."}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s http://169.254.170.20/health"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s http://192.0.2.10/latest/meta-data/"}
+{"category":"process_creation","tool_name":"Bash","command_line":"ip addr show | grep 169.254.1.1"}
+{"category":"web_request","tool_name":"WebFetch","url":"http://169.254.169.254/latest/meta-data/","domain":"169.254.169.254"}

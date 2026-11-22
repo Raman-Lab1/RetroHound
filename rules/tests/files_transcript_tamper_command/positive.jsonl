@@ -1,0 +1,15 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"rm -rf ~/.claude/projects"}
+{"category":"process_creation","tool_name":"Bash","command_line":"rm -f ~/.claude/projects/-home-dev-app/0b5e4f2a.jsonl"}
+{"category":"process_creation","tool_name":"Bash","command_line":"rm -rf \"$HOME/.codex/sessions/2026\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"rm -rf ~/.cl\"au\"de/projects"}
+{"category":"process_creation","tool_name":"Bash","command_line":"truncate -s 0 ~/.claude/history.jsonl"}
+{"category":"process_creation","tool_name":"Bash","command_line":": > ~/.claude/projects/-home-dev-app/0b5e4f2a.jsonl"}
+{"category":"process_creation","tool_name":"Bash","command_line":"find ~/.codex/archived_sessions -name '*.jsonl' -delete"}
+{"category":"process_creation","tool_name":"Bash","command_line":"mv ~/.gemini/antigravity-cli/brain /tmp/x"}
+{"category":"process_creation","tool_name":"PowerShell","command_line":"Remove-Item -Recurse -Force $env:USERPROFILE\\.claude\\projects"}
+{"category":"process_creation","tool_name":"Bash","command_line":"rm -rf ~/.retrohound"}
+{"category":"process_creation","tool_name":"Bash","command_line":"rm -rf $HOME/.claude"}
+{"category":"process_creation","tool_name":"Bash","command_line":"retrohound purge --all --yes"}
+{"category":"process_creation","tool_name":"Bash","command_line":"claude config set -g cleanupPeriodDays 0"}
+{"category":"process_creation","tool_name":"Bash","command_line":"jq '.cleanupPeriodDays = 1' ~/.claude/settings.json > /tmp/s && mv /tmp/s ~/.claude/settings.json"}
+{"category":"process_creation","tool_name":"Bash","agent":"codex","command_line":"codex -c history.persistence=none exec 'fix it'"}
