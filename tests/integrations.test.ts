@@ -101,3 +101,21 @@ describe("homebrew", () => {
     expect(read("integrations/homebrew/retrohound.rb")).toContain(`url "https://registry.npmjs.org/retrohound/-/retrohound-${version}.tgz"`);
   });
 });
+
+describe("tarball sha256", () => {
+  // A placeholder (all zeros, one repeated digit, the hash of an empty file) must never ship: brew and Velociraptor
+  // would reject the real tarball, or a user would "fix" it by turning the check off.
+  const real = (h: unknown) =>
+    typeof h === "string" && /^[0-9a-f]{64}$/.test(h) && !/^(.)\1+$/.test(h) &&
+    h !== "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+  test("rejects placeholders", () => {
+    for (const bad of ["0".repeat(64), "f".repeat(64), "abc", "A".repeat(64), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", undefined])
+      expect(real(bad)).toBe(false);
+  });
+  test("Homebrew formula and Velociraptor artifact pin the same real hash", () => {
+    const brew = /^\s*sha256 "([^"]*)"/m.exec(read("integrations/homebrew/retrohound.rb"))?.[1];
+    const velo = parse(read("integrations/velociraptor/Custom.RetroHound.Scan.yaml")).tools[0].expected_hash;
+    expect(real(brew)).toBe(true);
+    expect(velo).toBe(brew); // both name the same registry tarball
+  });
+});
