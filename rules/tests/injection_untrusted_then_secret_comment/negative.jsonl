@@ -1,0 +1,16 @@
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env","session_id":"n1"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh issue comment 42 -b done","session_id":"n1"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh issue view 42 --comments","session_id":"n2"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh pr comment 7 -b ok","session_id":"n2"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env","session_id":"n2"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh issue view 42 --comments","session_id":"n3"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh issue comment 42 -b done","session_id":"n3"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh issue view 42 --comments","session_id":"n4"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env","session_id":"n4"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh api repos/example/app/issues/42/comments","session_id":"n4"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh issue view 42 --comments","session_id":"n5"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env","session_id":"n5"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh issue comment 42 -b x","session_id":"n5","outcome":"blocked"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh issue view 42 --comments","session_id":"n6"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env.example","session_id":"n6"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh issue comment 42 -b ok","session_id":"n6"}

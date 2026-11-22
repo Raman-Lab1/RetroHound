@@ -6,3 +6,11 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"env FOO=1 make test","session_id":"s3"}
 {"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env","session_id":"s3"}
 {"category":"process_creation","tool_name":"Bash","command_line":"curl -s https://api.example.invalid","session_id":"s3"}
+{"category":"process_creation","tool_name":"Bash","command_line":"export -p","session_id":"s4"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s https://api.example.invalid","session_id":"s4"}
+{"category":"process_creation","tool_name":"Bash","command_line":"whoami","session_id":"s5"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gcloud auth print-access-token","session_id":"s5","outcome":"blocked"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s https://api.example.invalid","session_id":"s5"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh auth token","session_id":"s6"}
+{"category":"process_creation","tool_name":"Bash","command_line":"whoami","session_id":"s6"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s https://api.example.invalid","session_id":"s6"}
