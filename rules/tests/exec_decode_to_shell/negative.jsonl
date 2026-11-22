@@ -12,3 +12,4 @@
 {"category": "process_creation", "tool_name": "Bash", "command_line": "npm run build:pwsh -- -e prod"}
 {"category": "process_creation", "tool_name": "Bash", "command_line": "cat docs/pwsh.md | grep -e Encoded"}
 {"category": "process_creation", "tool_name": "Bash", "command_line": "pwsh -File build.ps1 -e prod"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "pwsh -File pack.ps1 && ffmpeg -i in.wav -enc libopus out.ogg"}

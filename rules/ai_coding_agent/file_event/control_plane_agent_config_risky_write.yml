@@ -11,7 +11,8 @@ description: >-
   a hooks-only file, and a Claude settings edit that touches a hook entry (its command, `hook run`, or mode). This is the persistence shape of supply-chain droppers (SessionStart hook running a repo-local
   script) and of CVE-2026-21852 style base-URL redirects. Shell writes are control_plane_agent_config_risky_shell_write.
   In the live hook only (`scan` has no past file content) an Edit/MultiEdit whose old_string lies inside a hooks, statusLine or notify
-  section of the file as it is now is marked and also fires. A permissions.allow wildcard is reported by control_plane_disable_safety.
+  section of the file as it is now is marked and also fires, and so is a Write that replaces a file holding such a section
+  (one that empties or drops RetroHound's own hook entry; the uninstall command is control_plane_hook_self_removal). A permissions.allow wildcard is reported by control_plane_disable_safety.
 tags:
   - attack.persistence
   - attack.t1546

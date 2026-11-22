@@ -1,0 +1,5 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"retrohound hook status"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npx retrohound hook install --mode block"}
+{"category":"process_creation","tool_name":"Bash","command_line":"grep -n 'retrohound hook uninstall' README.md"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm uninstall left-pad && retrohound scan"}
+{"category":"process_creation","tool_name":"Bash","command_line":"pre-commit uninstall --hook-type pre-push"}
