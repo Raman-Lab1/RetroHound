@@ -44,7 +44,9 @@ Run `scan` now and then, or after a session that felt off. The things worth a lo
 servers that you did not make.
 
 Before you open a repo you just cloned, run `retrohound preflight <dir>`. It reads the repo's `.claude/`, `.mcp.json`,
-CLAUDE.md and AGENTS.md, skills, `.vscode/tasks.json` and npm lifecycle scripts as text and runs nothing.
+CLAUDE.md and AGENTS.md, skills, `.vscode/tasks.json` and npm lifecycle scripts as text and runs nothing. It also
+warns (on stderr, and in `preflight.unsafe_hooks` with `--format json`) when an installed RetroHound hook runs files
+that other users can write.
 
 There is an optional live hook. It runs only the small set of high-precision `enforce` rules on each tool call before
 it runs. Install RetroHound globally first, then start in log mode, which only records what it would have done:
@@ -83,7 +85,8 @@ retrohound scan --no-index --fail-on high   # exit 1 on a high or critical findi
 Field mappings are in [docs/output-schema.md](docs/output-schema.md). Wazuh and Splunk configs, a Velociraptor
 artifact, a Homebrew formula and the GitHub Action (`action.yml`) are described in
 [docs/integrations.md](docs/integrations.md), including which of them have been run against a live system.
-`retrohound rules convert --target <backend>` turns the rules into SIEM queries with a local `sigma-cli`.
+`retrohound rules convert --target <backend> --pipeline ecs` (or `ocsf`, to match the export your SIEM holds) turns
+the rules into SIEM queries with a local `sigma-cli`.
 
 The index is evidence. Claude Code deletes transcripts after `cleanupPeriodDays` (default 30); the index keeps a
 masked record of every session it has seen, so scan before then. Every write to the index is added to a hash chain.
@@ -105,9 +108,10 @@ Other tools on the index:
 
 The rules are Sigma v2.1 YAML on an `ai_coding_agent` logsource, in [rules/ai_coding_agent](rules/ai_coding_agent).
 They cover secrets (read, retried after a block, sent out), risky execution, changes to agent settings, hooks and MCP
-servers, persistence, hidden text in instruction files, and uploads to paste and file-drop sites. `retrohound rules
-list` shows what is loaded, `rules show <rule>` prints one, and `rules test` runs every rule's positive and negative
-tests.
+servers, persistence, hidden text in instruction files, uploads to paste and file-drop sites, web, MCP or `gh` content
+followed by a risky command, cloud metadata access, deleting transcripts or lowering their retention, and the agent
+removing the RetroHound hook. `retrohound rules list` shows what is loaded, `rules show <rule>` prints one, and
+`rules test` runs every rule's positive and negative tests.
 
 Add your own with `--extra-rules <dir>` (they load on top of the shipped set and cannot replace a rule). Writing one:
 [CONTRIBUTING-RULES.md](CONTRIBUTING-RULES.md). Fields: [docs/logsource.md](docs/logsource.md).
@@ -127,7 +131,9 @@ it, since a malicious clone could use it to hide itself.
 
 - No network calls: no telemetry, no update checks. `tests/guards.test.ts` fails the build if code in `src/` imports a
   network module or calls `fetch`.
-- Secrets are masked in the index, every output and the logs. Findings keep a pattern name and a short fingerprint.
+- Secrets are masked in the index, every output and the logs. Findings keep a pattern name and a short fingerprint,
+  an HMAC under a per-install key in `~/.retrohound/fp.key`, so fingerprints do not match across machines.
+- `scan --mask-entropy` also masks unnamed random-looking strings. It is noisy, so it is off by default.
 - Raw transcript text is not stored. The index holds masked fields and a pointer (file and line) to the transcript.
 - Agent config files are read for MCP server, hook, skill and plugin names only; env, headers, arguments and URLs in
   them are not read out.
@@ -143,7 +149,7 @@ secrets longer too.
 - Gemini CLI and Cursor are not parsed yet. Codex and Antigravity do not record their own approval prompts, so a
   command you denied there leaves no trace.
 - No sandboxing, MCP server scanning, fleet console or auto-remediation.
-- Performance on a synthetic 1,000-session history: a warm scan takes about 0.3 s, a cold one about 20 s
+- Performance on a synthetic 1,000-session history: a warm scan takes about 0.14 s, a cold one about 6 s
   ([docs/perf.md](docs/perf.md)).
 
 ## Install and build

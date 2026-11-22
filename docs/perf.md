@@ -20,7 +20,8 @@ Targets: a warm scan of 1,000 sessions in under 5 s, and rule evaluation at 50k 
 
 ## Results (1,000 synthetic sessions, 101,000 events)
 
-Synthetic rows: 75 rules loaded (58 files: 60 shipped rules plus 15 helper rules that only feed correlations).
+Synthetic rows: measured with 75 rules loaded (58 files: 60 shipped rules plus 15 helper rules that only feed
+correlations). The set has since grown to 89 rules (69 files: 73 shipped plus 16 helpers) and has not been re-timed.
 
 | Measure | Result | Target |
 |---|---|---|
