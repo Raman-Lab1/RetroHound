@@ -45,6 +45,10 @@ tamper-evident (0015): a new event column changes every row's JSON and forces a 
 - Findings are as of the scan that evaluated the session. A transcript older than everything indexed, found later,
   does not re-evaluate untouched sessions; a rule-set change (a full re-evaluation) does. Baseline events never
   give first-seen findings, on any re-evaluation.
+- The same holds across scopes (an agent and root, 0006). A scan evaluates only the sessions it touched; the first-seen
+  query is global over the index, but a session in another scope is not re-evaluated when this scan adds an earlier
+  carrier of its value. Its finding stays as of its own scan until its transcripts change or the rule set does
+  (`tests/scan.test.ts` pins this). Re-evaluating every scope on each scan would defeat the warm scan.
 - Values compare as stored: indexed values are masked (0007), in-memory values are not, so two hook commands that
   differ only in a masked secret are one value in the index and two with `--no-index`.
 - With any rule reading the fields, every indexed scan runs the query, warm scans included. Indexed scans hold every

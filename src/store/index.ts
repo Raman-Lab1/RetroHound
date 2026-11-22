@@ -188,6 +188,8 @@ export function openStore(path: string = defaultDbPath()) {
       ON CONFLICT(session_id) DO UPDATE SET agent = excluded.agent, project_path = excluded.project_path,
         first_ts = excluded.first_ts, last_ts = excluded.last_ts, event_count = excluded.event_count`),
     sessionEvents: db.prepare("SELECT * FROM events WHERE session_id = ? ORDER BY ts, seq, id"),
+    goneEvents: db.prepare(`SELECT e.* FROM events e JOIN files_indexed f ON f.path = e.source_file
+      WHERE e.session_id = ? AND f.gone_at IS NOT NULL ORDER BY e.ts, e.seq, e.id`),
     getSession: db.prepare(`${SESSION_SELECT} WHERE s.session_id = ?`),
     listSessions: db.prepare(`${SESSION_SELECT} ORDER BY s.first_ts, s.session_id`),
     // A repeat refreshes the rule's wording but keeps the stored events: a re-evaluation from DB rows may no longer
@@ -318,6 +320,9 @@ export function openStore(path: string = defaultDbPath()) {
     refreshSessions,
 
     sessionEvents: (sessionId: string): AgentEvent[] => q.sessionEvents.all(sessionId).map(rowToEvent),
+
+    /** The session's events whose file is gone: masked rows, the only copy left (0008). */
+    goneEvents: (sessionId: string): AgentEvent[] => q.goneEvents.all(sessionId).map(rowToEvent),
 
     getSession(sessionId: string): SessionRow | undefined {
       const row = q.getSession.get(sessionId);
