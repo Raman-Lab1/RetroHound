@@ -9,8 +9,8 @@ description: >
   ~/.codex/history.jsonl, ~/.gemini/antigravity and ~/.gemini/antigravity-cli (brain, history) or the whole ~/.claude,
   ~/.codex or ~/.gemini directory; also ~/.retrohound and `retrohound purge --yes`. Also a command that sets Claude Code
   `cleanupPeriodDays` to 0-9 days or Codex history persistence to none. Each of these destroys the record of what the
-  agent did. Write/Edit of the settings is control_plane_transcript_retention_lowered. Known gap: a python or node
-  one-liner (shutil.rmtree, fs.rmSync) is not matched.
+  agent did. Write/Edit of the settings is control_plane_transcript_retention_lowered. Also an interpreter one-liner (python -c shutil.rmtree/os.remove, node -e fs.rmSync/unlinkSync, ruby, perl, php) that
+  deletes one of those paths. Known gap: a heredoc script or a path assembled in pieces is not matched.
 tags: [attack.defense_evasion, attack.t1070, attack.t1070.004, owasp_agentic.asi10]
 falsepositives:
   - The user asked the agent to free disk space or wipe old sessions; better done by the user outside the agent.
@@ -31,6 +31,12 @@ detection:
     - command_line_unquoted|re|i: *overwrite
   selection_find:
     command_line_unquoted|re|i: '\bfind\s[^;&|\n]{0,300}(?:\.claude[/\\]projects|\.codex[/\\](?:archived_)?sessions|\.gemini[/\\]antigravity|\.retrohound)[^;&|\n]{0,300}\s(?:-delete\b|-exec(?:dir)?\s{1,3}(?:rm|unlink|shred|truncate)\b)'
+  # A python, node, bun, ruby, perl or php one-liner (-c / -e / -r) that deletes a path naming a transcript store.
+  # ponytail: a one-liner that deletes something unrelated and only reads a transcript on the same line still matches; a
+  # path built in pieces (Path.home()/'.claude'/'projects') and heredoc scripts are not matched.
+  selection_interp:
+    - command_line|re|i: &interp '(?:^|[\s;&|(`/])(?:python[\d.]{0,5}|node(?:js)?|bun|ruby|perl|php)\s{1,5}(?:-[\w-]{1,20}\s{1,5}){0,3}-[ceEr]\s[^\n]{0,300}(?:(?:shutil\.rmtree|os\.(?:remove|unlink|rmdir|removedirs)|\.unlink\(|\.rmdir\(|rmtree|remove_tree|(?:rm|rmdir|unlink)Sync|fs(?:\.promises)?\.(?:rm|rmdir|unlink)\(|FileUtils\.rm\w{0,6}|File\.delete|Dir\.rmdir|\bunlink\b|\brmdir\b)[^\n]{0,300}(?:\.claude[/\\](?:projects|history\.jsonl)|\.codex[/\\](?:archived_)?(?:sessions|history\.jsonl)|\.gemini[/\\]antigravity|\.retrohound)|(?:\.claude[/\\](?:projects|history\.jsonl)|\.codex[/\\](?:archived_)?(?:sessions|history\.jsonl)|\.gemini[/\\]antigravity|\.retrohound)[^\n]{0,300}(?:shutil\.rmtree|os\.(?:remove|unlink|rmdir|removedirs)|\.unlink\(|\.rmdir\(|rmtree|remove_tree|(?:rm|rmdir|unlink)Sync|fs(?:\.promises)?\.(?:rm|rmdir|unlink)\(|FileUtils\.rm\w{0,6}|File\.delete|Dir\.rmdir|\bunlink\b|\brmdir\b))'
+    - command_line_unquoted|re|i: *interp
   selection_purge:
     command_line|re|i: '\bretrohound\s{1,3}purge\b[^;&|\n]{0,200}\s--yes\b'
   selection_retention:

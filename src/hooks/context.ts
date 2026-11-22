@@ -62,32 +62,57 @@ const olds = (input: string | undefined): string[] => {
   }
 };
 
+const patchInput = (e: RawEvent): Record<string, unknown> => {
+  try {
+    return JSON.parse(e.tool_input ?? "{}") ?? {};
+  } catch {
+    return {};
+  }
+};
+
+/** Old side (context and removed lines) of each hunk of a Codex apply_patch update: what Edit calls old_string. */
+function patchOlds(diff: string): string[] {
+  const parts = diff.replace(/\n+$/, "").split(/^@@.*$/m);
+  if (parts.length > 1) parts.shift(); // `---`/`+++` headers, when present, precede the first hunk
+  const old = (h: string) => h.split("\n").filter((l) => l === "" || l[0] === " " || l[0] === "-").map((l) => l.slice(1)).join("\n").replace(/^\n/, "");
+  return parts.map(old).filter((o) => o !== "");
+}
+
 const days = (t: string): number => Number(JSON.parse(t)?.cleanupPeriodDays); // the last duplicate key wins, as in JSON.parse
 
-/** A Write of Claude settings whose cleanupPeriodDays is not below the file's current value: RETENTION_KEPT appended. */
+// The value a Write or apply_patch sets: the whole new file for a Write or an Add, the diff's added lines for an Update.
+const newDays = (e: RawEvent): number =>
+  e.tool_name === "apply_patch" && patchInput(e).type === "update"
+    ? Number([...(e.content ?? "").matchAll(/cleanupperioddays\W{0,6}(\d+)/gi)].pop()?.[1])
+    : days(e.content ?? "");
+
+/** A Write (or Codex apply_patch) of Claude settings whose cleanupPeriodDays is not below the file's current value: RETENTION_KEPT appended. */
 function markRetention(e: RawEvent): RawEvent {
-  if (e.tool_name !== "Write" || !e.target_path || !/(?:^|\/)\.claude(?:\/settings(?:\.local)?)?\.json$/i.test(e.target_path)) return e;
+  if (!/^(?:Write|apply_patch)$/.test(e.tool_name ?? "") || !e.target_path || !/(?:^|\/)\.claude(?:\/settings(?:\.local)?)?\.json$/i.test(e.target_path)) return e;
   try {
     if (statSync(e.target_path).size > MAX) return e;
     // NaN (no value, bad JSON) compares false: not marked, the rule decides as before
-    return days(e.content ?? "") >= days(readFileSync(e.target_path, "utf8")) ? { ...e, content: `${e.content}\n${RETENTION_KEPT}` } : e;
+    return newDays(e) >= days(readFileSync(e.target_path, "utf8")) ? { ...e, content: `${e.content}\n${RETENTION_KEPT}` } : e;
   } catch {
     return e;
   }
 }
 
 /**
- * The event with IN_HOOKS in its content when an Edit/MultiEdit old_string overlaps a hook section of the current file, or
- * a Write replaces a file that has one (a Write that keeps its hooks fires on `"hooks"` anyway; one that drops them would not).
+ * The event with IN_HOOKS in its content when an Edit/MultiEdit old_string (or the old side of a Codex apply_patch hunk)
+ * overlaps a hook section of the current file, or a Write (or apply_patch add/delete) replaces a file that has one (a Write that keeps its hooks fires on `"hooks"` anyway; one that drops them would not).
  */
 export function markHooksEdit(e: RawEvent): RawEvent {
   if (e.category === "file_event") e = markRetention(e);
-  if (e.category !== "file_event" || !e.target_path || !CONFIG.test(e.target_path) || !/^(?:(?:Multi)?Edit|Write)$/.test(e.tool_name ?? "")) return e;
+  if (e.category !== "file_event" || !e.target_path || !CONFIG.test(e.target_path) || !/^(?:(?:Multi)?Edit|Write|apply_patch)$/.test(e.tool_name ?? "")) return e;
   try {
     if (statSync(e.target_path).size > MAX) return e;
     const text = readFileSync(e.target_path, "utf8");
     const spans = hookSpans(text, e.target_path.toLowerCase().endsWith(".toml"));
-    const hit = e.tool_name === "Write" ? spans.length > 0 : olds(e.tool_input).some((o) => {
+    const patch = e.tool_name === "apply_patch" ? patchInput(e) : undefined;
+    const whole = e.tool_name === "Write" || (patch !== undefined && patch.type !== "update");
+    const frags = patch ? patchOlds(String(patch.unified_diff ?? "")) : olds(e.tool_input);
+    const hit = whole ? spans.length > 0 : frags.some((o) => {
       for (let at = text.indexOf(o); at >= 0; at = text.indexOf(o, at + 1)) if (spans.some(([s, end]) => at < end && at + o.length > s)) return true;
       return false;
     });

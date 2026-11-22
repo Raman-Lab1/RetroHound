@@ -1,0 +1,12 @@
+{"category":"process_creation","tool_name":"Bash","command_line":"gh issue view 42 --comments","session_id":"p1"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env","session_id":"p1"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh issue comment 42 --body-file /tmp/out.txt","session_id":"p1"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh pr diff 7","session_id":"p2"}
+{"category":"process_creation","tool_name":"Bash","command_line":"printenv | sort","session_id":"p2"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh pr review 7 --comment -b ok","session_id":"p2"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh api repos/example/app/issues/42/comments","session_id":"p3"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env","session_id":"p3"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh api repos/example/app/issues/42/comments -X POST -f body=@/tmp/out","session_id":"p3"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh issue view 42 --comments","session_id":"p4"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh auth token","session_id":"p4"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh release create v1 --notes-file /tmp/out","session_id":"p4"}

@@ -52,6 +52,15 @@ test("secrets_read_for_egress reads variable-anchored Windows paths, not a quote
   for (const c of ["grep '\\.env' .gitignore", 'grep -nE "^\\.env|/\\.env" .gitignore']) expect(reads(c)).toBe(false);
 });
 
+// The helper copies its source rules' predicates (a correlation step cannot be an either-or): keep them in step.
+test.each(["secrets_env_dump", "exec_cloud_cli_credentials"])("secrets_harvest_for_recon matches the positives of %s", (src) => {
+  const rule = loadRuleDir("rules/ai_coding_agent").rules.find((r) => r.name === "secrets_harvest_for_recon") as DetectionRule;
+  const lines = readFileSync(`rules/tests/${src}/positive.jsonl`, "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  for (const l of lines.filter((l) => !/get-caller-identity/.test(l.command_line))) expect(rule.matches(event(l))).toBe(true);
+  expect(rule.matches(event({ category: "process_creation", command_line: "gcloud auth print-access-token", outcome: "blocked" }))).toBe(false);
+  expect(rule.matches(event({ category: "process_creation", command_line: "aws sts get-caller-identity" }))).toBe(false);
+});
+
 test("untrusted_content_received takes web, search, MCP and gh reads, not gh writes or failed calls", () => {
   const rule = loadRuleDir("rules/ai_coding_agent").rules.find((r) => r.name === "untrusted_content_received") as DetectionRule;
   const gh = (c: string, outcome: "success" | "blocked" = "success") => rule.matches(event({ category: "process_creation", command_line: c, outcome }));
