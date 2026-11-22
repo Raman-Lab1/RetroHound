@@ -1,5 +1,8 @@
 // Secret masking and detection (ADR 0007). One table drives both, so they cannot drift.
-import { createHash } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
+import { chmodSync, closeSync, constants, fstatSync, linkSync, lstatSync, mkdirSync, openSync, readSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 
 const MARK = "…[masked]";
 
@@ -64,15 +67,63 @@ export function secretKinds(s: string): string[] {
 // A token is the same secret with or without `Bearer `, and a key block the same in raw or JSON-escaped text.
 const tokenOf = (match: string) => match.replace(/^[^\n]*?bearer\s+|\\[nr]|\s/gi, "");
 
-/** First 16 hex of the sha256 of each distinct strong secret in `s`. Safe to store: strong tokens are high-entropy.
- * Known limit: unkeyed, so a weak value sent as `Bearer <value>` can be confirmed by guessing. Keying it would change
- * every fingerprint already stored in an index and break the joins across scans and git-secrets, so it stays. */
-export function secretFingerprints(s: string): string[] {
-  const fps = new Set<string>();
-  for (const { re } of STRONG) {
-    for (const [match] of s.matchAll(re)) fps.add(createHash("sha256").update(tokenOf(match)).digest("hex").slice(0, 16));
+// The per-install fingerprint key (ADR 0007): 32 random bytes, made on the first secret seen. Created whole (written to a
+// temp file, then hard-linked into place) so a crash or a racing hook never leaves a short key; opened without
+// following a symlink and refused unless it is a 32-byte regular file.
+let fpKey: Buffer | undefined;
+const key = () => (fpKey ??= readKey(join(homedir(), ".retrohound", "fp.key")));
+export function readKey(path: string): Buffer {
+  if (!lstatSync(path, { throwIfNoEntry: false })) {
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    const tmp = `${path}.${process.pid}.tmp`;
+    writeFileSync(tmp, randomBytes(32), { mode: 0o600 });
+    try {
+      linkSync(tmp, path);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e; // another process made it first: use theirs
+    } finally {
+      unlinkSync(tmp);
+    }
   }
-  return [...fps];
+  let fd: number;
+  try {
+    fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  } catch (e) {
+    throw new Error(`${path}: cannot open the fingerprint key (a symlink is refused): ${(e as Error).message}`);
+  }
+  try {
+    const st = fstatSync(fd), buf = Buffer.alloc(32);
+    if (!st.isFile() || st.size !== 32 || readSync(fd, buf, 0, 32, 0) !== 32) throw new Error(`${path}: not a 32-byte regular file, refusing it`);
+    try {
+      if (st.mode & 0o077) chmodSync(path, 0o600);
+    } catch {
+      // not supported on every filesystem
+    }
+    return buf;
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** One `kind/fp` per distinct strong secret in `s`: fp is the first 16 hex of HMAC-SHA256 under the per-install key,
+ * kind the first strong pattern (table order, most specific first) that matched the token. Stable on one machine;
+ * not comparable across machines, and a weak value cannot be confirmed by guessing without the key. */
+export function secretFingerprints(s: string): string[] {
+  const fps = new Map<string, string>();
+  for (const { name, re } of STRONG) {
+    for (const [match] of s.matchAll(re)) {
+      const fp = createHmac("sha256", key()).update(tokenOf(match)).digest("hex").slice(0, 16);
+      if (!fps.has(fp)) fps.set(fp, `${name}/${fp}`);
+    }
+  }
+  return [...fps.values()];
+}
+
+/** A stored fingerprint as [fp, kind]. An index from before 0.3.2 holds a bare fp, with no kind. The separator is not
+ * `:` because the mask reads `aws_access_key:<hex>` as an assignment. */
+export function splitFp(v: string): [string, string | undefined] {
+  const i = v.indexOf("/");
+  return i < 0 ? [v, undefined] : [v.slice(i + 1), v.slice(0, i)];
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

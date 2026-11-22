@@ -52,7 +52,7 @@ export type AgentEvent = {
   denial_category?: string; // classifierCategory
   secret_kinds?: string[]; // pattern names from tool_input and content, never values (0007)
   result_secret_kinds?: string[]; // pattern names from tool_response (0007)
-  secret_fps?: string[]; // first 16 hex of sha256 of each strong match (0007)
+  secret_fps?: string[]; // `kind/fp` per strong match, fp keyed per install (0007)
   text_excerpt?: string; // masked, <= 500 chars
   raw_ref: { file: string; line: number }; // pointer only, raw text is not stored
 };
