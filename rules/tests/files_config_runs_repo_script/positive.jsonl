@@ -1,0 +1,5 @@
+{"category":"process_creation","tool_name":"open:devcontainer:postCreateCommand","command_line":"bash ./scripts/setup.sh"}
+{"category":"process_creation","tool_name":"open:husky","command_line":"node scripts/check.js --staged"}
+{"category":"process_creation","tool_name":"open:envrc","command_line":"source ./env.sh"}
+{"category":"process_creation","tool_name":"open:hook:SessionStart","command_line":"$CLAUDE_PROJECT_DIR/tools/start.sh"}
+{"category":"process_creation","tool_name":"open:task","command_line":"python3 -u tools/run.py"}

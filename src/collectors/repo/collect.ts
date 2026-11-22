@@ -7,10 +7,13 @@ import { lstatSync, readdirSync, readFileSync, realpathSync, statSync } from "no
 import { join } from "node:path";
 import { parse } from "yaml";
 import type { Category, RawEvent } from "../../normalize/types.ts";
+import { openCommands } from "./open-commands.ts";
 
 export const MAX_FILE_BYTES = 1_048_576;
 export const MAX_PACKAGES = 500; // workspace package.json files per repo
 export const MAX_WORKSPACE_DIRS = 5000; // directories a workspace glob (`**`) may list; a deep tree is reported, not walked
+export const OVERSIZE_BYTES = 100_000; // an instruction, config or hook-script file past this is a signal (real ones are a few KB); the read cap is MAX_FILE_BYTES
+export const OVERSIZE_TOOL = "preflight:oversized"; // marker event for files_oversized_agent_file
 export const MAX_FILES = 400; // per directory walk; a bomb of agent files is reported as skipped, not read
 export const SESSION_ID = "preflight";
 const SKIP_DIRS = new Set(["node_modules", ".git"]);
@@ -31,7 +34,7 @@ const DIRS: [string, RegExp, Category][] = [
   [".claude/agents", /\.md$/i, "instruction_load"], [".claude/commands", /\.md$/i, "instruction_load"],
   [".claude/skills", /(?:^|\/)SKILL\.md$/i, "instruction_load"], [".cursor/rules", /\.mdc?$/i, "instruction_load"],
   [".github/instructions", /\.instructions\.md$/i, "instruction_load"],
-  [".husky", /^[^/]+$/, "file_event"], // top-level hook files only: husky v9's own shim lives under .husky/_
+  [".claude/hooks", /^[^/]+$/, "file_event"], [".husky", /^[^/]+$/, "file_event"], // top-level hook files only: husky v9's own shim lives under .husky/_
 ];
 /** Settings files whose `hooks` block is read as `hook:<Event>` commands (Gemini and Codex use Claude's shape). */
 const HOOK_FILES = /(?:^|\/)(?:\.claude\/settings(?:\.local)?\.json|\.gemini\/settings\.json|\.codex\/hooks\.json)$/;
@@ -110,6 +113,10 @@ export function collectRepo(dir: string, now = new Date()): Collected {
       return; // absent: the normal case for most of these paths
     }
     if (!st.isFile()) return;
+    // package.json (lockfile-sized in monorepos) is not an instruction/config file for this signal
+    if (st.size > OVERSIZE_BYTES && !rel.endsWith("package.json")) {
+      out.events.push({ ...event(rel, "", "file_event", out.events.length, ts), target_path: undefined, tool_name: OVERSIZE_TOOL, command_line: `${st.size} bytes, over ${OVERSIZE_BYTES}` });
+    }
     if (st.size > MAX_FILE_BYTES) return skip(rel, `larger than ${MAX_FILE_BYTES} bytes`);
     let text: string;
     try {
@@ -124,7 +131,11 @@ export function collectRepo(dir: string, now = new Date()): Collected {
     if (HOOK_FILES.test(rel)) {
       for (const [name, cmd] of hookCommands(text)) {
         out.events.push({ ...event(rel, abs, "process_creation", out.events.length, ts), tool_name: `hook:${name}`, command_line: cmd });
+        out.events.push({ ...event(rel, abs, "process_creation", out.events.length, ts), tool_name: `open:hook:${name}`, command_line: cmd });
       }
+    }
+    for (const [kind, cmd] of openCommands(rel, text)) {
+      out.events.push({ ...event(rel, abs, "process_creation", out.events.length, ts), tool_name: `open:${kind}`, command_line: cmd });
     }
   };
 

@@ -1,0 +1,5 @@
+{"category":"process_creation","tool_name":"open:devcontainer:postCreateCommand","command_line":"npm install"}
+{"category":"process_creation","tool_name":"open:husky","command_line":"./node_modules/.bin/lint-staged"}
+{"category":"process_creation","tool_name":"open:envrc","command_line":"use flake"}
+{"category":"process_creation","tool_name":"open:hook:SessionStart","command_line":"node /usr/local/lib/tool.js"}
+{"category":"process_creation","tool_name":"Bash","command_line":"bash ./scripts/setup.sh"}
