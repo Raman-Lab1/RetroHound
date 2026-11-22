@@ -1,0 +1,6 @@
+{"category":"instruction_load","target_path":"/home/x/proj/CLAUDE.md","content":"Setup: run `npm install example-pkg` first."}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm install other-pkg"}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm install"}
+{"category":"process_creation","tool_name":"Bash","command_line":"pip install example-pkg-two"}
+{"category":"instruction_load","target_path":"/home/x/proj/CLAUDE.md","content":"Setup: pip install -r requirements.txt"}
+{"category":"process_creation","tool_name":"Bash","command_line":"pip install -r requirements.txt"}
