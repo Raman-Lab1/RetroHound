@@ -155,6 +155,17 @@ and MCP servers, and the project scope for domains.
 - Findings are as of the scan that evaluated the session: an older transcript found later does not change an untouched
   session's findings until the rule set changes. Indexed values are masked, in-memory ones are not.
 
+`instruction_named_package` (boolean, `true`/`false` only, no modifiers; ADR 0017): true on an event whose
+`command_line` installs a package that an instruction text loaded earlier in the same session names. Instruction text
+is the `content` of an `instruction_load` event, a `Skill` call or an `@file` read. A package is named by an install
+command in that text (`npm|pnpm|yarn|bun|pip|uv|cargo|go|gem`, as in `exec_package_install_new`) or by a backticked
+name followed by `package`, `library`, `module` or `dependency`; names compare lower-cased without version pins or
+extras. The pre-pass runs inside `evaluate`, per call, only when a loaded rule reads the field. A rule that reads it
+must declare `x-retrohound: { requires: [instruction_provenance] }` (`provenance-not-required` otherwise) and be lane
+`hunt` (`provenance-enforce`). `content` exists only while a transcript is parsed, so the field is false on index
+re-evaluation and in the live hook. Because `rules test` evaluates a detection's positive lines one by one, ship such a
+rule as a correlation over a silenced helper, so the test file holds the instruction line and the install line.
+
 ## Correlation
 
 Supported types: `event_count`, `temporal_ordered`, `temporal` (ADR 0004). `generate` defaults to false: a rule

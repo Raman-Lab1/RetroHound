@@ -1,0 +1,49 @@
+title: Package installed that an instruction file or skill had named
+id: 6d0f6a52-3f0e-4c0a-9a57-0d6b1d4f2b7e
+name: control_plane_instruction_named_package_install
+author: Raman Kumar
+status: experimental
+description: >-
+  The agent installs a package that an instruction text loaded earlier in the same session names: CLAUDE.md,
+  AGENTS.md, a rule file, an @-file or a skill body. The link is the package name, not the timing (instruction files
+  load at every session start). A name counts as named when the text carries an install command for it or calls it a
+  package, library, module or dependency in backticks. Provenance for the supply-chain hunt: a planted instruction
+  that tells the agent what to install. Needs the transcript text, so it runs only while a transcript is parsed, and
+  never in the live hook (ADR 0017).
+tags:
+  - attack.initial_access
+  - attack.t1195.001
+  - owasp_agentic.asi04
+correlation:
+  type: event_count
+  rules:
+    - install_of_instruction_named_package
+  group-by:
+    - session_id
+  timespan: 1d
+  condition:
+    gte: 1
+falsepositives:
+  - A project whose CLAUDE.md lists its dependencies and an install of one of them
+level: low
+x-retrohound:
+  lane: hunt
+---
+title: Helper, an install of a package an instruction text named
+id: 0b5f7c0e-8d21-4c77-9b3a-5a1f0c9d6e44
+name: install_of_instruction_named_package
+author: Raman Kumar
+description: >-
+  Silenced step of control_plane_instruction_named_package_install: a command line that installs a package named by
+  an instruction text earlier in the session (derived field instruction_named_package, ADR 0017).
+logsource:
+  product: ai_coding_agent
+  category: process_creation
+detection:
+  selection:
+    instruction_named_package: true
+  condition: selection
+level: informational
+x-retrohound:
+  lane: hunt
+  requires: [instruction_provenance]
