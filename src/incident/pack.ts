@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { anonymizer, type Anonymizer } from "../cli/wrapped.ts";
 import type { Rule } from "../engine/load.ts";
-import { mask, splitFp } from "../normalize/mask.ts";
+import { fpKinds, mask } from "../normalize/mask.ts";
 import { GENESIS } from "../store/chain.ts";
 import type { Db, Row } from "../store/sqlite.ts";
 import { TOOL_VERSION } from "../version.ts";
@@ -85,9 +85,9 @@ function build(db: Db, sel: Selection, rules: Rule[], anonymize: boolean) {
   });
 
   const secrets = new Map<string, { kinds: Set<string>; sessions: Set<string>; events: string[] }>();
-  for (const e of timeline) for (const [fp, kind] of (e.secret_fps ?? []).map(splitFp)) {
+  for (const e of timeline) for (const [fp, kinds] of (e.secret_fps ?? []).map((v) => fpKinds(v, e.secret_kinds))) {
     const s = secrets.get(fp) ?? { kinds: new Set(), sessions: new Set(), events: [] };
-    (kind ? [kind] : (e.secret_kinds ?? [])).forEach((k) => s.kinds.add(k));
+    kinds.forEach((k) => s.kinds.add(k));
     s.sessions.add(e.session_id);
     s.events.push(e.id);
     secrets.set(fp, s);
