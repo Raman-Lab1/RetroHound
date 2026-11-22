@@ -89,12 +89,13 @@ Verified against: [artifacts](https://docs.velociraptor.app/docs/artifacts/),
 [path_join](https://docs.velociraptor.app/vql_reference/basic/path_join/). Not yet run on a live server.
 
 To publish: test on a lab client, then optionally submit it to the Velociraptor artifact exchange. Update `url` and
-`expected_hash` with each release.
+`expected_hash` after each release is on npm (the hash exists only then); until that commit the artifact keeps the
+previous release.
 
 ## GitHub Action
 
 `action.yml` (repository root): a composite action. It installs Node 24 (`actions/setup-node`, which also changes
-`node` for later steps of the job) and runs `npx --yes retrohound@0.3.1` with:
+`node` for later steps of the job) and runs `npx --yes retrohound@0.3.2` with:
 
 | Input | Default | Meaning |
 |---|---|---|
@@ -108,7 +109,7 @@ package from npm; RetroHound makes no network calls itself.
 
 ```yaml
 - uses: actions/checkout@v5
-- uses: Raman-Lab1/RetroHound@v0.3.1
+- uses: Raman-Lab1/RetroHound@v0.3.2
   with:
     command: preflight
 ```
@@ -119,7 +120,7 @@ always works:
 
 ```yaml
 - id: rh
-  uses: Raman-Lab1/RetroHound@v0.3.1
+  uses: Raman-Lab1/RetroHound@v0.3.2
   with:
     command: scan
     args: --root transcripts --format sarif
@@ -136,7 +137,7 @@ Verified against: [metadata syntax](https://docs.github.com/en/actions/reference
 
 To publish: the repo must be public with one `action.yml` at the root (this one); accept the Marketplace Developer
 Agreement, use 2FA, check the name `RetroHound` is free, then draft a release with "Publish this Action to the GitHub
-Marketplace" ticked and a `v0.3.1` tag. Bump the pinned version with each npm release (the test enforces it).
+Marketplace" ticked and a `v0.3.2` tag. Bump the pinned version with each npm release (the test enforces it).
 
 ## Homebrew
 
@@ -150,4 +151,5 @@ Verified against: [Language-specific formulae, Node](https://docs.brew.sh/Langua
 To publish: create a public `homebrew-tap` repository, copy the file to `Formula/retrohound.rb` (its `sha256` is
 that of the published tarball, `curl -sL <url> | shasum -a 256`), run
 `brew install --build-from-source ./Formula/retrohound.rb && brew test retrohound && brew audit --strict retrohound`,
-and push. Users run `brew install raman-lab1/tap/retrohound`. Update `url` and `sha256` with each release.
+and push. Users run `brew install raman-lab1/tap/retrohound`. Update `url` and `sha256` after each release is on npm, in the
+same commit as the Velociraptor artifact (a test checks both pin one version with a real hash).

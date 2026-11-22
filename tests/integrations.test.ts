@@ -77,9 +77,6 @@ describe("velociraptor", () => {
     expect(art.sources[0].query).toContain('FetchBinary(ToolName="RetroHound"');
     expect(art.sources[0].query).toContain('"--no-index"');
   });
-  test("tool URL pins the package.json version", () => {
-    expect(art.tools[0].url).toBe(`https://registry.npmjs.org/retrohound/-/retrohound-${version}.tgz`);
-  });
 });
 
 describe("github action", () => {
@@ -96,9 +93,17 @@ describe("github action", () => {
   });
 });
 
-describe("homebrew", () => {
-  test("formula pins the package.json version", () => {
-    expect(read("integrations/homebrew/retrohound.rb")).toContain(`url "https://registry.npmjs.org/retrohound/-/retrohound-${version}.tgz"`);
+describe("homebrew and velociraptor", () => {
+  // Both pin the latest *published* tarball: its hash only exists after npm publish, so the release commit keeps the
+  // previous pin and the post-publish commit moves both to the new version with its real hash.
+  const pin = (text: string) => /retrohound\/-\/retrohound-(\d+\.\d+\.\d+)\.tgz/.exec(text)?.[1];
+  const num = (v: string) => v.split(".").reduce((n, p) => n * 1000 + Number(p), 0);
+  test("formula and artifact pin the same released version, not newer than package.json", () => {
+    const brew = pin(read("integrations/homebrew/retrohound.rb"));
+    const velo = pin(read("integrations/velociraptor/Custom.RetroHound.Scan.yaml"));
+    expect(brew).toBeDefined();
+    expect(velo).toBe(brew);
+    expect(num(brew!)).toBeLessThanOrEqual(num(version));
   });
 });
 
