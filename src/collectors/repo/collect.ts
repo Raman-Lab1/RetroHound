@@ -23,10 +23,21 @@ const FILES: [string, Category][] = [
   ["CLAUDE.md", "instruction_load"], ["AGENTS.md", "instruction_load"], ["GEMINI.md", "instruction_load"], [".cursorrules", "instruction_load"],
   [".claude/settings.json", "file_event"], [".claude/settings.local.json", "file_event"], [".mcp.json", "file_event"],
   [".vscode/tasks.json", "file_event"], [".vscode/settings.json", "file_event"], ["package.json", "file_event"],
+  [".gemini/settings.json", "file_event"], [".cursor/mcp.json", "file_event"], [".vscode/mcp.json", "file_event"],
+  [".codex/config.toml", "file_event"], [".codex/hooks.json", "file_event"], [".envrc", "file_event"],
+  [".devcontainer/devcontainer.json", "file_event"], ["devcontainer.json", "file_event"], [".github/copilot-instructions.md", "instruction_load"],
 ];
-const DIRS: [string, RegExp][] = [
-  [".claude/agents", /\.md$/i], [".claude/commands", /\.md$/i], [".claude/skills", /(?:^|\/)SKILL\.md$/i], [".cursor/rules", /\.mdc?$/i],
+const DIRS: [string, RegExp, Category][] = [
+  [".claude/agents", /\.md$/i, "instruction_load"], [".claude/commands", /\.md$/i, "instruction_load"],
+  [".claude/skills", /(?:^|\/)SKILL\.md$/i, "instruction_load"], [".cursor/rules", /\.mdc?$/i, "instruction_load"],
+  [".github/instructions", /\.instructions\.md$/i, "instruction_load"],
+  [".husky", /^[^/]+$/, "file_event"], // top-level hook files only: husky v9's own shim lives under .husky/_
 ];
+/** Settings files whose `hooks` block is read as `hook:<Event>` commands (Gemini and Codex use Claude's shape). */
+const HOOK_FILES = /(?:^|\/)(?:\.claude\/settings(?:\.local)?\.json|\.gemini\/settings\.json|\.codex\/hooks\.json)$/;
+const NESTED_NAMES = new Set(["CLAUDE.md", "AGENTS.md"]);
+export const MAX_NESTED_DEPTH = 4; // directory levels below the root searched for CLAUDE.md / AGENTS.md
+export const MAX_NESTED = 50; // nested instruction files read per repo
 
 export const fwd = (p: string) => p.replaceAll("\\", "/");
 export const inside = (root: string, p: string) => p === root || p.startsWith(root + "/");
@@ -110,14 +121,14 @@ export function collectRepo(dir: string, now = new Date()): Collected {
     const abs = fwd(full);
     const n = out.events.length;
     out.events.push({ ...event(rel, abs, category, n, ts), content: text, ...(category === "file_event" ? { tool_name: "Write" } : {}) });
-    if (rel.endsWith(".claude/settings.json") || rel.endsWith(".claude/settings.local.json")) {
+    if (HOOK_FILES.test(rel)) {
       for (const [name, cmd] of hookCommands(text)) {
         out.events.push({ ...event(rel, abs, "process_creation", out.events.length, ts), tool_name: `hook:${name}`, command_line: cmd });
       }
     }
   };
 
-  const walk = (rel: string, keep: RegExp, seen = { n: 0 }) => {
+  const walk = (rel: string, keep: RegExp, category: Category, seen = { n: 0 }) => {
     let entries;
     try {
       // readdir follows a symlinked walk root (`.claude/skills -> /`), so check where it really is first
@@ -129,11 +140,29 @@ export function collectRepo(dir: string, now = new Date()): Collected {
     for (const e of entries) {
       const child = `${rel}/${e.name}`;
       if (SKIP_DIRS.has(e.name)) continue;
-      if (e.isDirectory()) walk(child, keep, seen); // a symlinked directory is not isDirectory(): never descended
+      if (e.isDirectory()) walk(child, keep, category, seen); // a symlinked directory is not isDirectory(): never descended
       else if (keep.test(child.slice(rel.length + 1))) {
         if (++seen.n > MAX_FILES) return skip(child, "too many files");
-        add(child, "instruction_load");
+        add(child, category);
       }
+    }
+  };
+
+  // CLAUDE.md / AGENTS.md below the root (a package's own instructions): bounded by depth, count and directories listed.
+  // A symlinked directory is not isDirectory(), so this never leaves the root either.
+  const nested = { files: 0, dirs: 0 };
+  const findNested = (rel: string, depth: number): void => {
+    if (depth > MAX_NESTED_DEPTH || ++nested.dirs > MAX_WORKSPACE_DIRS) return;
+    let entries;
+    try {
+      entries = readdirSync(join(root, rel), { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const child = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory() && !SKIP_DIRS.has(e.name)) findNested(child, depth + 1);
+      else if (rel && e.isFile() && NESTED_NAMES.has(e.name) && ++nested.files <= MAX_NESTED) add(child, "instruction_load");
     }
   };
 
@@ -169,6 +198,8 @@ export function collectRepo(dir: string, now = new Date()): Collected {
   for (const rel of [...packages].slice(0, MAX_PACKAGES)) add(rel, "file_event");
   if (packages.size > MAX_PACKAGES) skip("workspaces", `more than ${MAX_PACKAGES} packages, only the first ${MAX_PACKAGES} read`);
   else if (listed > MAX_WORKSPACE_DIRS) skip("workspaces", `glob lists more than ${MAX_WORKSPACE_DIRS} directories, stopped there`);
-  for (const [rel, keep] of DIRS) walk(rel, keep);
+  for (const [rel, keep, cat] of DIRS) walk(rel, keep, cat);
+  findNested("", 0);
+  if (nested.files > MAX_NESTED) skip("nested", `more than ${MAX_NESTED} nested CLAUDE.md/AGENTS.md, only the first ${MAX_NESTED} read`);
   return out;
 }

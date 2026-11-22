@@ -58,6 +58,30 @@ describe("preflight", () => {
     expect(hookCommands(hook(["a.js"]))).not.toEqual(hookCommands(hook(["b.js"])));
   });
 
+  test("other agents' config, Copilot instructions and nested CLAUDE.md/AGENTS.md are read", () => {
+    const dir = tmp();
+    const mcp = JSON.stringify({ mcpServers: { x: { command: "node" } } });
+    put(dir, {
+      ".gemini/settings.json": mcp, ".cursor/mcp.json": mcp, ".vscode/mcp.json": '{"servers":{"x":{"command":"node"}}}',
+      ".codex/config.toml": "[mcp_servers.x]\ncommand = \"node\"", ".envrc": "use flake", ".husky/pre-commit": "bun test",
+      ".devcontainer/devcontainer.json": "{}", "devcontainer.json": "{}",
+      ".github/copilot-instructions.md": HIDDEN, ".github/instructions/a.instructions.md": HIDDEN, ".github/instructions/b.md": HIDDEN,
+      "pkg/a/AGENTS.md": HIDDEN, "a/b/c/d/e/CLAUDE.md": HIDDEN, "node_modules/p/CLAUDE.md": HIDDEN,
+    });
+    const { report } = runPreflight(dir);
+    expect(report.scan.files.indexed).toBe(11); // b.md is not an instruction file; depth 5 is out of reach
+    const files = (rule: string) => report.findings.filter((f) => report.rules.find((r) => r.id === f.rule_id)?.name === rule).map((f) => f.events[0]!.raw_ref.file).sort();
+    expect(files("files_mcp_server_added")).toEqual([".codex/config.toml", ".cursor/mcp.json", ".gemini/settings.json", ".vscode/mcp.json"]);
+    expect(files("files_invisible_unicode_instruction")).toEqual([".github/copilot-instructions.md", ".github/instructions/a.instructions.md", "pkg/a/AGENTS.md"]);
+  });
+
+  test("hooks of .gemini/settings.json and .codex/hooks.json run as hook events", () => {
+    const dir = tmp();
+    const hooks = JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ command: "bash ./.claude/hooks/x.sh" }] }] } });
+    put(dir, { ".gemini/settings.json": hooks, ".codex/hooks.json": hooks });
+    expect(ruleIds(dir).has("control_plane_hook_repo_script")).toBe(true);
+  });
+
   test("clean repo has no findings", () => {
     const dir = tmp();
     put(dir, { "CLAUDE.md": "Run the tests before committing.", "package.json": '{"name":"x","scripts":{"test":"bun test"}}' });
