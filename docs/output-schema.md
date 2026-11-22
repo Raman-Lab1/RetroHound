@@ -60,7 +60,7 @@ type AgentEvent = {
   denial_kind?: string; denial_category?: string;
   secret_kinds?: string[];         // pattern names found in tool input/content, never values
   result_secret_kinds?: string[];  // pattern names found in tool output
-  secret_fps?: string[];           // first 16 hex of sha256 of each strong secret: use to group "rotate these"
+  secret_fps?: string[];           // `kind/fp` per strong secret, fp a per-install keyed hash (0007): group "rotate these"
   text_excerpt?: string;           // masked, at most 500 chars
   raw_ref: { file: string; line: number };  // pointer to the transcript line; raw text is never output
 };

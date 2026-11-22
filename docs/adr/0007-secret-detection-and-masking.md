@@ -27,9 +27,8 @@ two separate pattern lists would drift apart.
 - **Stored fields** (names and hashes only, safe to keep and re-evaluate):
   - `secret_kinds`, from the raw tool input and written content (0006);
   - `result_secret_kinds`, from the raw tool result;
-  - `secret_fps`: the first 16 hex characters of the SHA-256 of each strong match. Strong tokens have enough entropy
-    that the hash cannot be brute-forced; mask-only values get no fingerprint. One key typed five times becomes one
-    entry in the "rotate these secrets" list that `scan` prints.
+  - `secret_fps`: one `kind/fp` per strong secret (see the 2026-11-22 amendment). Mask-only values get no
+    fingerprint. One key typed five times becomes one entry in the "rotate these secrets" list that `scan` prints.
 - **Rule:** `secrets_literal_in_tool_input` is an ordinary Sigma rule (`level: high`, enforce lane): any
   `secret_kinds`, or `result_secret_kinds` on a secret-file read only, so reading ordinary files that mention a key
   does not alert.
@@ -43,3 +42,18 @@ two separate pattern lists would drift apart.
   `<your-key>`), and a check that no strong pattern appears in any snapshot or fixture.
 - Unnamed high-entropy strings in free text are a known gap.
 - Private IP addresses are not masked; `wrapped --anonymize` hides names for sharing.
+
+## Amendment 2026-11-22: keyed fingerprints with their kind (0.3.2)
+- **Why:** a plain SHA-256 let anyone holding an index or incident pack confirm a guessed low-entropy value (a weak
+  `Bearer` token, a short password in a key-shaped slot), and the same secret had the same fingerprint on every
+  machine, so packs from different people could be linked. The rotate lists also gave each fingerprint every kind
+  seen on its event, not the kind of that secret.
+- **Fingerprint:** the first 16 hex of HMAC-SHA256 of the token under a per-install key. The key is 32 random bytes
+  in `~/.retrohound/fp.key`, made on the first secret seen (directory 0700, file 0600, created whole so a racing hook
+  never reads a short key). A symlink, a non-regular file or a file that is not 32 bytes is refused, not replaced.
+- **Stored as `kind/fp`**, kind being the first strong pattern that matched (table order, most specific first, so
+  `Bearer sk-...` is `sk_key`). Not `kind:fp`: the mask reads `aws_access_key:<hex>` as an assignment.
+- **Consequences:** fingerprints stay stable on one machine, so rescans and `git-secrets` still join. They do not
+  match across machines or with an index from before 0.3.2; the parser versions were bumped so transcripts still on
+  disk are re-fingerprinted. An archived session keeps its old bare fingerprint, which readers show with the event's
+  kinds. Deleting the key changes every new fingerprint: rebuild the index (`retrohound purge`, then `scan`).

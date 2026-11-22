@@ -60,7 +60,7 @@ absent, not `[]`, when empty, so `|exists` is true only when something was found
 | `attribution` | `skill:<x>`, `mcp:<server>` or `plugin:<x>`. |
 | `secret_kinds` | Names of secret patterns found in tool input or content. Never values. |
 | `result_secret_kinds` | Same, in the tool output. |
-| `secret_fps` | First 16 hex of sha256 of each strong secret, to group "rotate these". |
+| `secret_fps` | `kind/fp` per strong secret: fp is the first 16 hex of a per-install HMAC-SHA256 (ADR 0007), to group "rotate these". |
 | `text_excerpt` | Masked, at most 500 chars. |
 
 ### Match-only fields (ADR 0006)

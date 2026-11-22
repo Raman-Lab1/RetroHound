@@ -51,6 +51,10 @@ describe("toTable", () => {
     expect(out).toContain(`${FP}  github_token  1 session(s)`);
     expect(out).toContain("1 high   →  retrohound show aaaaaaaa");
   });
+  test("a kind/fp pair names its own kind, not every kind on the event", () => {
+    const f = finding({ events: [ev({ secret_fps: [`jwt/${FP}`], secret_kinds: ["jwt", "github_token"] })] });
+    expect(toTable(report({}, [f]), { color: false })).toContain(`${FP}  jwt  1 session(s)`);
+  });
   test("collapses one rule across sessions and attributes sub-agents", () => {
     const fs = [1, 2, 3, 4].map((i) => finding({ id: `f${i}`, session_id: `s${i}`, events: [ev({ agent_id: i === 1 ? "agentxyz99" : undefined })] }));
     const out = toTable(report({}, fs), { color: false });

@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { createHash } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
+import { createHmac } from "node:crypto";
+import { mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { mask, scrubHome, secretFingerprints, secretKinds } from "../src/normalize/mask.ts";
+import { mask, readKey, scrubHome, secretFingerprints, secretKinds, splitFp } from "../src/normalize/mask.ts";
 
 // Defanged placeholders, built by concatenation so no secret-shaped literal lands in the repo.
 const BODY = "A1b2C3d4E5".repeat(4);
@@ -160,9 +161,32 @@ describe("secretKinds", () => {
 
 describe("secretFingerprints", () => {
   const key = "sk" + "-ant-" + BODY;
-  const fp = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 16);
+  const keyFile = join(homedir(), ".retrohound", "fp.key"); // HOME is a temp dir (tests/preload.ts)
+  const fp = (s: string) => createHmac("sha256", readFileSync(keyFile)).update(s).digest("hex").slice(0, 16);
 
-  test("is the first 16 hex of the sha256 of the token", () => expect(secretFingerprints(key)).toEqual([fp(key)]));
+  test("is kind/first 16 hex of the HMAC-SHA256 of the token under the per-install key", () => {
+    expect(secretFingerprints(key)).toEqual([`sk_key/${fp(key)}`]);
+    expect(statSync(keyFile).mode & 0o777).toBe(0o600);
+    expect(statSync(join(homedir(), ".retrohound")).mode & 0o777).toBe(0o700);
+    expect(splitFp(secretFingerprints(key)[0]!)).toEqual([fp(key), "sk_key"]);
+    expect(splitFp("0123456789abcdef")).toEqual(["0123456789abcdef", undefined]); // an index from before 0.3.2
+  });
+  test("the mask leaves every kind/fp pair alone", () => {
+    for (const [kind, token] of STRONG) expect(mask(`${kind}/${fp(token)}`)).toBe(`${kind}/${fp(token)}`);
+  });
+  test("a token also matched by bearer_token keeps its specific kind", () => {
+    expect(secretFingerprints("Bearer " + key)).toEqual([`sk_key/${fp(key)}`]);
+  });
+  test("the key is made once, 32 bytes, and a symlink or a short file is refused", () => {
+    const d = mkdtempSync(join(tmpdir(), "rh-key-"));
+    const k = readKey(join(d, "k"));
+    expect(k).toHaveLength(32);
+    expect(readKey(join(d, "k"))).toEqual(k);
+    symlinkSync(join(d, "k"), join(d, "link"));
+    expect(() => readKey(join(d, "link"))).toThrow("symlink");
+    writeFileSync(join(d, "short"), "x");
+    expect(() => readKey(join(d, "short"))).toThrow("32-byte");
+  });
   test("one secret typed many times is one fingerprint", () => {
     expect(secretFingerprints(`${key} x ${key} y ${key}`)).toHaveLength(1);
   });
