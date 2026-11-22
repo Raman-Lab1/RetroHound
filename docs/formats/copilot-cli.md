@@ -19,9 +19,11 @@ the day a real sample is available.
   session record is not written to disk here. Likely causes (unconfirmed): sessions ended before any event was
   flushed, or the CLI version in use keeps the record in its account-side store only.
 - The logs are `<ISO-8601 timestamp> [LEVEL] [component] message` lines: runtime start-up, managed-settings policy
-  resolution, MCP client connect, session attach (`SDK session attached: sha256:...`). They carry no tool calls,
-  commands or prompts, so they are not a source of events. They do contain the GitHub account login and home paths:
-  never read them into the index.
+  resolution, MCP client connect and, in some files, session attach (`SDK session attached: sha256:...`; seen in only
+  one of the files checked, so version-specific). They carry no tool calls,
+  commands or prompts, so they are not a source of events. They may contain the GitHub account login
+  (not reproduced in the files checked) and home paths: never read them into the index. A start-up warning line
+  shows the CLI itself makes network calls; RetroHound does not.
 - Nothing in `config.json` or the logs states the CLI version.
 
 ## Reported by third parties (unverified here)
@@ -43,7 +45,7 @@ official schema, so every field name below is version dependent.
 - Copilot CLI syncs sessions to the user's GitHub account by default. The local file is therefore not the only copy,
   and a session's content has already left the machine before RetroHound reads it. RetroHound itself makes no
   network call and does not use that store.
-- Home paths, the account login and `sha256:` session handles in the logs are identifying: mask or skip.
+- Home paths and, where present, the account login and `sha256:` session handles in the logs are identifying: mask or skip.
 
 ## What to capture before building the collector
 
