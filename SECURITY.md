@@ -3,8 +3,8 @@
 ## Reporting
 
 Report vulnerabilities privately through GitHub: **Security → Report a vulnerability**
-([new advisory](https://github.com/Raman-Lab1/RetroHound/security/advisories/new)). Please do not open a public issue.
-You should get a first reply within 7 days.
+([new advisory](https://github.com/Raman-Lab1/RetroHound/security/advisories/new)). Private reporting is enabled on
+this repository. Please do not open a public issue. You should get a first reply within 7 days.
 
 In scope:
 
@@ -17,9 +17,29 @@ In scope:
 A `hunt`-lane rule that misses something, or fires on something benign, is a normal issue: use the
 "False positive" or "New rule" templates.
 
+## Advisories
+
+We publish a GitHub security advisory for every confirmed `enforce`-lane bypass or masking leak, and request a CVE
+when users on a released version are exposed.
+
 ## Supported versions
 
 Only the latest release gets fixes while the project is at 0.x.
+
+## Threat model and limits
+
+RetroHound runs as the same user as the agent it watches. An agent that is compromised, or told to, can delete or
+rewrite the transcripts and the RetroHound index, because both are files that user owns.
+
+RetroHound can detect that, not prevent it. Every write to the index goes into a hash chain: `retrohound verify`
+checks it and prints the head, and `verify --head <hash>` fails if an earlier head is no longer in the chain. Rules in
+the anti-forensics and tamper-guard families flag an agent touching transcripts, agent history or the index
+(`retrohound rules list`). For tamper resistance, keep the `verify` head somewhere the agent cannot write, or forward
+findings to a SIEM (`scan --format ndjson-ecs`, [docs/integrations.md](docs/integrations.md)) as they happen.
+
+The live hook is opt-in. It installs in log mode by default, and enforce mode (`--mode block` or `confirm`) is a
+separate choice. It fails open: if the hook errors, the tool call goes ahead. It sees only what the agent passes to
+it, so a child agent started with different settings can skip a user-scope hook (see the README).
 
 ## Reports and test data
 

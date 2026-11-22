@@ -146,8 +146,10 @@ Absolute paths: unlike SARIF, which writes `uri` relative to the agent's transcr
 index holds them. ECS `log.file.path` and OCSF `unmapped.retrohound.raw_ref.file` are the transcript's absolute path,
 and ECS `process.working_directory` and `retrohound.project_path` (OCSF `unmapped.retrohound.project_path`) are the
 session's working directory, so they carry the home path and the user name (`/Users/<name>/...`). `file.path` and
-commands carry them too when the agent touched files under the home. Strip or rewrite these fields in the SIEM pipeline
-if the user name must not be indexed.
+commands carry them too when the agent touched files under the home. This is by design (owner decision A3): an analyst
+pivots from a finding to the transcript on that host and to other host telemetry by the same path. Strip or rewrite
+these fields in the SIEM pipeline if the user name must not be indexed. SARIF stays relative (`uri` + `uriBaseId`,
+above).
 
 ### OCSF 1.9.0
 
