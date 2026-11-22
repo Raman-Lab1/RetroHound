@@ -14,7 +14,7 @@ rules/tests/<name>/negative.jsonl
 - `<category>` is the logsource category. Rules with no `logsource.category` (they run on every event) live in `any/`;
   correlations live in `correlation/`; the folder is only for humans, the loader reads `logsource`.
 - `name` is the file stem and the test directory name. Prefixes in use: `exec_`, `files_`, `secrets_`, `control_plane_`,
-  `network_`, `blocked_`.
+  `network_`, `blocked_`, `injection_`.
 - A file may hold several documents separated by `---` (helpers plus a correlation). Each needs its own `name`.
   A helper that should not alert alone is silenced by being referenced only by non-generating correlations, and at
   least one of them must be in the helper's own file.
