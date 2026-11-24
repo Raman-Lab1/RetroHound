@@ -19,15 +19,16 @@ x-retrohound: { lane: enforce }
 logsource: { product: ai_coding_agent, category: process_creation }
 detection:
   # Both spellings: command_line keeps Windows backslashes, command_line_unquoted undoes `.cl"au"de` quoting.
-  # The command word may follow `=`: git -c core.fsmonitor=, GIT_EDITOR=, alias x=, --upload-pack= all run their value.
-  # Also after `!` (a git shell alias) or a quote left by a nested sh -c '...' (not after ==, a jq or test comparison), as
-  # /bin/rm or /usr/bin/rm, and as "rm" or rm\ -rf.
+  # The command word may follow a quoted `=` value (git -c core.fsmonitor='rm ...', GIT_EDITOR=, alias x=, --upload-pack=)
+  # or an escaped one (=rm\ -rf), a quoted `!` (git shell alias '!rm'), or a quote right after sh -c. A bare `=rm` is a
+  # flag value (--grep=rm, op=rm) and `==` a comparison, so neither anchors. /bin/rm and /usr/bin/rm count only in command
+  # position (line start, after ; & | ( `, sudo or env, or in the quoted forms), so `ls -l /bin/rm` is a listing.
   selection_delete:
-    - command_line|re|i: &delete '(?:^|[\s;&|(`=!]|[^=][\s;&|(`=!][''"])(?:/(?:usr/)?(?:local/)?s?bin/)?(?:rm|rmdir|unlink|shred|srm|truncate|remove-item|ri|del|erase|rd)[''"\\]{0,2}\s[^;&|\n]{0,300}(?:\.claude[/\\](?:projects|history\.jsonl)|\.codex[/\\](?:archived_)?(?:sessions|history\.jsonl)|\.gemini[/\\]antigravity|\.retrohound(?:$|[/\\\s*;&|)])|(?:~|home\}?|userprofile%?|/(?:home|users)/[^/\s;&|]{1,64}|/root)[/\\]\.(?:claude|codex|gemini)[/\\]?\*?(?:$|[\s;&|)]))'
+    - command_line|re|i: &delete '(?:(?:(?:^|[;&|(`]|\b(?:sudo|env)\s|[''"]!|\s-\w{0,5}c\s{1,5}[''"]{1,2})\s{0,5}(?:/(?:usr/)?(?:local/)?s?bin/)?|\s)(?:rm|rmdir|unlink|shred|srm|truncate|remove-item|ri|del|erase|rd)[''"\\]{0,2}|[^=]=[''"]!?(?:/(?:usr/)?(?:local/)?s?bin/)?(?:rm|rmdir|unlink|shred|srm|truncate|remove-item|ri|del|erase|rd)\\?|[^=]=(?:/(?:usr/)?(?:local/)?s?bin/)?(?:rm|rmdir|unlink|shred|srm|truncate|remove-item|ri|del|erase|rd)\\|[^=]=[''"]{2}(?:/(?:usr/)?(?:local/)?s?bin/)?(?:rm|rmdir|unlink|shred|srm|truncate|remove-item|ri|del|erase|rd)[''"])\s[^;&|\n]{0,300}(?:\.claude[/\\](?:projects|history\.jsonl)|\.codex[/\\](?:archived_)?(?:sessions|history\.jsonl)|\.gemini[/\\]antigravity|\.retrohound(?:$|[/\\\s*;&|)])|(?:~|home\}?|userprofile%?|/(?:home|users)/[^/\s;&|]{1,64}|/root)[/\\]\.(?:claude|codex|gemini)[/\\]?\*?(?:$|[\s;&|)]))'
     - command_line_unquoted|re|i: *delete
   # mv only with the transcript as a source (another argument follows it): moving a copy back into place is a restore.
   selection_move:
-    - command_line|re|i: &move '(?:^|[\s;&|(`=!]|[^=][\s;&|(`=!][''"])(?:/(?:usr/)?(?:local/)?s?bin/)?mv[''"\\]{0,2}\s[^;&|\n]{0,300}(?:(?:\.claude[/\\](?:projects|history\.jsonl)|\.codex[/\\](?:archived_)?(?:sessions|history\.jsonl)|\.gemini[/\\]antigravity)[^\s;&|]{0,300}|\.retrohound(?:[/\\*][^\s;&|]{0,300})?|(?:~|home\}?|userprofile%?|/(?:home|users)/[^/\s;&|]{1,64}|/root)[/\\]\.(?:claude|codex|gemini)[/\\]?\*?)\s{1,5}[^\s;&|]'
+    - command_line|re|i: &move '(?:(?:(?:^|[;&|(`]|\b(?:sudo|env)\s|[''"]!|\s-\w{0,5}c\s{1,5}[''"]{1,2})\s{0,5}(?:/(?:usr/)?(?:local/)?s?bin/)?|\s)mv[''"\\]{0,2}|[^=]=[''"]!?(?:/(?:usr/)?(?:local/)?s?bin/)?mv\\?|[^=]=(?:/(?:usr/)?(?:local/)?s?bin/)?mv\\|[^=]=[''"]{2}(?:/(?:usr/)?(?:local/)?s?bin/)?mv[''"])\s[^;&|\n]{0,300}(?:(?:\.claude[/\\](?:projects|history\.jsonl)|\.codex[/\\](?:archived_)?(?:sessions|history\.jsonl)|\.gemini[/\\]antigravity)[^\s;&|]{0,300}|\.retrohound(?:[/\\*][^\s;&|]{0,300})?|(?:~|home\}?|userprofile%?|/(?:home|users)/[^/\s;&|]{1,64}|/root)[/\\]\.(?:claude|codex|gemini)[/\\]?\*?)\s{1,5}[^\s;&|]'
     - command_line_unquoted|re|i: *move
   selection_overwrite:
     - command_line|re|i: &overwrite '(?:^|[^>\d&])>\|?\s{0,3}[^\s;&|<>]{0,200}(?:\.claude[/\\](?:projects|history\.jsonl)|\.codex[/\\](?:archived_)?(?:sessions|history\.jsonl)|\.gemini[/\\]antigravity)'

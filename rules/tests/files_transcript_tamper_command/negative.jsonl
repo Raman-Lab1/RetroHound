@@ -35,3 +35,13 @@
 {"category": "process_creation", "tool_name": "Bash", "command_line": "open 'https://example.invalid/search?q=rm%20-rf' ~/.claude/projects"}
 {"category": "process_creation", "tool_name": "Bash", "command_line": "ls ~/bin/rmlint ~/.claude/projects"}
 {"category": "process_creation", "tool_name": "Bash", "command_line": "jq 'select(.cmd==\"rm -rf ~/.claude/projects\")' ~/.claude/projects/x.jsonl"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git log --grep=rm -- ~/.claude/projects"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "awk -v op=rm '$0 ~ op' ~/.claude/history.jsonl"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "grep -rn --include=*.jsonl -e 'op=del ' ~/.claude/projects"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "retrohound query \"select session_id from events where argv0='rm' and command_line like '%.claude/projects%'\""}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "gem install foo --document=ri ~/.claude"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "env MODE=del tail -n 5 ~/.claude/history.jsonl"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "python3 -c \"print('rm -rf ~/.claude/projects is denied')\""}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "printf '%s\\n' 'tip: never run !rm on ~/.claude/projects'"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "ls -l /bin/rm ~/.claude/projects"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "stat /bin/rm ~/.claude"}
