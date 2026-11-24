@@ -10,3 +10,9 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"gh issue view 42 --comments","session_id":"p4"}
 {"category":"process_creation","tool_name":"Bash","command_line":"gh auth token","session_id":"p4"}
 {"category":"process_creation","tool_name":"Bash","command_line":"gh release create v1 --notes-file /tmp/out","session_id":"p4"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh issue view 42 --comments","session_id":"p5"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env","session_id":"p5"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh api repos/example/app/issues/42/comments -f body=@/tmp/out","session_id":"p5"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh pr diff 7","session_id":"p6"}
+{"category":"process_creation","tool_name":"Bash","command_line":"printenv | sort","session_id":"p6"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh api --field body=@/tmp/out repos/example/app/pulls/7/comments","session_id":"p6"}

@@ -14,3 +14,9 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"gh issue view 42 --comments","session_id":"n6"}
 {"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env.example","session_id":"n6"}
 {"category":"process_creation","tool_name":"Bash","command_line":"gh issue comment 42 -b ok","session_id":"n6"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh issue view 42 --comments","session_id":"n7"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env","session_id":"n7"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh api repos/example/app/issues/42/comments -f per_page=100 -X GET","session_id":"n7"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh issue view 42 --comments","session_id":"n8"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env","session_id":"n8"}
+{"category":"process_creation","tool_name":"Bash","command_line":"gh api repos/example/my-fork/issues/42/comments --paginate --jq .[].body -H 'Accept: application/vnd.github+json'","session_id":"n8"}
