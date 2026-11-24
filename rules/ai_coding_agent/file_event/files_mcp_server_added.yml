@@ -5,7 +5,7 @@ title: MCP server added to an agent config
 status: experimental
 description: >
   The agent writes a config that defines MCP servers: mcpServers in .mcp.json, ~/.claude.json, Claude settings,
-  .gemini/settings.json or Antigravity mcp_config.json, or `[mcp_servers.<name>]` in Codex .codex/config.toml. A new MCP server
+  .gemini/settings.json, .cursor/mcp.json, `servers` in .vscode/mcp.json or Antigravity mcp_config.json, or `[mcp_servers.<name>]` in Codex .codex/config.toml. A new MCP server
   gives a third party tool access inside the session. `claude mcp add` style commands are files_mcp_server_command.
 level: medium
 tags: [attack.persistence, attack.t1546, owasp_agentic.asi04, owasp_agentic.asi02]
@@ -16,9 +16,12 @@ x-retrohound: { lane: hunt }
 logsource: { product: ai_coding_agent, category: file_event }
 detection:
   written:
-    target_path|endswith: ['/.mcp.json', '/.claude.json', '/.claude/settings.json', '/.claude/settings.local.json', '/.gemini/settings.json', '/mcp_config.json']
+    target_path|endswith: ['/.mcp.json', '/.claude.json', '/.claude/settings.json', '/.claude/settings.local.json', '/.gemini/settings.json', '/.cursor/mcp.json', '/mcp_config.json']
     content|contains: '"mcpservers"'
   written_toml:
     target_path|endswith: '/.codex/config.toml'
     content|contains: 'mcp_servers'
-  condition: written or written_toml
+  written_vscode:
+    target_path|endswith: '/.vscode/mcp.json'
+    content|contains: '"servers"'
+  condition: written or written_toml or written_vscode

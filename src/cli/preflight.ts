@@ -35,7 +35,7 @@ function preflightCommand(dir: string, f: Flags, io: IO): number {
   if (format === "json") io.out(JSON.stringify(maskDeep({ ...JSON.parse(toJson(result.report)), preflight: { skipped: result.skipped, unsafe_hooks } }), null, 2) + "\n");
   else io.out(preflightTable(result));
   for (const h of unsafe_hooks) io.err(mask(`WARNING: the RetroHound hook in ${h.path} runs files others may be able to modify:\n${h.unsafe.map((x) => `  ${x.path}: ${x.reason}`).join("\n")}\n  Fix the permissions, or run \`hook uninstall\`.\n`));
-  return failsOn(result.report, failOn) ? 1 : 0;
+  return failsOn(result.report, failOn, unsafe_hooks.length) ? 1 : 0;
 }
 
 export const registerPreflight: Registrar = (program, run, io) => {
@@ -43,7 +43,7 @@ export const registerPreflight: Registrar = (program, run, io) => {
     .option("--rules <dir>", "rules directory", DEFAULT_RULES_DIR)
     .option("--extra-rules <dir>", EXTRA_HELP, repeat)
     .option("--format <format>", "table or json", "table")
-    .option("--fail-on <level>", "exit 1 when any finding is at or above this level")
+    .option("--fail-on <level>", "exit 1 when any finding is at or above this level; an unsafe RetroHound hook warning counts as high")
     .option("--ignore <file>", "ignore file (default ~/.retrohound/ignore.yml; a repo's own file is only read when passed here)")
     .action((dir: string | undefined, f: Flags) => run(() => preflightCommand(dir ?? ".", f, io)));
 };
