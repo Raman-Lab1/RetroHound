@@ -32,12 +32,17 @@ and versions follow [Semantic Versioning](https://semver.org/).
   not change.
 - `purge --all` also deletes the fingerprint key `~/.retrohound/fp.key`, so fingerprints differ after the next scan.
 - The live hook no longer computes secret fingerprints (no rule reads them), so a read-only HOME gives no key warning.
+- `injection_untrusted_then_secret_comment` also counts a `gh api` post made with `-f`, `-F`, `--field`, `--raw-field`
+  or `--input` and no method (gh posts when given fields). `-X GET`, `HEAD`, `PUT` or `DELETE` with fields does not count.
 
 ### Fixed
 - A session split over several transcript files lost findings that needed a deleted file's events on re-evaluation;
   the stored rows of the gone files are now included.
 - `--anonymize` hashed the kept parts of a quoted home path that contains a space.
 - On the Bun runtime, `verify` and `query` could not open a WAL index copied without its `-wal`/`-shm` files.
+- `files_transcript_tamper_command` (enforce) denied a lone `git commit` or `git tag` whose message named a transcript
+  delete. A single commit or tag line with no `; & | \` $ > (` or newline now passes; chained, substituted and
+  `git -c` spellings still fire. Process substitution (`<(...)`) no longer slips past the read-only search filter either.
 - ADR 0016 now says that another scope's scan does not re-evaluate untouched sessions for first-seen fields.
 
 ## [0.3.2] - 2026-11-22
