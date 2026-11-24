@@ -179,6 +179,12 @@ describe("incident", () => {
     expect(fix("cat ~/My Projects/clientc/a.txt")).toContain("clientc"); // unquoted: stops at the space (docs/incident.md)
   });
 
+  test("a quoted path's kept parts are not hashed a second time up to their space", () => {
+    const fix = anonymizer([], []);
+    expect(fix(`cat "~/Desktop/My Notes.txt"`)).toBe(`cat "~/Desktop/My Notes.txt"`);
+    expect(fix(`cat '/home/bob/docs/Q3 plan.md' ~/Desktop/x.txt`)).toBe(`cat '/home/anon-${/anon-(\w+)/.exec(fix("/home/bob/x"))![1]}/docs/Q3 plan.md' ~/Desktop/x.txt`);
+  });
+
   test("--anonymize hides project and dir names in tool names, attribution and paths with spaces", async () => {
     const d = fresh();
     expect(await cli(B, "--out", d, "--anonymize")).toBe(0);

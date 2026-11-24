@@ -25,6 +25,7 @@ const HOME = String.raw`([\\/](?:Users|home)|(?<![\w~])~|\$\{?HOME\}?|%USERPROFI
 const UNDER_HOME = new RegExp(HOME + String.raw`([\\/][^\s"'${"`"}<>|;&(),=:]*)`, "gi");
 // inside "..." or '...' a path runs to the closing quote, spaces included; unquoted it stops at the first space (a limit)
 const QUOTED_HOME = new RegExp(String.raw`(["'])` + HOME + String.raw`([\\/](?:(?!\1)[^\n])*)(?=\1)`, "gi"); // runs to the SAME quote: "Bob's Stuff"
+const ANY_HOME = new RegExp(`${QUOTED_HOME.source}|${UNDER_HOME.source}`, "gi");
 // a field that is only a path: everything after the home is path, spaces included
 const PATH_HOME = new RegExp(HOME + String.raw`([\\/].*)`, "is");
 export type Anonymizer = ((s: string) => string) & { host: (h: string) => string; path: (s: string) => string };
@@ -48,8 +49,10 @@ export function anonymizer(events: Pick<AgentEvent, "raw_ref">[], projects: stri
   // a dotfile or a name with an extension (.env, x.ts) is kept: generic, and what an investigator needs
   const part = (c: string) => (c.includes(".") || c.startsWith("anon-") || KEEP.has(c.toLowerCase()) ? c : hash(c));
   const under = (head: string, rest: string) => head + rest.split(/([\\/]+)/).map((c, i) => (i % 2 || !c ? c : part(c))).join("");
-  const dirs = (s: string) => s.replace(QUOTED_HOME, (_m, q: string, head: string, rest: string) => q + under(head, rest))
-    .replace(UNDER_HOME, (_m, head: string, rest: string) => under(head, rest));
+  // one pass: a quoted path starts at its quote, so it wins over the unquoted match and its kept parts (`My Docs.txt`) are not
+  // re-hashed up to the space by a second pass
+  const dirs = (s: string) => s.replace(ANY_HOME, (_m, q: string | undefined, h1: string, r1: string, h2: string, r2: string) =>
+    q === undefined ? under(h2, r2) : q + under(h1, r1));
   const tokens = new Set<string>([basename(homedir()), userInfo().username]);
   for (const p of projects) {
     tokens.add(p);

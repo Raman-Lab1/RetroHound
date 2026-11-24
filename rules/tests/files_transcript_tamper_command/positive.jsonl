@@ -18,3 +18,12 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"mv ~/.claude/projects/-home-dev-app /tmp/old"}
 {"category":"process_creation","tool_name":"Bash","command_line":"mv ~/.retrohound /tmp/x"}
 {"category":"process_creation","tool_name":"Bash","command_line":"mv \"$HOME/.codex\" /tmp/c"}
+{"category":"process_creation","tool_name":"Bash","command_line":"python3 -c \"import shutil,os; shutil.rmtree(os.path.expanduser('~/.claude/projects'))\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"python -c \"import os; os.remove('/home/dev/.claude/history.jsonl')\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"python3 -c \"import glob,os; [os.unlink(f) for f in glob.glob('/home/dev/.codex/sessions/*/*.jsonl')]\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"node -e \"require('fs').rmSync(process.env.HOME + '/.claude/projects', {recursive: true})\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"node -e \"fs.unlinkSync('/home/dev/.codex/history.jsonl')\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"ruby -e \"require 'fileutils'; FileUtils.rm_rf(File.expand_path('~/.retrohound'))\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"perl -e 'unlink glob(\"/home/dev/.gemini/antigravity/brain/*\")'"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "python3 -c \"import os; os.system('rm -rf ~/.claude/projects')\""}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "cd /tmp && sudo bash -c \"python3 -c 'import shutil; shutil.rmtree(\\\"/home/dev/.claude/projects\\\")'\""}

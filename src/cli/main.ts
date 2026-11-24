@@ -88,10 +88,10 @@ async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
   return min !== undefined && report.findings.some((x) => LEVELS.indexOf(x.level) >= min) ? 1 : 0;
 }
 
-/** The hook log and rules caches in the data dir; only regular files by those names, never a symlink or anything else. */
+/** The hook log, rules caches and fingerprint key in the data dir; only regular files by those names, never a symlink or anything else. */
 export function dataFiles(dir = dirname(defaultLogPath())): string[] {
   if (!existsSync(dir)) return [];
-  return readdirSync(dir).filter((n) => n === "hook-log.jsonl" || /^rules-cache-[0-9a-f]+\.json$/.test(n))
+  return readdirSync(dir).filter((n) => n === "hook-log.jsonl" || /^fp\.key(\.\d+\.tmp)?$/.test(n) || /^rules-cache-[0-9a-f]+\.json$/.test(n))
     .map((n) => join(dir, n)).filter((p) => lstatSync(p).isFile());
 }
 
@@ -160,7 +160,7 @@ export function buildProgram(io: IO, setCode: (n: number) => void): Command {
   program.command("purge").description("Delete the local index database (it may be the only copy of deleted evidence)")
     .option("--db <path>", "index database", defaultDbPath())
     .option("--yes", "actually delete; without it purge only says what it would delete")
-    .option("--all", "also delete the hook log and rules caches in ~/.retrohound")
+    .option("--all", "also delete the hook log, rules caches and fingerprint key (fp.key) in ~/.retrohound; secret fingerprints differ afterwards")
     .action((f: { db?: string; yes?: boolean; all?: boolean }) => run(() => purgeCommand(f, io)));
 
   registerQuery(program, run, io);

@@ -65,5 +65,9 @@ export function preflightTable({ report, skipped }: PreflightResult): string {
   return mask(lines.join("\n") + "\n");
 }
 
-export const failsOn = (report: ScanReport, level?: Level) =>
-  level !== undefined && report.findings.some((f) => rank(f.level) >= rank(level));
+/** The 0.3.2 unsafe-hook warning (a RetroHound hook running files others can modify) counts as this level for `--fail-on`. */
+export const UNSAFE_HOOK_LEVEL: Level = "high";
+
+/** `unsafeHooks`: how many unsafe-hook warnings were printed. Without `level` nothing fails, as before. */
+export const failsOn = (report: ScanReport, level?: Level, unsafeHooks = 0) =>
+  level !== undefined && (report.findings.some((f) => rank(f.level) >= rank(level)) || (unsafeHooks > 0 && rank(UNSAFE_HOOK_LEVEL) >= rank(level)));

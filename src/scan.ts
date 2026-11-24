@@ -230,7 +230,11 @@ async function indexAgent(c: Collector, store: Store, paths: string[], full: boo
 }
 
 function evaluateAgent(c: Collector, store: Store, rules: Rule[], sessions: Sessions, full: boolean): void {
-  const findings = [...sessions.values()].flatMap((events) => evaluate(rules, [...events.values()]).map(toFinding));
+  // A split session with a file gone: the remaining files are a partial view, so add the rows of the gone files (ids the
+  // raw parse lacks), or replaceFindings would drop findings only the whole session showed (0008).
+  const whole = ([id, events]: [string, Map<string, RawEvent>]): RawEvent[] =>
+    [...events.values(), ...(store.goneEvents(id).filter((e) => !events.has(e.id)) as RawEvent[])];
+  const findings = [...sessions].flatMap((s) => evaluate(rules, whole(s)).map(toFinding));
   store.replaceFindings([...sessions.keys()], findings);
   if (full) {
     // Sessions whose transcripts are gone can only be re-read from masked rows (0006, 0008): keep their old evidence.
