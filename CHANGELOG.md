@@ -5,6 +5,41 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- `injection_untrusted_then_secret_comment` (hunt): web, MCP or `gh` content enters a session, then a secret is read
+  or minted, then something is posted to GitHub with `gh` (issue or PR comment, review, release notes, `gh api`
+  POST/PATCH) within 30 minutes. This is the case of a CI agent that leaks its key into a comment.
+- `control_plane_instruction_named_package_install` (hunt): the agent installs a package that an instruction file or
+  skill loaded earlier in the session named. It uses a new derived per-session field, `instruction_named_package`
+  (ADR 0017), computed before evaluation and never stored, so it runs only while a transcript is parsed.
+- `preflight` reads more agent config: `.gemini/settings.json`, `.cursor/mcp.json`, `.vscode/mcp.json`, `.codex/`
+  (`config.toml`, `hooks.json`), `.envrc`, husky hooks, `devcontainer.json`, Copilot instruction files and nested
+  CLAUDE.md/AGENTS.md (depth 4, 50 files at most). `files_mcp_server_added` also covers the Cursor and VS Code MCP files.
+- `files_config_runs_repo_script`: a hook, devcontainer lifecycle command, husky hook, `.envrc` line or folder-open
+  task that runs a script from the repo. `files_oversized_agent_file`: an instruction, config or hook-script file over
+  100,000 bytes.
+- `docs/formats/copilot-cli.md`: where Copilot CLI keeps its sessions. There is no collector yet; the local session
+  folders inspected were empty, and a parser is written only from real transcripts.
+
+### Changed
+- `secrets_recon_read_egress`: the harvest step also counts an environment dump or a cloud CLI call that prints or
+  mints a token, not only a secret-file read.
+- `files_transcript_tamper_command` (enforce) also catches python, node, bun, ruby, perl and php one-liners that delete
+  transcripts or `~/.retrohound`. A one-liner that only reads a transcript passes.
+- The live hook marks Codex `apply_patch` edits of agent settings the way it marks Write and Edit, for the hook and
+  retention rules.
+- `preflight --fail-on` also fails on the unsafe RetroHound hook warning (counted as high). The default exit code does
+  not change.
+- `purge --all` also deletes the fingerprint key `~/.retrohound/fp.key`, so fingerprints differ after the next scan.
+- The live hook no longer computes secret fingerprints (no rule reads them), so a read-only HOME gives no key warning.
+
+### Fixed
+- A session split over several transcript files lost findings that needed a deleted file's events on re-evaluation;
+  the stored rows of the gone files are now included.
+- `--anonymize` hashed the kept parts of a quoted home path that contains a space.
+- On the Bun runtime, `verify` and `query` could not open a WAL index copied without its `-wal`/`-shm` files.
+- ADR 0016 now says that another scope's scan does not re-evaluate untouched sessions for first-seen fields.
+
 ## [0.3.2] - 2026-11-22
 
 ### Added

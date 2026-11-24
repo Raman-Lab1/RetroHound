@@ -43,9 +43,10 @@ Run `scan` now and then, or after a session that felt off. The things worth a lo
 (`.env`, SSH keys) and where they went next, `curl | sh` and similar, and changes to agent settings, hooks or MCP
 servers that you did not make.
 
-Before you open a repo you just cloned, run `retrohound preflight <dir>`. It reads the repo's `.claude/`, `.mcp.json`,
-CLAUDE.md and AGENTS.md, skills, `.vscode/tasks.json` and npm lifecycle scripts as text and runs nothing. It also
-warns (on stderr, and in `preflight.unsafe_hooks` with `--format json`) when an installed RetroHound hook runs files
+Before you open a repo you just cloned, run `retrohound preflight <dir>`. It reads the repo's agent config (`.claude/`,
+`.mcp.json`, `.gemini/`, `.cursor/mcp.json`, `.codex/`, `.vscode/`), CLAUDE.md and AGENTS.md at any depth, Copilot
+instruction files, skills, `.envrc`, husky hooks, devcontainer commands and npm lifecycle scripts as text and runs
+nothing. It flags config that runs a script from the repo on its own, and unusually large agent files. It also warns (on stderr, and in `preflight.unsafe_hooks` with `--format json`) when an installed RetroHound hook runs files
 that other users can write.
 
 There is an optional live hook. It runs only the small set of high-precision `enforce` rules on each tool call before
@@ -100,7 +101,8 @@ Other tools on the index:
 - `retrohound mcp`: the index over MCP stdio, read-only. `claude mcp add retrohound -- retrohound mcp`.
 - `retrohound git-secrets`: secrets an agent saw that were then committed to the project's local git history.
 - `retrohound wrapped --anonymize`: a shareable summary page, or `--out card.svg` for an image.
-- `retrohound purge --yes`: delete the index and its footprint report.
+- `retrohound purge --yes`: delete the index and its footprint report. `--all` also deletes the hook log, the rules
+  caches and the fingerprint key, so secret fingerprints differ after the next scan.
 
 `retrohound <command> --help` lists every flag.
 
@@ -109,8 +111,9 @@ Other tools on the index:
 The rules are Sigma v2.1 YAML on an `ai_coding_agent` logsource, in [rules/ai_coding_agent](rules/ai_coding_agent).
 They cover secrets (read, retried after a block, sent out), risky execution, changes to agent settings, hooks and MCP
 servers, persistence, hidden text in instruction files, uploads to paste and file-drop sites, web, MCP or `gh` content
-followed by a risky command, cloud metadata access, deleting transcripts or lowering their retention, and the agent
-removing the RetroHound hook. `retrohound rules list` shows what is loaded, `rules show <rule>` prints one, and
+followed by a risky command or by a secret posted back to GitHub, a package that an instruction file named and the
+agent then installed, cloud metadata access, deleting transcripts or lowering their retention, and the agent removing
+the RetroHound hook. `retrohound rules list` shows what is loaded, `rules show <rule>` prints one, and
 `rules test` runs every rule's positive and negative tests.
 
 Add your own with `--extra-rules <dir>` (they load on top of the shipped set and cannot replace a rule). Writing one:
