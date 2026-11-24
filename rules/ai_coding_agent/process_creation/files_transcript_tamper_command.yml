@@ -10,7 +10,7 @@ description: >
   ~/.codex or ~/.gemini directory; also ~/.retrohound and `retrohound purge --yes`. Also a command that sets Claude Code
   `cleanupPeriodDays` to 0-9 days or Codex history persistence to none. Each of these destroys the record of what the
   agent did. Write/Edit of the settings is control_plane_transcript_retention_lowered. Also an interpreter one-liner (python -c shutil.rmtree/os.remove, node -e fs.rmSync/unlinkSync, ruby, perl, php) that
-  deletes one of those paths. Known gap: a heredoc script or a path assembled in pieces is not matched.
+  deletes one of those paths. A lone git commit or git tag with no shell metacharacters (; & | ` $ > ( or newline) is not matched, whatever its message says. Known gap: a heredoc script or a path assembled in pieces is not matched.
 tags: [attack.defense_evasion, attack.t1070, attack.t1070.004, owasp_agentic.asi10]
 falsepositives:
   - The user asked the agent to free disk space or wipe old sessions; better done by the user outside the agent.
@@ -49,9 +49,13 @@ detection:
   # ponytail: a line that touches memory and also deletes a transcript is filtered whole; split per path if abused.
   filter_memory:
     command_line_unquoted|re|i: '\.claude[/\\]projects[/\\][^/\\\s;&|]{1,300}[/\\]memory(?:[/\\]|\s|$)'
-  # A lone read-only search names `rm -rf` or `mv ` as its pattern; any ; & | ` $ or > in the line keeps the rule on.
+  # A lone read-only search names `rm -rf` or `mv ` as its pattern; any ; & | ` $ > or ( in the line keeps the rule on (`<(...)` runs first).
   filter_search:
-    command_line|re|i: '^\s{0,5}(?:[efz]?grep|rg|ag|ack|git\s{1,5}grep)\s[^;&|`$>\n]{0,2000}$'
+    command_line|re|i: '^\s{0,5}(?:[efz]?grep|rg|ag|ack|git\s{1,5}grep)\s[^;&|`$>(\n]{0,2000}$'
   search_pre: # rg --pre runs a command on every file it searches
     command_line|re|i: '\s--pre\b'
-  condition: 1 of selection_* and not filter_memory and not (filter_search and not search_pre)
+  # A lone git commit/tag with none of ; & | ` $ > ( or newline, so <(..), =(..) and PowerShell (..) still match; `-C dir`
+  # is allowed, `-c k=v` is not (core.fsmonitor, gpg.program and core.editor run commands); case-sensitive for -C vs -c.
+  filter_git_message:
+    command_line|re: '^\s{0,5}git(?:[ \t]{1,5}-C[ \t]{1,5}(?:"[^"\n;&|`$>(]{1,300}"|''[^''\n;&|`$>(]{1,300}''|[^\s;&|`$>(''"]{1,300})){0,3}[ \t]{1,5}(?:commit|tag)[ \t][^;&|`$>(\n]{0,2000}$'
+  condition: 1 of selection_* and not filter_memory and not (filter_search and not search_pre) and not filter_git_message

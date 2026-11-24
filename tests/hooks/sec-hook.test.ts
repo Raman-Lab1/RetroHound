@@ -10,6 +10,7 @@ import type { IO } from "../../src/cli/io.ts";
 import { loadRuleDir } from "../../src/cli/rules.ts";
 import { checkPaths, handlerFor, install, isOurs, status, uninstall, type SafetyEnv } from "../../src/hooks/install.ts";
 import { loadEnforceRules, runHook } from "../../src/hooks/run.ts";
+import { DEFAULT_RULES_DIR } from "../../src/version.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "rh-sec-hook-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -215,4 +216,12 @@ describe("installer", () => {
     install({ ...o, mode: "log" });
     expect(groups().map((g: { matcher: string }) => g.matcher)).toEqual(["*", "Bash"]);
   });
+});
+
+test("shipped tamper rule: a lone commit message naming the delete passes the hook; a chained delete is denied", () => {
+  const shipped = loadEnforceRules(DEFAULT_RULES_DIR, join(dir, "c-shipped.json"));
+  const hit = (cmd: string) => runHook(bash(cmd), "block", shipped, logPath).rule;
+  expect(hit("git commit -m 'drop rm -rf ~/.claude/projects from the docs'")).toBeUndefined();
+  expect(hit("git commit -m x && rm -rf ~/.claude/projects")).toBe("files_transcript_tamper_command");
+  expect(hit("git commit -F <(rm -rf ~/.claude/projects)")).toBe("files_transcript_tamper_command");
 });
