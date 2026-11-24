@@ -32,3 +32,14 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"git commit -m x; rm -rf ~/.claude/projects"}
 {"category":"process_creation","tool_name":"Bash","command_line":"git commit -m x\nrm -rf ~/.claude/projects"}
 {"category":"process_creation","tool_name":"Bash","command_line":"git -c core.fsmonitor=x commit -m 'drop rm -rf ~/.claude/projects'"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git commit -F <(rm -rf ~/.claude/projects)"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git commit -m x <(rm -rf ~/.claude/projects)"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git commit -F =(rm -rf ~/.claude/projects)"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git tag -a v1 -F <(rm -rf ~/.codex/sessions)"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git -C '/tmp/x' commit -F <(shred -u ~/.claude/history.jsonl)"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git commit -F <(find ~/.claude/projects -delete)"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git commit -F <(retrohound purge --yes)"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git commit -m (Remove-Item ~/.claude/projects -Recurse -Force)"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git commit -m @(Remove-Item ~\\.claude\\projects -Recurse)"}
+{"category":"process_creation","tool_name":"Bash","command_line":"grep -n x <(rm -rf ~/.claude/projects)"}
+{"category":"process_creation","tool_name":"Bash","command_line":"rg foo <(rm -rf ~/.codex/sessions)"}

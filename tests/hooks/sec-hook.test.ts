@@ -223,4 +223,5 @@ test("shipped tamper rule: a lone commit message naming the delete passes the ho
   const hit = (cmd: string) => runHook(bash(cmd), "block", shipped, logPath).rule;
   expect(hit("git commit -m 'drop rm -rf ~/.claude/projects from the docs'")).toBeUndefined();
   expect(hit("git commit -m x && rm -rf ~/.claude/projects")).toBe("files_transcript_tamper_command");
+  expect(hit("git commit -F <(rm -rf ~/.claude/projects)")).toBe("files_transcript_tamper_command");
 });
