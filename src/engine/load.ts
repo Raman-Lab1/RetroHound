@@ -4,6 +4,7 @@ import { parseAllDocuments } from "yaml";
 import { CATEGORIES, LEVELS, type Category, type Level } from "../normalize/types.ts";
 import { compileCondition } from "./condition.ts";
 import { FIRST_SEEN_FIELDS } from "./first-seen.ts";
+import { PROVENANCE_FIELD } from "./provenance.ts";
 import { linkCorrelations, parseCorrelation, type CorrelationRule } from "./correlate.ts";
 import { allOf, anyOf, compileItem, RuleError, type Pred } from "./modifiers.ts";
 
@@ -62,7 +63,7 @@ function optString(doc: Doc, key: string): string | undefined {
 }
 
 const CORRELATION_X = new Set(["max_events_between", "differ_by"]); // checked in correlate.ts
-const REQUIRES = new Set(["first_seen"]); // detections only: what the rule needs that the live hook cannot give (0016)
+const REQUIRES = new Set(["first_seen", "instruction_provenance"]); // detections only: what the rule needs that the live hook cannot give (0016)
 
 /** The metadata shared by detections and correlations, including the strict `x-retrohound` block. */
 function parseMeta(doc: Doc, where: Where, correlation: boolean): RuleMeta {
@@ -82,6 +83,9 @@ function parseMeta(doc: Doc, where: Where, correlation: boolean): RuleMeta {
   }
   if (requires.includes("first_seen") && lane === "enforce") {
     throw new RuleError("first-seen-enforce", "a rule that requires first_seen is hunt-only: the live hook has no index");
+  }
+  if (requires.includes("instruction_provenance") && lane === "enforce") {
+    throw new RuleError("provenance-enforce", "a rule that requires instruction_provenance is hunt-only: the live hook sees no instruction text");
   }
   const id = optString(doc, "id");
   const name = optString(doc, "name");
@@ -139,6 +143,9 @@ function compileDetection(doc: Doc, where: Where): DetectionRule {
   const firstSeen = FIRST_SEEN_FIELDS.find((f) => used.has(f));
   if (firstSeen && !requires.includes("first_seen")) {
     throw new RuleError("first-seen-not-required", `${firstSeen} needs x-retrohound.requires: [first_seen]`);
+  }
+  if (used.has(PROVENANCE_FIELD) && !requires.includes("instruction_provenance")) {
+    throw new RuleError("provenance-not-required", `${PROVENANCE_FIELD} needs x-retrohound.requires: [instruction_provenance]`);
   }
   return { ...meta, kind: "detection", ...logsource, fields: [...used], matches };
 }

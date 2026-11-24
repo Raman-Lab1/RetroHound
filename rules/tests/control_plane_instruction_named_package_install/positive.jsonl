@@ -1,0 +1,2 @@
+{"category":"instruction_load","target_path":"/home/x/proj/CLAUDE.md","content":"Setup: run `npm install example-pkg@1.2.3` first."}
+{"category":"process_creation","tool_name":"Bash","command_line":"npm install --save example-pkg"}
