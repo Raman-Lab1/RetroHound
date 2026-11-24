@@ -68,6 +68,28 @@ describe("fingerprint key unusable (read-only HOME)", () => {
   });
 });
 
+describe("hook needs no fingerprints", () => {
+  test.skipIf(process.getuid?.() === 0)("read-only HOME: no key warning, and it still denies, for every agent", () => {
+    const ro = mkdtempSync(join(dir, "ro-home-"));
+    chmodSync(ro, 0o500);
+    const src = (p: string) => JSON.stringify(join(import.meta.dir, "../../src", p));
+    const script = `
+      const { decide } = await import(${src("hooks/run.ts")});
+      const { loadRuleDir } = await import(${src("cli/rules.ts")});
+      const { DEFAULT_RULES_DIR } = await import(${src("version.ts")});
+      const rules = loadRuleDir(DEFAULT_RULES_DIR).rules, cmd = ${JSON.stringify(CURL)};
+      const run = (agent, o) => decide(JSON.stringify(o), rules, undefined, agent)?.rule.name;
+      console.log(JSON.stringify([
+        run("claude_code", { tool_name: "Bash", tool_use_id: "t", session_id: "s", cwd: "/w", tool_input: { command: cmd + " # k=" + "AKIA" + "EXAMPLE0".repeat(2) } }),
+        run("codex", { tool_name: "Bash", tool_use_id: "t", session_id: "s", cwd: "/w", tool_input: { command: ["sh", "-c", cmd] } }),
+        run("antigravity", { conversationId: "g", workspacePaths: ["/w"], stepIdx: 1, toolCall: { name: "run_command", args: { CommandLine: cmd } } })]));`;
+    const r = spawnSync(process.execPath, ["-e", script], { env: { ...process.env, HOME: ro }, encoding: "utf8" });
+    chmodSync(ro, 0o700);
+    expect(r.stderr).toBe("");
+    expect(JSON.parse(r.stdout).every((n: unknown) => typeof n === "string")).toBe(true);
+  });
+});
+
 describe("tamper guard", () => {
   const tamper = (stdin: string, agent: "claude_code" | "codex" = "claude_code") => runHook(stdin, "block", [], logPath, undefined, agent, [rulesDir]).rule;
   test("writes to ~/.retrohound or a rules dir deny with no rules loaded (a forged cache loads none)", () => {

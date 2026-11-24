@@ -12,3 +12,11 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"grep -c 'mv ' ~/.codex/sessions/2026/01/01/rollout.jsonl"}
 {"category":"process_creation","tool_name":"Bash","command_line":"mv /tmp/0b5e4f2a.jsonl ~/.claude/projects/-home-dev-app/0b5e4f2a.jsonl"}
 {"category":"process_creation","tool_name":"Bash","command_line":"mv -f ~/backup/history.jsonl ~/.codex/history.jsonl"}
+{"category":"process_creation","tool_name":"Bash","command_line":"python3 -c \"print(open('/home/dev/.claude/history.jsonl').read()[:200])\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"node -e \"console.log(fs.readdirSync('/home/dev/.codex/sessions'))\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"python3 -c \"import shutil; shutil.rmtree('build')\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"node -e \"fs.rmSync('dist', {recursive: true})\""}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "python3 -c \"import shutil; shutil.rmtree('/home/dev/.retrohound-test-dir')\""}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "node -e \"fs.rmSync('/home/dev/proj/.claude/projects-old')\""}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git commit -m \"fix: python -c os.remove on ~/.claude/projects now caught\""}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "echo \"python3 -c 'os.remove(\\\"~/.claude/projects/x\\\")'\" >> notes.md"}

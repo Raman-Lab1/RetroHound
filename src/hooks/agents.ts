@@ -1,7 +1,7 @@
 // Per-agent PreToolUse protocol for `hook run --agent` (ADR 0009): payload -> the RawEvent the rules see, built with
 // the collectors' own mapping, and a decision in that agent's output format. Never `allow`, never input rewrites.
 // Codex: learn.chatgpt.com/docs/hooks. Antigravity: antigravity.google/docs/hooks.
-import { mapToolUse, type ToolFields } from "../collectors/claude-code/v1.ts";
+import { mapToolUse, withoutFingerprints, type ToolFields } from "../collectors/claude-code/v1.ts";
 import { mapCall } from "../collectors/antigravity/v1.ts";
 import { cwdOf, mapItem, shellFields, type Fields } from "../collectors/codex/map.ts";
 import { secretKinds } from "../normalize/mask.ts";
@@ -78,7 +78,7 @@ function antigravity(p: Line): RawEvent {
 export function toEvents(agent: Agent, p: unknown): RawEvent[] {
   const o = obj(p);
   if (agent === "antigravity" ? typeof o.toolCall?.name !== "string" : typeof o.tool_name !== "string") throw new Error("not a tool-call payload");
-  const evs = agent === "codex" ? codex(o) : [agent === "antigravity" ? antigravity(o) : claude(o)];
+  const evs = withoutFingerprints(() => (agent === "codex" ? codex(o) : [agent === "antigravity" ? antigravity(o) : claude(o)]));
   return evs.map((ev) => Object.fromEntries(Object.entries(ev).filter(([, v]) => v !== undefined)) as RawEvent); // absent, not undefined: `|exists`
 }
 

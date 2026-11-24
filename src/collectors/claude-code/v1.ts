@@ -140,10 +140,22 @@ function resolvePath(p: string, cwd?: string): string {
   return resolveDots(normalizeSlashes(!cwd || p.startsWith("/") || UNRESOLVABLE.test(p) ? p : `${cwd}/${p}`));
 }
 
+let fingerprinting = true;
+/** Runs `fn` with fingerprints off (the live hook reads no fingerprint, and computing one opens the key file). */
+export function withoutFingerprints<T>(fn: () => T): T {
+  const was = fingerprinting;
+  fingerprinting = false;
+  try {
+    return fn();
+  } finally {
+    fingerprinting = was;
+  }
+}
+
 function addSecrets(ev: Partial<RawEvent>): void {
   const raw = [ev.tool_input, ev.content].filter((s) => s !== undefined);
   const kinds = [...new Set(raw.flatMap((s) => secretKinds(s)))];
-  const fps = [...new Set(raw.flatMap((s) => secretFingerprints(s)))];
+  const fps = fingerprinting ? [...new Set(raw.flatMap((s) => secretFingerprints(s)))] : [];
   if (kinds.length) ev.secret_kinds = kinds;
   if (fps.length) ev.secret_fps = fps;
 }
