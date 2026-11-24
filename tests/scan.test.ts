@@ -218,6 +218,17 @@ describe("runScan", () => {
     expect(r.findings.length).toBe(1);
   });
 
+  test("a split session with one file gone keeps the finding that needed the gone part's events", async () => {
+    await runScan(opts);
+    const proj = join(root, "projects", "-home-x-acme");
+    rmSync(join(proj, "s1.jsonl")); // 2 of the 4 hits the correlation needs
+    const extra = { type: "user", uuid: "u-x", sessionId: "s1", timestamp: "2026-11-07T10:00:07.000Z", message: { content: "hi" } };
+    appendFileSync(join(proj, "s1.orphaned-1.jsonl"), JSON.stringify(extra) + "\n"); // touched: the session re-evaluates
+    const r = await runScan(opts);
+    expect(r.scan.files).toMatchObject({ gone: 1, indexed: 1 });
+    expect(r.findings.map((f) => f.rule_id)).toEqual(["many"]);
+  });
+
   test("level, project and since filters", async () => {
     expect((await runScan({ ...opts, level: "high" })).findings).toEqual([]);
     expect((await runScan({ ...opts, level: "low" })).findings.length).toBe(1);
@@ -374,6 +385,18 @@ x-retrohound: { requires: [first_seen] }
     expect(fired(await runScan({ ...opts, noIndex: true }))).toEqual(want);
     expect(fired(await runScan(opts))).toEqual(want);
     expect(fired(await runScan(opts))).toEqual(want); // a warm rescan keeps them
+  });
+
+  test("pinned (ADR 0016): another scope's scan does not re-evaluate untouched sessions, so their findings stay as of their scan", async () => {
+    writeFileSync(join(dir, "rules", "fs.yml"), FS);
+    const proj = join(root, "projects", "-home-x-acme");
+    put(join(proj, "s09.jsonl"), [fetch("s09", "2026-10-01T10:00:00.000Z", "https://base.example.invalid/")]);
+    put(join(proj, "s10.jsonl"), [fetch("s10", "2026-10-20T10:00:00.000Z", "https://a.example.invalid/")]);
+    expect(fired(await runScan(opts))).toEqual(["fs-global s10 a.example.invalid", "fs-project s10 a.example.invalid"]);
+    // a second root, same index: its older use of the domain (inside the baseline) would make s10 no longer the first
+    const other = join(dir, "claude2");
+    put(join(other, "projects", "-home-x-acme", "s08.jsonl"), [fetch("s08", "2026-10-10T10:00:00.000Z", "https://a.example.invalid/")]);
+    expect(fired(await runScan({ ...opts, root: other }))).toEqual(["fs-global s10 a.example.invalid", "fs-project s10 a.example.invalid"]);
   });
 
   test("cold start: nothing fires while the data spans under 14 days", async () => {

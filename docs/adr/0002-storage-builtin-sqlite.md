@@ -34,6 +34,9 @@ Schema (`src/store/schema.ts`), beyond the basic tables:
 Schema versioning is `PRAGMA user_version` plus an ordered list of SQL migrations, with no framework.
 `retrohound query` opens the database read-only, so user SQL cannot change the index. On macOS and Linux the file is
 mode 0600 in a 0700 directory, because it holds masked evidence for a long time.
+Under Bun, a WAL index copied without its `-wal`/`-shm` cannot be opened read-only (the shm cannot be created, and the
+failure shows on the first read). The adapter then retries with `immutable=1`, which is safe because such a copy has
+no writer; a live index never needs the retry. Node opens it as is.
 
 ## Consequences
 - No native dependencies and no install scripts.
