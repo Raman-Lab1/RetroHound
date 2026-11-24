@@ -47,7 +47,11 @@ function connect(path: string, readonly: boolean): Engine {
     if (!readonly) return new Database(path);
     try {
       const db = new Database(path, { readonly: true });
-      db.prepare("SELECT 1 FROM sqlite_master LIMIT 1").get(); // the open is lazy: the failure shows on the first read
+      // The open is lazy: the failure shows on the first read. Finalize the probe, or Bun's close() leaves a zombie
+      // connection and the writer's close can no longer remove -wal/-shm.
+      const probe = db.prepare("SELECT 1 FROM sqlite_master LIMIT 1");
+      probe.get();
+      probe.finalize?.();
       return db;
     } catch (e) {
       if (!NO_SHM.test(String((e as Error)?.message))) throw e; // SQLITE_BUSY or locked: a live WAL, an immutable open would read it stale
