@@ -26,7 +26,7 @@ describe.each(report.rules.map((r) => [r.name, r] as const))("%s", (_name, r) =>
 test.each([
   ["blocked_then_other_tool_secret_read", ["p1", "p2", "p3"]],
   ["blocked_then_subagent_same_call", ["p1", "p2", "p3"]],
-  ["injection_untrusted_then_secret_comment", ["p1", "p2", "p3", "p4", "p5", "p6"]],
+  ["injection_untrusted_then_secret_comment", ["p1", "p2", "p3", "p4", "p5", "p6", "p7"]],
 ])("%s fires in every positive session", (name, sessions) => {
   const lines = readFileSync(`rules/tests/${name}/positive.jsonl`, "utf8").trim().split("\n");
   const evs = lines.map((l, i) => event({ seq: i + 1, ts: new Date(Date.UTC(2026, 0, 1, 0, 0, i)).toISOString(), ...JSON.parse(l) }));
@@ -62,6 +62,13 @@ test("github_post_via_gh matches gh api field posts, not reads", () => {
     `gh api ${path} --input /tmp/o.json`, `gh api ${path} -fbody=x`, `gh api ${path} -X POST -f body=x`]) expect(posts(c)).toBe(true);
   for (const c of [`gh api ${path} -f per_page=100 -X GET`, `gh api --method=HEAD -F x=1 ${path}`, `gh api ${path} -XGET -f a=1`,
     `gh api ${path} --paginate --jq .[].body`, `gh api repos/example/my-fork/issues -H 'X-A: b'`, `gh api user -f name=x`]) expect(posts(c)).toBe(false);
+  // Quoted -f values, a continued line, and -X text inside a quoted value still post.
+  for (const c of [`gh api ${path} -f"body=x"`, `gh api ${path} -f'body=x'`, `gh api ${path} \\\n  -f body=x`,
+    `gh api ${path} -f body='use -X GET to list'`, `gh api ${path} -f body=x -H 'X-A: --method GET'`]) expect(posts(c)).toBe(true);
+  // PUT and DELETE do not post a comment; GET spelled with = or quotes, or after a continued line, is a read.
+  for (const c of ["gh api repos/example/app/pulls/7/merge -X PUT -f merge_method=squash", "gh api -X PUT repos/example/app/issues/42/lock -f lock_reason=resolved",
+    "gh api -X DELETE repos/example/app/issues/42/labels -f labels[]=bug", `gh api ${path} -f per_page=100 -X=GET`,
+    `gh api ${path} -f per_page=100 -X 'GET'`, `gh api ${path} -f per_page=100 --method="GET"`, `gh api ${path} \\\n  -f per_page=1 \\\n  -X GET`]) expect(posts(c)).toBe(false);
 });
 
 // The helper copies its source rules' predicates (a correlation step cannot be an either-or): keep them in step.
