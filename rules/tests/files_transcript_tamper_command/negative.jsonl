@@ -20,3 +20,8 @@
 {"category": "process_creation", "tool_name": "Bash", "command_line": "node -e \"fs.rmSync('/home/dev/proj/.claude/projects-old')\""}
 {"category": "process_creation", "tool_name": "Bash", "command_line": "git commit -m \"fix: python -c os.remove on ~/.claude/projects now caught\""}
 {"category": "process_creation", "tool_name": "Bash", "command_line": "echo \"python3 -c 'os.remove(\\\"~/.claude/projects/x\\\")'\" >> notes.md"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git commit -m 'drop rm -rf ~/.claude/projects from the docs'"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git commit -m \"drop rm -rf ~/.claude/projects from the docs\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"git commit --message='note: rm ~/.codex/sessions is now denied'"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git tag -a v1 -m 'rm -rf ~/.claude/projects is denied since v1'"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git -C \"/home/dev/my app\" commit -m \"drop rm -rf ~/.claude/projects from the docs\""}

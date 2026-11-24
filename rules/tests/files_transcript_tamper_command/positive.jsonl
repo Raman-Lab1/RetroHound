@@ -27,3 +27,8 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"perl -e 'unlink glob(\"/home/dev/.gemini/antigravity/brain/*\")'"}
 {"category": "process_creation", "tool_name": "Bash", "command_line": "python3 -c \"import os; os.system('rm -rf ~/.claude/projects')\""}
 {"category": "process_creation", "tool_name": "Bash", "command_line": "cd /tmp && sudo bash -c \"python3 -c 'import shutil; shutil.rmtree(\\\"/home/dev/.claude/projects\\\")'\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"git commit -m x && rm -rf ~/.claude/projects"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git commit -m \"$(rm -rf ~/.claude/projects)\""}
+{"category":"process_creation","tool_name":"Bash","command_line":"git commit -m x; rm -rf ~/.claude/projects"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git commit -m x\nrm -rf ~/.claude/projects"}
+{"category":"process_creation","tool_name":"Bash","command_line":"git -c core.fsmonitor=x commit -m 'drop rm -rf ~/.claude/projects'"}
