@@ -8,6 +8,11 @@ and versions follow [Semantic Versioning](https://semver.org/).
 ### Changed
 - The Homebrew formula and the Velociraptor artifact pin the published 0.3.2 tarball and its SHA-256.
 
+### Fixed
+- `files_transcript_tamper_command` (enforce) missed a transcript delete run from a quoted `=` value (`git -c core.fsmonitor='...'`,
+  `GIT_EDITOR=`, `alias x=`), a git shell alias (`'!rm ...'`), `/bin/rm` or `/usr/bin/rm`, or a nested `sh -c '...'`.
+  A bare flag value (`--grep=rm`, `op=rm`) and `ls -l /bin/rm` still pass.
+
 ## [0.3.2] - 2026-11-24
 
 ### Added
