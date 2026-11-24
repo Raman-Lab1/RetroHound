@@ -1,7 +1,7 @@
 # Architecture decision records
 
-Each record states the context, the options considered, the decision and its consequences. All are accepted and
-describe the code as it is; amendments are dated inside the record.
+Each record states the context, the options considered, the decision and its consequences. Accepted records
+describe the code as it is; amendments are dated inside the record. A proposed record describes planned work.
 
 | ADR | Topic | Decision |
 |---|---|---|
@@ -20,6 +20,7 @@ describe the code as it is; amendments are dated inside the record.
 | [0015](0015-tamper-evident-index.md) | Integrity | A hash chain over every write to events, findings and indexed files; `verify --head` checks it against a recorded head. |
 | [0016](0016-first-seen-fields.md) | First seen | `first_seen_project` / `first_seen_global`: derived booleans from a scan pre-pass, never stored; rules declare `requires: [first_seen]`, hunt lane only. |
 | [0017](0017-instruction-named-package.md) | Instruction provenance | `instruction_named_package`: a derived boolean from a per-session pre-pass in `evaluate`, never stored; rules declare `requires: [instruction_provenance]`, hunt lane only. |
+| [0018](0018-ci-runner-mode.md) | CI-runner mode (proposed) | Scan the runner's transcripts in the same job after the agent step (`if: always()`, `--fail-on`, masked SARIF/NDJSON artifact); optional block-mode hook before it, fail-closed acceptable on a disposable runner; no new rules. |
 
 Numbers 0012 and 0013 are not published.
 
