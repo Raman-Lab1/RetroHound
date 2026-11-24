@@ -25,3 +25,8 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"git commit --message='note: rm ~/.codex/sessions is now denied'"}
 {"category":"process_creation","tool_name":"Bash","command_line":"git tag -a v1 -m 'rm -rf ~/.claude/projects is denied since v1'"}
 {"category":"process_creation","tool_name":"Bash","command_line":"git -C \"/home/dev/my app\" commit -m \"drop rm -rf ~/.claude/projects from the docs\""}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "ls --color=auto ~/.claude/projects"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "export TERM=rxvt; du -sh ~/.claude/projects"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "NODE_OPTIONS=--max-old-space-size=4096 node scripts/stats.js ~/.claude/projects"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "form=rmdir_list.txt cat ~/.claude/history.jsonl"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git -c core.pager='less -R' log -- ~/.claude/projects"}

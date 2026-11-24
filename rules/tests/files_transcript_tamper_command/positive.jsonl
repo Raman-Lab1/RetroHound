@@ -43,3 +43,14 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"git commit -m @(Remove-Item ~\\.claude\\projects -Recurse)"}
 {"category":"process_creation","tool_name":"Bash","command_line":"grep -n x <(rm -rf ~/.claude/projects)"}
 {"category":"process_creation","tool_name":"Bash","command_line":"rg foo <(rm -rf ~/.codex/sessions)"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git -c core.fsmonitor='rm -rf ~/.claude/projects' commit -m x"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git -c core.pager='rm -rf ~/.claude/projects' log"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git -c core.editor='shred -u ~/.claude/history.jsonl' commit"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git -c sequence.editor='rm -rf ~/.codex/sessions' rebase -i HEAD~2"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git -c gpg.program='rm -rf ~/.claude/projects' tag -s v1 -m x"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git -c diff.external='rm -rf ~/.codex/archived_sessions' diff"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "GIT_EDITOR='rm -rf ~/.codex/sessions' git commit"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "alias x='rm -rf ~/.claude/projects'"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git fetch --upload-pack='rm -rf ~/.claude/projects' origin"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git -c core.fsmonitor='mv ~/.claude/projects /tmp/x' status"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git -c core.pager='python3 -c \"import shutil; shutil.rmtree(\\\"/home/dev/.claude/projects\\\")\"' log"}

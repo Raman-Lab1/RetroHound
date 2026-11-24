@@ -224,4 +224,5 @@ test("shipped tamper rule: a lone commit message naming the delete passes the ho
   expect(hit("git commit -m 'drop rm -rf ~/.claude/projects from the docs'")).toBeUndefined();
   expect(hit("git commit -m x && rm -rf ~/.claude/projects")).toBe("files_transcript_tamper_command");
   expect(hit("git commit -F <(rm -rf ~/.claude/projects)")).toBe("files_transcript_tamper_command");
+  expect(hit("git -c core.fsmonitor='rm -rf ~/.claude/projects' commit -m x")).toBe("files_transcript_tamper_command");
 });
