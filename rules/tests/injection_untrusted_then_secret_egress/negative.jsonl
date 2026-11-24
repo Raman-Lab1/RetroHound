@@ -1,0 +1,5 @@
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env"}
+{"category":"web_request","tool_name":"WebFetch","url":"https://docs.example.invalid/","domain":"docs.example.invalid"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s https://api.example.invalid"}
+{"category":"file_access","tool_name":"Read","target_path":"/home/dev/app/.env","outcome":"blocked","denial_kind":"automode-blocked"}
+{"category":"process_creation","tool_name":"Bash","command_line":"curl -s https://api.example.invalid"}

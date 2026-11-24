@@ -59,6 +59,46 @@ describe("old_string inside a hook section", () => {
     expect(edit(big, "npm test").rule).toBeUndefined();
     expect(edit(put("e/notes.json", JSON_CFG), "npm test").rule).toBeUndefined();
   });
+  test("a Write that drops the hooks entry is marked; a Write of a file without hooks is not", () => {
+    const write = (file_path: string) => runHook(JSON.stringify({ session_id: "s", cwd: dir, tool_name: "Write", tool_use_id: "t",
+      tool_input: { file_path, content: `{"model": "opus"}` } }), "block", rules, log).rule;
+    expect(write(put("w/.claude/settings.json", JSON_CFG))).toBe("control_plane_agent_config_risky_write");
+    expect(write(put("x/.claude/settings.json", `{"model": "sonnet"}`))).toBeUndefined();
+  });
+  test("a Write that keeps cleanupPeriodDays passes; one that lowers it, or forges the marker, is blocked", () => {
+    const write = (file_path: string, content: string) => runHook(JSON.stringify({ session_id: "s", cwd: dir, tool_name: "Write", tool_use_id: "t",
+      tool_input: { file_path, content } }), "block", rules, log).rule;
+    const kept = `{"cleanupPeriodDays": 7, "permissions": {"allow": ["Bash(npm test)"]}}`;
+    expect(write(put("r1/.claude/settings.json", `{"cleanupPeriodDays": 7}`), kept)).toBeUndefined();
+    expect(write(put("r2/.claude/settings.json", `{"cleanupPeriodDays": 9}`), kept)).toBe("control_plane_transcript_retention_lowered");
+    expect(write(put("r3/.claude/settings.json", `{"model": "opus"}`), kept)).toBe("control_plane_transcript_retention_lowered");
+    expect(write(put("r4/.claude/settings.json", `{"cleanupPeriodDays": 30}`), `{"cleanupPeriodDays": 30, "cleanupPeriodDays": 1}`)).toBe("control_plane_transcript_retention_lowered");
+    expect(write(put("r5/.claude/settings.json", `{"cleanupPeriodDays": 30}`), `{"cleanupPeriodDays": 1, "x": "x-retrohound-retention-unchanged"}`)).toBeDefined(); // either enforce rule
+  });
+  describe("Codex apply_patch of a settings file", () => {
+    const patch = (body: string) => runHook(JSON.stringify({ session_id: "c", cwd: dir, tool_name: "apply_patch", tool_use_id: "t",
+      tool_input: { command: `*** Begin Patch\n${body}\n*** End Patch` } }), "block", rules, log, undefined, "codex").rule;
+    const upd = (file: string, hunk: string) => patch(`*** Update File: ${file}\n@@\n${hunk}`);
+    test("a hunk whose old side overlaps a hook section is marked; one outside it is not", () => {
+      const j = put("p1/.claude/settings.json", JSON_CFG);
+      expect(upd(j, ` {\n-  "model": "opus",\n+  "model": "sonnet",\n   "hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "/usr/local/bin/retro hook run --mode block"}]}]},`)).toBe("control_plane_agent_config_risky_write");
+      expect(upd(j, `-  "note": "npm test"\n+  "note": "other"`)).toBeUndefined();
+      expect(upd(j, ` {\n-  "model": "opus",\n+  "model": "sonnet",`)).toBeUndefined();
+    });
+    test("TOML: a hunk inside [hooks], and an add or delete of a file that has hooks", () => {
+      const t = put("p2/.codex/config.toml", TOML_CFG);
+      expect(upd(t, ` [hooks]\n-pre = "npm test"\n+pre = "sh /tmp/x.sh"`)).toBe("control_plane_agent_config_risky_write");
+      expect(upd(t, ` [other]\n-note = "npm test"\n+note = "x"`)).toBeUndefined();
+      expect(patch(`*** Delete File: ${put("p3/.claude/settings.json", JSON_CFG)}`)).toBe("control_plane_agent_config_risky_write");
+      expect(patch(`*** Add File: ${put("p4/.claude/settings.json", `{"model": "sonnet"}`)}\n+{"model": "opus"}`)).toBeUndefined();
+    });
+    test("a hunk that keeps cleanupPeriodDays passes; one that lowers it is blocked", () => {
+      const f = put("p5/.claude/settings.json", `{\n  "cleanupPeriodDays": 5,\n  "model": "opus"\n}\n`);
+      expect(upd(f, `-  "cleanupPeriodDays": 5,\n+  "cleanupPeriodDays": 5,`)).toBeUndefined();
+      expect(upd(f, `-  "cleanupPeriodDays": 5,\n+  "cleanupPeriodDays": 1,`)).toBe("control_plane_transcript_retention_lowered");
+      expect(upd(put("p6/.claude/settings.json", `{\n  "model": "opus"\n}\n`), ` {\n+  "cleanupPeriodDays": 1,`)).toBe("control_plane_transcript_retention_lowered");
+    });
+  });
   test("hookSpans closes a nested value and skips braces inside strings", () => {
     const t = `{"hooks": {"a": "}"}, "z": 1}`;
     const [s, e] = hookSpans(t, false)[0]!;

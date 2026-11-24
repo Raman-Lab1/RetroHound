@@ -115,6 +115,9 @@ export const MIGRATIONS: readonly Migration[] = [
   CREATE INDEX config_snapshots_scan ON config_snapshots (scan_id);
   ALTER TABLE rule_runs ADD COLUMN config_items INTEGER;
   `,
+  // 5: which (agent, root) scopes a run evaluated, a JSON array, so a scan of one agent does not mark the others'
+  // findings current (0006). Older runs have NULL: no scope matches them, and each is re-evaluated once.
+  "ALTER TABLE rule_runs ADD COLUMN scope TEXT;",
 ];
 
 /** Applies the entries `db` has not had yet, each in its own transaction. Refuses a DB newer than `migrations`, and

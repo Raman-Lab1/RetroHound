@@ -1,5 +1,8 @@
 // Secret masking and detection (ADR 0007). One table drives both, so they cannot drift.
-import { createHash } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
+import { closeSync, constants, fchmodSync, fstatSync, linkSync, lstatSync, mkdirSync, openSync, readSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 
 const MARK = "…[masked]";
 
@@ -50,29 +53,112 @@ const PATTERNS: { name: string; strong: boolean; re: RegExp }[] = [
 ];
 const STRONG = PATTERNS.filter((p) => p.strong);
 
-/** Masks every pattern, keeping a short type prefix. Idempotent. */
-export function mask(s: string): string {
+// Opt-in (`scan --mask-entropy`, ADR 0007): an unnamed run of 32+ word characters holding upper case, lower case and a
+// digit, at 4.5+ bits of Shannon entropy per character. Hex hashes (at most 4 bits) and UUIDs (hex) never qualify.
+// ponytail: plain threshold, no context; a long random-looking identifier or a base64 blob is masked too (the FP risk).
+const ENTROPY = /(?<![\w-])[\w-]{32,}(?![\w-])/g;
+export let maskEntropy = false;
+export const setMaskEntropy = (on: boolean) => void (maskEntropy = on);
+function highEntropy(t: string): boolean {
+  if (!/[a-z]/.test(t) || !/[A-Z]/.test(t) || !/\d/.test(t)) return false;
+  const counts = new Map<string, number>();
+  for (const c of t) counts.set(c, (counts.get(c) ?? 0) + 1);
+  let bits = 0;
+  for (const n of counts.values()) bits -= (n / t.length) * Math.log2(n / t.length);
+  return bits >= 4.5;
+}
+
+function named(s: string): string {
   for (const { re } of PATTERNS) s = s.replace(re, `$1${MARK}`);
   return s;
 }
 
-/** Names of the strong patterns in `s`, in table order. Never values. */
+/** Masks every pattern, keeping a short type prefix, and unnamed high-entropy tokens when opted in. Idempotent. */
+export function mask(s: string): string {
+  s = named(s);
+  return maskEntropy ? s.replace(ENTROPY, (t) => (highEntropy(t) ? MARK : t)) : s;
+}
+
+/** Names of the strong patterns in `s`, in table order, then `high_entropy` when opted in and an unnamed token
+ * qualifies. Never values. */
 export function secretKinds(s: string): string[] {
-  return STRONG.filter(({ re }) => s.search(re) >= 0).map(({ name }) => name);
+  const kinds = STRONG.filter(({ re }) => s.search(re) >= 0).map(({ name }) => name);
+  return maskEntropy && [...named(s).matchAll(ENTROPY)].some(([t]) => highEntropy(t)) ? [...kinds, "high_entropy"] : kinds;
 }
 
 // A token is the same secret with or without `Bearer `, and a key block the same in raw or JSON-escaped text.
 const tokenOf = (match: string) => match.replace(/^[^\n]*?bearer\s+|\\[nr]|\s/gi, "");
 
-/** First 16 hex of the sha256 of each distinct strong secret in `s`. Safe to store: strong tokens are high-entropy.
- * Known limit: unkeyed, so a weak value sent as `Bearer <value>` can be confirmed by guessing. Keying it would change
- * every fingerprint already stored in an index and break the joins across scans and git-secrets, so it stays. */
-export function secretFingerprints(s: string): string[] {
-  const fps = new Set<string>();
-  for (const { re } of STRONG) {
-    for (const [match] of s.matchAll(re)) fps.add(createHash("sha256").update(tokenOf(match)).digest("hex").slice(0, 16));
+// The per-install fingerprint key (ADR 0007): 32 random bytes, made on the first secret seen. Created whole (written to a
+// temp file, then hard-linked into place) so a crash or a racing hook never leaves a short key; opened without
+// following a symlink and refused unless it is a 32-byte regular file of this user's. A key that cannot be made or read
+// (read-only HOME, a symlink) warns once and yields no fingerprints; parsing, masking and detection go on.
+let fpKey: Buffer | undefined, keyWarned = false;
+function key(): Buffer | undefined {
+  const path = join(homedir(), ".retrohound", "fp.key");
+  try {
+    return (fpKey ??= readKey(path));
+  } catch (e) {
+    if (!keyWarned) process.stderr.write(`retrohound: no secret fingerprints, the key at ${path} is unusable: ${(e as Error).message}\n`);
+    keyWarned = true;
+    return undefined;
   }
-  return [...fps];
+}
+export function readKey(path: string): Buffer {
+  if (!lstatSync(path, { throwIfNoEntry: false })) {
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    const tmp = `${path}.${process.pid}.tmp`;
+    writeFileSync(tmp, randomBytes(32), { mode: 0o600, flag: "wx" });
+    try {
+      linkSync(tmp, path);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e; // another process made it first: use theirs
+    } finally {
+      unlinkSync(tmp);
+    }
+  }
+  let fd: number;
+  try {
+    fd = openSync(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  } catch (e) {
+    throw new Error(`${path}: cannot open the fingerprint key (a symlink is refused): ${(e as Error).message}`);
+  }
+  try {
+    const st = fstatSync(fd), buf = Buffer.alloc(32);
+    if (!st.isFile() || st.size !== 32 || readSync(fd, buf, 0, 32, 0) !== 32) throw new Error(`${path}: not a 32-byte regular file, refusing it`);
+    if (process.getuid && st.uid !== process.getuid()) throw new Error(`${path}: owned by another user, refusing it`);
+    try {
+      if (st.mode & 0o077) fchmodSync(fd, 0o600);
+    } catch {
+      // not supported on every filesystem
+    }
+    return buf;
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** One `kind/fp` per distinct strong secret in `s`: fp is the first 16 hex of HMAC-SHA256 under the per-install key,
+ * kind the first strong pattern (table order, most specific first) that matched the token. Stable on one machine;
+ * not comparable across machines, and a weak value cannot be confirmed by guessing without the key. */
+export function secretFingerprints(s: string): string[] {
+  const fps = new Map<string, string>();
+  for (const { name, re } of STRONG) {
+    for (const [match] of s.matchAll(re)) {
+      const k = key();
+      if (!k) return [];
+      const fp = createHmac("sha256", k).update(tokenOf(match)).digest("hex").slice(0, 16);
+      if (!fps.has(fp)) fps.set(fp, `${name}/${fp}`);
+    }
+  }
+  return [...fps.values()];
+}
+
+/** A stored fingerprint as [fp, kinds]. An index from before 0.3.2 holds a bare fp with no kind: the event's `fallback`
+ * kinds stand in. The separator is not `:` because the mask reads `aws_access_key:<hex>` as an assignment. */
+export function fpKinds(v: string, fallback: string[] = []): [string, string[]] {
+  const i = v.indexOf("/");
+  return i < 0 ? [v, fallback] : [v.slice(i + 1), [v.slice(0, i)]];
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

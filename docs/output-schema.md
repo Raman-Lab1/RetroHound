@@ -48,7 +48,7 @@ type Finding = {
 };
 
 type AgentEvent = {
-  id: string; schema_version: "0.1"; agent: "claude_code" | "codex" | "gemini_cli" | "cursor"; agent_version?: string;
+  id: string; schema_version: "0.1"; agent: "claude_code" | "codex" | "antigravity" | "gemini_cli" | "cursor"; agent_version?: string;
   session_id: string; parent_session_id?: string;
   agent_id?: string;               // set = sub-agent event; absent = main conversation
   parent_tool_use_id?: string; project_path?: string; ts: string; seq: number;
@@ -60,7 +60,7 @@ type AgentEvent = {
   denial_kind?: string; denial_category?: string;
   secret_kinds?: string[];         // pattern names found in tool input/content, never values
   result_secret_kinds?: string[];  // pattern names found in tool output
-  secret_fps?: string[];           // first 16 hex of sha256 of each strong secret: use to group "rotate these"
+  secret_fps?: string[];           // `kind/fp` per strong secret, fp a per-install keyed hash (0007): group "rotate these"
   text_excerpt?: string;           // masked, at most 500 chars
   raw_ref: { file: string; line: number };  // pointer to the transcript line; raw text is never output
 };
@@ -71,7 +71,8 @@ type AgentEvent = {
 - Every string is run through the secret mask again on output (ADR 0007).
 - The match-only fields `content`, `tool_input`, `tool_response` and `text` never appear (ADR 0006), even if a caller
   left them on an event object.
-- List fields are absent, not `[]`, when empty.
+- Event list fields (`secret_kinds`, `result_secret_kinds`, `secret_fps`) are absent, not `[]`, when empty. Document
+  lists (`scan.archived_sessions`, `rules`, `findings`) are always present and can be `[]`.
 - The scan makes no network calls.
 
 ## Stability
@@ -86,12 +87,21 @@ Fields may be added to `0.1` documents. Removing or renaming a field, or changin
 
 | Document | SARIF |
 |---|---|
-| `rules[]` | `tool.driver.rules[]`: `id`, `name`, `shortDescription` (title), `fullDescription` (description or title), `help.text` (includes `falsepositives`), `defaultConfiguration.level`, `properties.tags` (`security` + Sigma tags, max 10) and `properties["security-severity"]` |
+| `rules[]` | `tool.driver.rules[]`: `id`, `name`, `shortDescription` (title), `fullDescription` (description or title), `help.text` (includes `falsepositives`), `defaultConfiguration.level`, `properties.tags` (`security` + Sigma tags, max 10), `properties["security-severity"]` and `properties.author` (when the rule has one, DRL 1.1 credit) |
 | `findings[]` | `results[]`: `ruleId`, `ruleIndex`, `level`, `message.text` |
-| `events[0].raw_ref` | `locations[0]`: `uri` relative to the Claude projects dir, `uriBaseId: CLAUDE_PROJECTS`, `region.startLine` = line, `startColumn` 1 |
-| `events[1..]` | `relatedLocations[]` with a one-line message |
+| `events[0].raw_ref` | `locations[0]`: `uri` relative to the agent's transcript root, `uriBaseId` per agent (below), `region.startLine` = line, `startColumn` 1 |
+| `events[1..]` | `relatedLocations[]` with a one-line message, same `uri` and `uriBaseId` rules |
 | `finding.id` | `partialFingerprints`: `primaryLocationLineHash` = `<first 16 hex>:1`, `retrohound/v1` = full id |
 | session / agent | `properties`: `session_id`, `agent`, `agent_id` and `scope` (`main` or `sub-agent`), `event_ids` |
+
+| `agent` | `uriBaseId` | `uri` starts at |
+|---|---|---|
+| `claude_code` | `CLAUDE_PROJECTS` | the path after `~/.claude/projects/`: `<encoded-project>/<session>.jsonl` |
+| `codex` | `CODEX_HOME` | `sessions/YYYY/MM/DD/rollout-*.jsonl[.zst]` or `archived_sessions/...` |
+| `antigravity` | `ANTIGRAVITY_HOME` | `brain/<conversation-id>/.system_generated/...` |
+| other agent, or a path without that agent's folder name | `TRANSCRIPTS` | the last two path segments |
+
+Each `uri` segment is percent-encoded (a space becomes `%20`), so the `uri` is always a relative reference.
 
 | Sigma level | SARIF level | security-severity |
 |---|---|---|
@@ -102,11 +112,15 @@ Fields may be added to `0.1` documents. Removing or renaming a field, or changin
 
 Example (shortened): `{"ruleId":"r1","ruleIndex":0,"level":"error","message":{"text":"..."},"locations":[{"physicalLocation":{"artifactLocation":{"uri":"-home-u-acme/aaaa.jsonl","uriBaseId":"CLAUDE_PROJECTS"},"region":{"startLine":7,"startColumn":1,"endLine":7}}}],"partialFingerprints":{"primaryLocationLineHash":"9b1e000000000000:1"}}`
 
+That is a Claude Code result. A Codex result has `"artifactLocation":{"uri":"sessions/2026/09/14/rollout-aaaa.jsonl","uriBaseId":"CODEX_HOME"}`,
+an Antigravity one `"artifactLocation":{"uri":"brain/<conversation-id>/.system_generated/logs/transcript_full.jsonl","uriBaseId":"ANTIGRAVITY_HOME"}`.
+
 Known limits:
 - Transcripts are not files in a repository. GitHub code scanning may drop or reject results with such URIs (untested).
-  Use the output for local viewers and CI artifacts; upload to code scanning only for repo files (`preflight`, v0.2).
+  Use the output for local viewers and CI artifacts. SARIF for repo files (`preflight`) is not built yet: `preflight`
+  outputs only `table` and `json`.
 - `originalUriBaseIds` is omitted on purpose: it would publish the home directory. The encoded project directory still
-  contains the user name; an `--anonymize` step is not implemented.
+  contains the user name, and SARIF has no `--anonymize` step yet (`wrapped` and `incident` do).
 - `primaryLocationLineHash` uses the CodeQL-like `<hex>:1` shape in case GitHub checks it; not verified.
 - A finding whose rule is missing from `rules[]` gets a stub rule so `ruleIndex` always resolves.
 - No limit handling (GitHub keeps the top 5,000 results by severity, 10 MB gzipped).
@@ -124,9 +138,18 @@ stripped before output. For ECS the primary event's attributes are copied into t
 | `finding.id` / level | `event.id`, `event.severity`, `event.risk_score` (1/0, 2/21, 3/47, 4/73, 5/99); `event.kind: alert`, `event.dataset: retrohound.finding` |
 | rule | `rule.id`, `rule.uuid`, `rule.name`, `rule.description`, `rule.ruleset: retrohound` |
 | Sigma tags | `attack.tNNNN[.NNN]` to `threat.technique.id` / `.subtechnique.id`; other `attack.*` to `threat.tactic.name`; the rest to `tags[]` |
-| primary event | `@timestamp`, `event.category/type/action/outcome/sequence`, `process.command_line`, `file.*`, `url.*`, `destination.domain`, `log.file.path`, `message` |
-| agent | `gen_ai.agent.name`, `gen_ai.agent.id` (sub-agent id), `gen_ai.provider.name`, `gen_ai.tool.name`; copies in `retrohound.{session_id,agent_id,parent_session_id,agent_version,project_path,outcome,raw_ref.line,mcp}` |
+| primary event | `@timestamp`, `event.category/type/action/outcome/sequence`, `process.command_line`, `file.*`, `url.*`, `destination.domain`, `log.file.path`; `message` is the finding's message, not the event's excerpt |
+| agent | `gen_ai.agent.name`, `gen_ai.agent.id` (sub-agent id), `gen_ai.provider.name` (`anthropic`, `openai` for Codex, `gcp.gemini` for Antigravity), `gen_ai.tool.name`; copies in `retrohound.{session_id,agent_id,parent_session_id,agent_version,project_path,outcome,raw_ref.line,mcp}` |
 | finding | `retrohound.finding.{id,event_ids}` |
+
+Absolute paths: unlike SARIF, which writes `uri` relative to the agent's transcript root, NDJSON keeps paths as the
+index holds them. ECS `log.file.path` and OCSF `unmapped.retrohound.raw_ref.file` are the transcript's absolute path,
+and ECS `process.working_directory` and `retrohound.project_path` (OCSF `unmapped.retrohound.project_path`) are the
+session's working directory, so they carry the home path and the user name (`/Users/<name>/...`). `file.path` and
+commands carry them too when the agent touched files under the home. This is by design: an analyst
+pivots from a finding to the transcript on that host and to other host telemetry by the same path. Strip or rewrite
+these fields in the SIEM pipeline if the user name must not be indexed. SARIF stays relative (`uri` + `uriBaseId`,
+above).
 
 ### OCSF 1.9.0
 

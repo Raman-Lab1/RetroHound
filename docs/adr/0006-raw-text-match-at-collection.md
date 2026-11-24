@@ -31,8 +31,9 @@ and a pointer (`raw_ref`: file and line) back to the source. Several detections 
 - **One evaluator, two event sources:** the parser (with match-only fields) and database rows (without).
 - **Per session:** `src/scan.ts` groups a session's files (main transcript, `subagents/*`, set-aside copies), parses
   them and evaluates their events together, de-duplicated by event id, so "one finding per session per rule" (0004)
-  holds. A session is re-evaluated when one of its files changed, or every session when the rule-set hash differs
-  from the last run; other sessions' findings are read back from the database. Memory holds one session's events.
+  holds. A session is re-evaluated when one of its files changed, or every session of a scope (agent plus root) when
+  the rule-set hash differs from that scope's last run (amended 2026-11-13: per scope since schema migration 5, so a
+  scan of one agent no longer marks another current); other sessions' findings are read back from the database. Memory holds one session's events.
 - Sessions whose files are gone (0008) are re-evaluated from masked rows only, on a rule-set change, and only add
   findings.
 

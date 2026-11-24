@@ -285,13 +285,16 @@ function temporal(rule: CorrelationRule, steps: Occurrence[][]): Occurrence[] {
 }
 
 // Across streams `seq` means nothing: replace it with each event's rank in (ts, agent_id, seq) order, a total order that
-// stays deterministic on equal ts. A bad ts sorts first. Occurrences of one event share a rank.
+// stays deterministic on equal ts. A bad ts sorts first. Occurrences of one event share a rank. One occurrence in several
+// steps keeps one copy, so event_count's dedup still counts it once.
 function rerank(steps: Occurrence[][]): Occurrence[][] {
   const evs = [...new Set(steps.flat().map((o) => o.at))];
   const key = (e: Row) => (Number.isNaN(Date.parse(String(e.ts))) ? -Infinity : Date.parse(String(e.ts)));
   evs.sort((a, b) => (key(a) === key(b) ? 0 : key(a) < key(b) ? -1 : 1) || compareEvents(a, b));
   const rank = new Map(evs.map((e, i) => [e, i]));
-  return steps.map((list) => list.map((o) => ({ ...o, seq: rank.get(o.at)! })));
+  const copies = new Map<Occurrence, Occurrence>();
+  const copy = (o: Occurrence) => copies.get(o) ?? copies.set(o, { ...o, seq: rank.get(o.at)! }).get(o)!;
+  return steps.map((list) => list.map(copy));
 }
 
 const RUN = { event_count: eventCount, temporal_ordered: temporalOrdered, temporal };

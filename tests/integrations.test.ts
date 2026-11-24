@@ -77,9 +77,6 @@ describe("velociraptor", () => {
     expect(art.sources[0].query).toContain('FetchBinary(ToolName="RetroHound"');
     expect(art.sources[0].query).toContain('"--no-index"');
   });
-  test("tool URL pins the package.json version", () => {
-    expect(art.tools[0].url).toBe(`https://registry.npmjs.org/retrohound/-/retrohound-${version}.tgz`);
-  });
 });
 
 describe("github action", () => {
@@ -96,8 +93,34 @@ describe("github action", () => {
   });
 });
 
-describe("homebrew", () => {
-  test("formula pins the package.json version", () => {
-    expect(read("integrations/homebrew/retrohound.rb")).toContain(`url "https://registry.npmjs.org/retrohound/-/retrohound-${version}.tgz"`);
+describe("homebrew and velociraptor", () => {
+  // Both pin the latest *published* tarball: its hash only exists after npm publish, so the release commit keeps the
+  // previous pin and the post-publish commit moves both to the new version with its real hash.
+  const pin = (text: string) => /retrohound\/-\/retrohound-(\d+\.\d+\.\d+)\.tgz/.exec(text)?.[1];
+  const num = (v: string) => v.split(".").reduce((n, p) => n * 1000 + Number(p), 0);
+  test("formula and artifact pin the same released version, not newer than package.json", () => {
+    const brew = pin(read("integrations/homebrew/retrohound.rb"));
+    const velo = pin(read("integrations/velociraptor/Custom.RetroHound.Scan.yaml"));
+    expect(brew).toBeDefined();
+    expect(velo).toBe(brew);
+    expect(num(brew!)).toBeLessThanOrEqual(num(version));
+  });
+});
+
+describe("tarball sha256", () => {
+  // A placeholder (all zeros, one repeated digit, the hash of an empty file) must never ship: brew and Velociraptor
+  // would reject the real tarball, or a user would "fix" it by turning the check off.
+  const real = (h: unknown) =>
+    typeof h === "string" && /^[0-9a-f]{64}$/.test(h) && !/^(.)\1+$/.test(h) &&
+    h !== "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+  test("rejects placeholders", () => {
+    for (const bad of ["0".repeat(64), "f".repeat(64), "abc", "A".repeat(64), "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", undefined])
+      expect(real(bad)).toBe(false);
+  });
+  test("Homebrew formula and Velociraptor artifact pin the same real hash", () => {
+    const brew = /^\s*sha256 "([^"]*)"/m.exec(read("integrations/homebrew/retrohound.rb"))?.[1];
+    const velo = parse(read("integrations/velociraptor/Custom.RetroHound.Scan.yaml")).tools[0].expected_hash;
+    expect(real(brew)).toBe(true);
+    expect(velo).toBe(brew); // both name the same registry tarball
   });
 });

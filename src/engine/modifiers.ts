@@ -4,6 +4,7 @@
 import { isInside } from "../normalize/paths.ts";
 import { downloadExecuted, resetDerived, unquotedOf } from "./derived.ts";
 import { firstSeen } from "./first-seen.ts";
+import { instructionNamed } from "./provenance.ts";
 import type { RawEvent } from "../normalize/types.ts";
 
 export type Row = Record<string, unknown>;
@@ -38,6 +39,8 @@ const BOOLEANS = new Map<string, { reads: string[]; test: (ev: Row) => boolean }
   // `x-retrohound.requires: [first_seen]`.
   ["first_seen_project", { reads: ["first_seen_project"], test: (ev) => firstSeen("project", ev) }],
   ["first_seen_global", { reads: ["first_seen_global"], test: (ev) => firstSeen("global", ev) }],
+  // From evaluate's per-session pre-pass (provenance.ts, ADR 0017); needs `x-retrohound.requires: [instruction_provenance]`.
+  ["instruction_named_package", { reads: ["instruction_named_package"], test: (ev) => instructionNamed(ev) }],
 ]);
 const FIELDS = new Set([...Object.keys(FIELD_TABLE), ...BOOLEANS.keys(), UNQUOTED]);
 const ALIASES = new Map([

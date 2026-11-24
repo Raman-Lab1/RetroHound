@@ -24,6 +24,16 @@ everywhere, and test data defanged (`example.invalid`, `192.0.2.x`, placeholder 
 - **A parser** for another agent's history (Gemini CLI, Cursor): read a few real transcripts first and write down the
   format in `docs/formats/<agent>.md` before writing code, as the existing collectors did.
 
+## Donating a sample transcript
+
+Parsers and rules get better with real formats, but a transcript holds your prompts, code and secrets. Open an issue
+first and say what the sample would show. Then send a reduced copy, never the raw file:
+
+- Keep only the events that matter (the tool call, its result, the lines around it) and drop everything else.
+- Defang it: `example.invalid` hosts, `192.0.2.x` addresses, placeholder keys, no real prompts or repo content.
+- For Claude Code, `bun scripts/redact-fixture.ts <in.jsonl> <out>` does a first pass; read the result line by line
+  before you share it.
+
 ## Pull requests
 
 Small and focused, with tests, `bun run check` green, and a line in `CHANGELOG.md` for anything users notice. CI runs

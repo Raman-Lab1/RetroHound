@@ -19,8 +19,8 @@ export type Collector = {
 
 const claudeCode: Collector = {
   agent: "claude_code",
-  parserVersion: "claude-code/v3", // v2: heredoc bodies move only when a data reader stores them; v3: a bad line no longer ends the file, Grep is a file read
-  defaultRoot: () => join(homedir(), ".claude"),
+  parserVersion: "claude-code/v4", // v4: keyed kind/fp secret fingerprints; v2: heredoc bodies move only when a data reader stores them; v3: a bad line no longer ends the file, Grep is a file read
+  defaultRoot: () => process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"),
   discover: claudeDiscover,
   parseFile: claudeParse,
   // <project>/<session>/subagents/x.jsonl and <project>/<session>.jsonl[.copy] are one session

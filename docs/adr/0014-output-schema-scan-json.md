@@ -38,3 +38,5 @@ findings map to Detection Finding (class 2004).
 - Findings embed their events, so the JSON is larger than a summary; that is fine for a local report.
 - SARIF over transcript files does not fit GitHub code scanning (the paths are not repository files), so SARIF from
   `scan` is for local use and CI artifacts.
+- Amendment 2026-11-13: `references` is not emitted in `rules[]` (the report rule type has no such field); the list
+  above is what Sigma allows, not what the document holds. `docs/output-schema.md` lists the emitted fields.

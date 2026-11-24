@@ -1,0 +1,29 @@
+title: Untrusted content read, then a remote script piped to a shell
+id: be396a70-556b-458c-8df4-bc9cff5d1dc0
+name: injection_untrusted_then_pipe_to_shell
+author: Raman Kumar
+status: experimental
+description: >-
+  Within one session and ten minutes, the agent took in content it did not write (untrusted_content_received: a web
+  page or search, an MCP tool result, gh issue/PR/repo text) and then piped a download into a shell or interpreter
+  (exec_pipe_download_to_shell). The shape of an indirect prompt injection: text from outside tells the agent to run
+  a remote script. Main agent and sub-agents count as one session.
+tags:
+  - attack.execution
+  - attack.t1059
+  - attack.t1105
+  - owasp_agentic.asi01
+  - owasp_agentic.asi05
+correlation:
+  type: temporal_ordered
+  rules:
+    - untrusted_content_received
+    - exec_pipe_download_to_shell
+  group-by:
+    - session_id
+  timespan: 10m
+falsepositives:
+  - Following a vendor's install page the user asked for (rustup, nvm, brew)
+level: medium
+x-retrohound:
+  lane: hunt

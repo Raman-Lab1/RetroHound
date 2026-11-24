@@ -43,7 +43,7 @@ export const loadRuleDir = (dir: string, extras: string[] = []): LoadResult => l
 export const repeat = (v: string, prev: string[] = []) => [...prev, v];
 export const EXTRA_HELP = "more rules to load on top of --rules (repeatable)";
 
-const category = (r: Rule) => (r.kind === "correlation" ? "correlation" : (r.category ?? "any"));
+const category = (r: Rule) => (r.kind === "correlation" ? "correlation" : (r.category ?? "any")) + (r.silenced ? " silenced" : "");
 
 export function listRules(dir: string, io: IO, extras: string[] = []): number {
   const { rules, rejected } = loadRuleDir(dir, extras);

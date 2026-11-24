@@ -3,9 +3,9 @@
 // sorted, so the same index gives the same bytes. Strings are masked again here (0007).
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { anonymizer } from "../cli/wrapped.ts";
+import { anonymizer, type Anonymizer } from "../cli/wrapped.ts";
 import type { Rule } from "../engine/load.ts";
-import { mask } from "../normalize/mask.ts";
+import { fpKinds, mask } from "../normalize/mask.ts";
 import { GENESIS } from "../store/chain.ts";
 import type { Db, Row } from "../store/sqlite.ts";
 import { TOOL_VERSION } from "../version.ts";
@@ -22,19 +22,21 @@ type PackFinding = { id: string; rule_id: string; rule_name?: string; level: str
 export type Pack = ReturnType<typeof buildPack>;
 
 const IN = "IN (SELECT value FROM json_each(?))";
-const PATHS = new Set(["project_path", "command_line", "target_path", "url", "source_file", "path"]); // what --anonymize rewrites
+// what --anonymize rewrites: free text (a tool or MCP server can be named after the project), and fields that are only a path
+const FREE = new Set(["command_line", "url", "tool_name", "attribution"]);
+const PATHS = new Set(["project_path", "target_path", "source_file", "path"]);
 const LISTS = new Set(["secret_kinds", "secret_fps"]);
 const OUTCOMES = ["success", "error", "blocked", "unknown"] as const;
 const sha256 = (b: string | Buffer) => createHash("sha256").update(b).digest("hex");
 
 /** A row as a plain object: nulls dropped, JSON lists parsed, strings masked, path-like fields through `fix`. */
-function clean<T>(row: Row, fix: (s: string) => string): T {
+function clean<T>(row: Row, fix: Pick<Anonymizer, "path"> & ((s: string) => string)): T {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(row)) {
     if (v === null) continue;
     if (typeof v !== "string") out[k] = Number(v);
     else if (LISTS.has(k)) out[k] = (JSON.parse(v) as string[]).map(mask).sort();
-    else out[k] = PATHS.has(k) ? fix(mask(v)) : mask(v);
+    else out[k] = PATHS.has(k) ? fix.path(mask(v)) : FREE.has(k) ? fix(mask(v)) : mask(v);
   }
   return out as T;
 }
@@ -62,7 +64,7 @@ function build(db: Db, sel: Selection, rules: Rule[], anonymize: boolean) {
       SELECT 1 FROM events e JOIN files_indexed f ON f.path = e.source_file WHERE e.session_id = s.session_id AND f.gone_at IS NULL
     ) AS archived FROM sessions s WHERE session_id ${IN} ORDER BY first_ts, session_id`).all(ids);
   const projects = sessionRows.flatMap((s) => (typeof s.project_path === "string" ? [s.project_path] : []));
-  const fix = anonymize ? anonymizer(files.map((f) => ({ raw_ref: { file: String(f.path), line: 0 } })), projects) : (s: string) => s;
+  const fix = anonymize ? anonymizer(files.map((f) => ({ raw_ref: { file: String(f.path), line: 0 } })), projects) : Object.assign((s: string) => s, { path: (s: string) => s });
 
   const sessions = sessionRows.map((r) => ({ ...clean<Session>(r, fix), archived: Boolean(r.archived) }));
   const timeline = db.prepare(`SELECT id, session_id, ts, seq, agent_id, parent_tool_use_id, category, tool_name, command_line,
@@ -83,9 +85,9 @@ function build(db: Db, sel: Selection, rules: Rule[], anonymize: boolean) {
   });
 
   const secrets = new Map<string, { kinds: Set<string>; sessions: Set<string>; events: string[] }>();
-  for (const e of timeline) for (const fp of e.secret_fps ?? []) {
+  for (const e of timeline) for (const [fp, kinds] of (e.secret_fps ?? []).map((v) => fpKinds(v, e.secret_kinds))) {
     const s = secrets.get(fp) ?? { kinds: new Set(), sessions: new Set(), events: [] };
-    e.secret_kinds?.forEach((k) => s.kinds.add(k));
+    kinds.forEach((k) => s.kinds.add(k));
     s.sessions.add(e.session_id);
     s.events.push(e.id);
     secrets.set(fp, s);
@@ -94,6 +96,14 @@ function build(db: Db, sel: Selection, rules: Rule[], anonymize: boolean) {
   // The chain head the pack was built at (ADR 0015): `verify --head` later shows the index still holds it. null on an
   // index from before the chain, opened read-only so never upgraded.
   const chained = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'chain'").get();
+  // The last run that evaluated every source of these sessions: a run's scope is `agent:root` (scan.ts), so a session
+  // file is in it when `agent:file` sits under one. An older run (no scope) never matches, as in Store.lastRuleRun.
+  const scoped = db.prepare("SELECT 1 FROM pragma_table_info('rule_runs') WHERE name = 'scope'").get();
+  const sources = db.prepare(`SELECT DISTINCT s.agent || ':' || e.source_file AS v FROM events e JOIN sessions s
+    ON s.session_id = e.session_id WHERE e.session_id ${IN}`).all(ids).map((r) => String(r.v));
+  const under = (v: string, scope: string) => v.startsWith(scope) && ["/", "\\"].includes(v[scope.length] ?? "");
+  const run = !scoped || !sources.length ? undefined : db.prepare("SELECT rule_set_hash, scope FROM rule_runs WHERE scope IS NOT NULL ORDER BY id DESC")
+    .all().find((r) => sources.every((v) => (JSON.parse(String(r.scope)) as string[]).some((sc) => under(v, sc))));
   const head = chained ? ((db.prepare("SELECT hash FROM chain ORDER BY seq DESC LIMIT 1").get()?.hash as string | undefined) ?? GENESIS) : null;
 
   return {
@@ -102,7 +112,7 @@ function build(db: Db, sel: Selection, rules: Rule[], anonymize: boolean) {
     selected: { kind: sel.kind, id: sel.id },
     anonymized: anonymize,
     index_head: head,
-    rule_set_hash: (db.prepare("SELECT rule_set_hash FROM rule_runs ORDER BY id DESC LIMIT 1").get()?.rule_set_hash as string | undefined) ?? null,
+    rule_set_hash: run ? String(run.rule_set_hash) : null,
     rules: rulesUsed,
     sessions,
     counts: {

@@ -28,12 +28,11 @@ import { testRules } from "./rules-test.ts";
 import { registerConvert } from "./convert.ts";
 import { retentionDays, summaryLines } from "./summary.ts";
 import { defaultReportPath, writeFootprint } from "./footprint.ts";
-import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 type ScanFlags = {
   since?: string; agent: string; project?: string; rules: string; extraRules?: string[]; level?: string; format: string;
-  index: boolean; failOn?: string; db?: string; root?: string; ignore?: string;
+  index: boolean; failOn?: string; db?: string; root?: string; ignore?: string; maskEntropy?: boolean;
   report?: string | false; // undefined: next to the index; false: --no-report
 };
 
@@ -54,7 +53,7 @@ async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
   }
   const opts: ScanOptions = {
     agent, root: f.root, dbPath: f.db, rulesDir: f.rules, extraRules: f.extraRules, project: f.project, level, noIndex: !f.index,
-    since: f.since ? parseSince(f.since) : undefined, ignore: f.ignore,
+    since: f.since ? parseSince(f.since) : undefined, ignore: f.ignore, maskEntropy: f.maskEntropy,
   };
   let rejected = 0;
   const report = await runScan({ ...opts, onRejected: (r) => (rejected = r.length) });
@@ -65,12 +64,14 @@ async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
   else if (format === "ndjson-ocsf") io.out(toNdjson(report, "ocsf"));
   else if (format === "attack-layer") io.out(toAttackLayer(report) + "\n");
   else {
-    const root = f.root ?? join(homedir(), ".claude");
+    // settings.json and history.jsonl sit in the config dir, also when --root names its projects dir
+    const given = f.root ?? COLLECTORS.claude_code!.defaultRoot();
+    const root = basename(resolve(given)) === "projects" ? dirname(resolve(given)) : given;
     // the retention summary reads Claude Code's own settings, so it only applies to that agent
-    const summary = agent === "claude_code" ? summaryLines(root, f.index ? f.db : undefined, report.scan.archived_sessions.length) : [];
+    const summary = agent === "claude_code" ? summaryLines(root, f.db, report.scan.archived_sessions.length) : [];
     if (f.index && f.report !== false) {
       const dbPath = f.db ?? defaultDbPath();
-      const claude = agent === "claude_code" ? root : join(homedir(), ".claude");
+      const claude = agent === "claude_code" ? root : COLLECTORS.claude_code!.defaultRoot();
       try {
         const url = writeFootprint({
           dbPath, out: f.report || defaultReportPath(dbPath), rulesDir: f.rules, extraRules: f.extraRules,
@@ -87,10 +88,10 @@ async function scanCommand(f: ScanFlags, io: IO): Promise<number> {
   return min !== undefined && report.findings.some((x) => LEVELS.indexOf(x.level) >= min) ? 1 : 0;
 }
 
-/** The hook log and rules caches in the data dir; only regular files by those names, never a symlink or anything else. */
+/** The hook log, rules caches and fingerprint key in the data dir; only regular files by those names, never a symlink or anything else. */
 export function dataFiles(dir = dirname(defaultLogPath())): string[] {
   if (!existsSync(dir)) return [];
-  return readdirSync(dir).filter((n) => n === "hook-log.jsonl" || /^rules-cache-[0-9a-f]+\.json$/.test(n))
+  return readdirSync(dir).filter((n) => n === "hook-log.jsonl" || /^fp\.key(\.\d+\.tmp)?$/.test(n) || /^rules-cache-[0-9a-f]+\.json$/.test(n))
     .map((n) => join(dir, n)).filter((p) => lstatSync(p).isFile());
 }
 
@@ -131,12 +132,13 @@ export function buildProgram(io: IO, setCode: (n: number) => void): Command {
     .option("--level <level>", `hide findings below this level (${LEVELS.join("|")})`)
     .option("--format <format>", "table, json, sarif, ndjson-ecs, ndjson-ocsf or attack-layer (ATT&CK Navigator)", "table")
     .option("--no-index", "evaluate in memory, write nothing")
-    .option("--report <file>", "where to write the offline footprint report (default: report.html next to the index)")
+    .option("--report <file>", "where to write the offline footprint report (default: <index name>.footprint.html next to the index)")
     .option("--no-report", "do not write the footprint report")
     .option("--fail-on <level>", "exit 1 when any finding is at or above this level")
     .option("--db <path>", "index database", defaultDbPath())
-    .option("--root <dir>", "Claude config dir or its projects dir (default ~/.claude)")
+    .option("--root <dir>", "the agent's data dir: Claude config dir or its projects dir (default $CLAUDE_CONFIG_DIR or ~/.claude), $CODEX_HOME or ~/.codex, ~/.gemini/antigravity-cli")
     .option("--ignore <file>", "ignore file (default ~/.retrohound/ignore.yml; a repo's own file is only read when passed here)")
+    .option("--mask-entropy", "also mask and flag (secret kind high_entropy) unnamed random-looking strings; noisy, off by default")
     .action((f: ScanFlags) => run(() => scanCommand(f, io)));
 
   const rules = program.command("rules").description("Inspect the loaded detection rules");
@@ -158,7 +160,7 @@ export function buildProgram(io: IO, setCode: (n: number) => void): Command {
   program.command("purge").description("Delete the local index database (it may be the only copy of deleted evidence)")
     .option("--db <path>", "index database", defaultDbPath())
     .option("--yes", "actually delete; without it purge only says what it would delete")
-    .option("--all", "also delete the hook log and rules caches in ~/.retrohound")
+    .option("--all", "also delete the hook log, rules caches and fingerprint key (fp.key) in ~/.retrohound; secret fingerprints differ afterwards")
     .action((f: { db?: string; yes?: boolean; all?: boolean }) => run(() => purgeCommand(f, io)));
 
   registerQuery(program, run, io);

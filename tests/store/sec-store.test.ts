@@ -1,7 +1,7 @@
 // Store hardening: a planted trigger, a hand-edited sessions table, history rewritten after a recorded head, another
 // program's database given as --db, the incident pack's snapshot, and what purge will delete. Defanged data only.
 import { afterAll, beforeEach, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { defaultLogPath } from "../../src/hooks/run.ts";
@@ -21,6 +21,21 @@ let dir: string, db: string, file: string;
 beforeEach(() => {
   dir = mkdtempSync(join(base, "case-"));
   [db, file] = [join(dir, "index.db"), join(dir, "s1.jsonl")];
+});
+
+test("a WAL index copied without its -wal/-shm opens read-only and verifies", () => {
+  const s = openStore(db);
+  s.close();
+  const copy = join(dir, "copy.db");
+  copyFileSync(db, copy);
+  const r = openReadOnly(copy);
+  try {
+    expect(Number(r.prepare("PRAGMA user_version").get()?.user_version)).toBe(MIGRATIONS.length);
+    expect(schemaProblem(r) ?? verifyChain(r).ok).toBe(true);
+  } finally {
+    r.close();
+  }
+  expect(() => openReadOnly(join(dir, "missing.db"))).toThrow(); // the fallback does not hide a missing file
 });
 
 const sql = (text: string) => {

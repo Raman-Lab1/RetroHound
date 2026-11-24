@@ -2,8 +2,8 @@
 {"category":"process_creation","tool_name":"Bash","command_line":"grep -n model .mcp.json 2>/dev/null"}
 {"category":"process_creation","tool_name":"Bash","command_line":"echo hi > out.txt"}
 {"category":"process_creation","tool_name":"Bash","command_line":"cat .mcp.json > /dev/null"}
-{"category": "process_creation", "agent": "codex_cli", "tool_name": "shell", "command_line": "cat ~/.codex/config.toml"}
-{"category": "process_creation", "agent": "codex_cli", "tool_name": "shell", "command_line": "sed -i 's/a/b/' proj/settings.toml"}
+{"category": "process_creation", "agent": "codex", "tool_name": "Bash", "command_line": "cat ~/.codex/config.toml"}
+{"category": "process_creation", "agent": "codex", "tool_name": "Bash", "command_line": "sed -i 's/a/b/' proj/settings.toml"}
 {"category":"process_creation","tool_name":"Bash","command_line":"ln -sf ../notes/cfg.json .claude/settings.json"}
 {"category": "process_creation", "tool_name": "Bash", "command_line": "sed -i 's/block/log/' ~/.claude/settings.json"}
 {"category": "process_creation", "tool_name": "Bash", "command_line": "cat notes/cfg.json > .claude/settings.json"}

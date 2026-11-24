@@ -3,6 +3,7 @@
 import { compareEvents, occurrence, runCorrelation, type CorrelationRule, type Occurrence } from "./correlate.ts";
 import type { DetectionRule, Rule } from "./load.ts";
 import { resetFieldCache, type Row } from "./modifiers.ts";
+import { PROVENANCE_FIELD, setProvenance } from "./provenance.ts";
 
 /** `events` are in contract order, (session_id, agent_id, seq), without repeats. `events[0]` is the primary event. */
 export type Match<E> = { rule: Rule; events: E[] };
@@ -45,7 +46,9 @@ export function evaluate<E extends object>(rules: Rule[], events: readonly E[]):
   const uncategorised = detections.filter((r) => !r.category);
   const hits = new Map<Rule, Occurrence[]>(detections.map((r) => [r, []]));
 
-  for (const event of contractOrder(events)) {
+  const ordered = contractOrder(events);
+  setProvenance(detections.some((r) => r.fields.includes(PROVENANCE_FIELD)) ? (ordered as readonly Row[]) : undefined); // ADR 0017
+  for (const event of ordered) {
     const ev = event as Row;
     let occ: Occurrence | null = null; // shared, so a correlation can tell one event from two
     for (const rule of buckets.get(ev.category as string) ?? uncategorised) {
@@ -54,6 +57,7 @@ export function evaluate<E extends object>(rules: Rule[], events: readonly E[]):
     }
   }
   resetFieldCache();
+  setProvenance();
 
   for (const rule of correlations) hits.set(rule, runCorrelation(rule, hits));
   return rules

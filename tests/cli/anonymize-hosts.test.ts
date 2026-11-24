@@ -30,12 +30,12 @@ test("bare scp/rsync hosts and ssh -J/-l/-o values are hashed", () => {
   expect(fix("echo a:b")).toBe("echo a:b");
 });
 
-test("purge --all file list: log and caches only, no symlinks", () => {
+test("purge --all file list: log, caches and fp.key only, no symlinks", () => {
   const dir = join(base, "home", ".retrohound");
   mkdirSync(dir, { recursive: true });
-  for (const n of ["hook-log.jsonl", "rules-cache-abc123.json", "keep.txt", "index.db"]) writeFileSync(join(dir, n), "x");
+  for (const n of ["hook-log.jsonl", "rules-cache-abc123.json", "fp.key", "fp.key.123.tmp", "keep.txt", "index.db"]) writeFileSync(join(dir, n), "x");
   writeFileSync(join(base, "outside"), "x");
   symlinkSync(join(base, "outside"), join(dir, "rules-cache-dead01.json"));
-  expect(dataFiles(dir).map((p) => p.split("/").pop()).sort()).toEqual(["hook-log.jsonl", "rules-cache-abc123.json"]);
+  expect(dataFiles(dir).map((p) => p.split("/").pop()).sort()).toEqual(["fp.key", "fp.key.123.tmp", "hook-log.jsonl", "rules-cache-abc123.json"]);
   expect(existsSync(join(base, "outside"))).toBe(true);
 });

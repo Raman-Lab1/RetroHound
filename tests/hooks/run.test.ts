@@ -1,12 +1,12 @@
 // hook run: payload fixtures are defanged (example.invalid, placeholder keys); rules are the test's own temp files.
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Command } from "commander";
 import { hookRun, registerHook } from "../../src/cli/hook.ts";
 import type { IO } from "../../src/cli/io.ts";
-import { loadEnforceRules, runHook } from "../../src/hooks/run.ts";
+import { loadEnforceRules, logTrial, runHook } from "../../src/hooks/run.ts";
 import { loadRuleDir } from "../../src/cli/rules.ts";
 
 setDefaultTimeout(60_000);
@@ -112,6 +112,12 @@ describe("fail open", () => {
     const t = io();
     expect(await hookRun({ mode: "block", rules: join(dir, "missing"), cache: join(dir, "hook-cache.json") }, t.io, async () => bash("enforce-me"))).toBe(0);
     expect(t.o).toEqual([]);
+    expect(t.e.join("")).toContain("is missing or empty; deciding without it"); // one stderr line, not silence
+  });
+  test.skipIf(process.platform === "win32")("the trial log dir is created 0700", () => {
+    const log = join(dir, "fresh-home", ".retrohound", "hook-trial.jsonl");
+    logTrial(log, { rule: "x" });
+    expect(statSync(dirname(log)).mode & 0o777).toBe(0o700);
   });
   test("bad mode and unknown flags still exit 0 through the CLI", async () => {
     const t = io();

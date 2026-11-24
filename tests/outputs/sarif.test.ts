@@ -73,6 +73,33 @@ describe("toSarif", () => {
     for (const w of [TOKEN, "C0NTENT", "T1NPUT"]) expect(out).not.toContain(w);
     expect(out).toContain("ghp_…[masked]");
   });
+  test("per-agent base and URI, related locations too; no home path or username", () => {
+    const loc = (e: AgentEvent) => {
+      const out = toSarif(report([finding({ events: [ev({ id: "p" }), e] })]));
+      expect(out).not.toContain("/home/example");
+      expect(out).not.toContain("example-user");
+      return JSON.parse(out).runs[0].results[0].relatedLocations[0].physicalLocation.artifactLocation;
+    };
+    const codex = (f: string) => loc(ev({ agent: "codex", raw_ref: { file: f, line: 1 } }));
+    expect(codex("/home/example-user/.codex/sessions/2026/09/14/rollout-x.jsonl.zst"))
+      .toEqual({ uri: "sessions/2026/09/14/rollout-x.jsonl.zst", uriBaseId: "CODEX_HOME" });
+    expect(codex("C:\\Users\\example-user\\.codex\\archived_sessions\\2026\\09\\14\\rollout-y.jsonl"))
+      .toEqual({ uri: "archived_sessions/2026/09/14/rollout-y.jsonl", uriBaseId: "CODEX_HOME" });
+    const ag = (conv: string) => loc(ev({ agent: "antigravity", raw_ref: {
+      file: `/home/example-user/.gemini/antigravity-cli/brain/${conv}/.system_generated/logs/transcript_full.jsonl`, line: 1 } }));
+    const a = ag("conv-aaaa"), b = ag("conv-bbbb");
+    expect(a).toEqual({ uri: "brain/conv-aaaa/.system_generated/logs/transcript_full.jsonl", uriBaseId: "ANTIGRAVITY_HOME" });
+    expect(b.uri).not.toBe(a.uri);
+    // Unknown agent or layout: generic base, last two segments only.
+    expect(loc(ev({ agent: "cursor", raw_ref: { file: "/home/example-user/x/y/z.jsonl", line: 1 } })))
+      .toEqual({ uri: "y/z.jsonl", uriBaseId: "TRANSCRIPTS" });
+    expect(loc(ev({ agent: "codex", raw_ref: { file: "/home/example-user/elsewhere/r.jsonl", line: 1 } })))
+      .toEqual({ uri: "elsewhere/r.jsonl", uriBaseId: "TRANSCRIPTS" });
+    // Segments are percent-encoded: a space or a drive root never makes an invalid or absolute URI.
+    expect(loc(ev({ agent: "cursor", raw_ref: { file: "C:\\x.jsonl", line: 1 } })).uri).toBe("C%3A/x.jsonl");
+    expect(loc(ev({ agent: "cursor", raw_ref: { file: "/home/example-user/My Logs/a b.jsonl", line: 1 } })).uri)
+      .toBe("My%20Logs/a%20b.jsonl");
+  });
   test("empty report is a valid run with no results", () => {
     const run = JSON.parse(toSarif(report([]))).runs[0];
     expect(run.results).toEqual([]);
@@ -115,6 +142,19 @@ describe("toNdjson", () => {
     expect(o.unmapped.retrohound.ai_agent).toBeUndefined();
     expect(o.evidences[0].ai_agent).toEqual({ name: "claude_code", instance_uid: "aaaaaaaa-1111", type_id: 1 });
     expect(o.evidences[0].api).toBeUndefined();
+  });
+  test("every sub-technique gets an OCSF attack, 'and' stays lower case, provider per agent", () => {
+    const r = report([finding({ events: [ev({ agent: "codex" })] })]);
+    r.rules[0]!.tags = ["attack.command_and_control", "attack.t1552.001", "attack.t1552.004", "attack.t1041"];
+    const o = JSON.parse(toNdjson(r, "ocsf").trim());
+    expect(o.finding_info.attacks).toEqual([
+      { tactic: { name: "Command and Control" } }, { technique: { uid: "T1552" }, sub_technique: { uid: "T1552.001" } },
+      { technique: { uid: "T1552" }, sub_technique: { uid: "T1552.004" } }, { technique: { uid: "T1041" } },
+    ]);
+    const e = JSON.parse(toNdjson(r, "ecs").trim());
+    expect([e.threat.tactic.name, e.gen_ai.provider]).toEqual([["Command and Control"], { name: "openai" }]);
+    const ag = JSON.parse(toNdjson(report([finding({ events: [ev({ agent: "antigravity" })] })]), "ecs").trim());
+    expect(ag.gen_ai.provider).toEqual({ name: "gcp.gemini" });
   });
   test("OCSF evidence per event: agent version, MCP server and tool as api", () => {
     const mcp = ev({ id: "e2", category: "mcp", agent: "codex", agent_version: "0.50.0", tool_name: "mcp__docs__fetch", mcp_server: "docs", mcp_tool: "fetch" });

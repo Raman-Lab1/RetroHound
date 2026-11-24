@@ -29,3 +29,6 @@ Option 3.
 - Node parses about 2x and inserts about 3x slower than Bun. That is within the targets; if a large history ever
   exceeds them, the fix belongs in the hot loop, not in a runtime switch.
 - The live hook (0009) pays Node's start-up time on every tool call; the parsed-rule cache keeps the rest small.
+- Amendment 2026-11-13: compressed Codex logs (`.jsonl.zst`) need `zstdDecompressSync` from `node:zlib`, which arrived
+  in Node 22.15. On 22.13 and 22.14 the scan reports those files as failed and reads everything else
+  (`docs/formats/codex.md`).

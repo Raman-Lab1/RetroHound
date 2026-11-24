@@ -9,7 +9,9 @@ import { toJson } from "../src/outputs/json.ts";
 import { toSarif } from "../src/outputs/sarif.ts";
 import { toTable } from "../src/outputs/table.ts";
 import { runScan, type ScanOptions } from "../src/scan.ts";
+import { verifyChain } from "../src/store/chain.ts";
 import { openReadOnly } from "../src/store/index.ts";
+import { open } from "../src/store/sqlite.ts";
 
 const base = mkdtempSync(join(tmpdir(), "rh-scan-"));
 afterAll(() => rmSync(base, { recursive: true, force: true }));
@@ -114,6 +116,20 @@ describe("runScan", () => {
     expect(warm.findings).toEqual(first.findings);
   });
 
+  test("--mask-entropy re-parses every file when turned on, masks the token in the index, and is off again after", async () => {
+    const token = "aB3dE5gH7jK9mN1p" + "Q2rS4tU6vW8xY0zC"; // defanged placeholder
+    appendFileSync(join(root, "projects", "-home-x-acme", "s1.jsonl"), JSON.stringify(cmd("s1", 5, { message: { content: [
+      { type: "tool_use", id: "te", name: "Bash", input: { command: `curl -H "X-Api: ${token}" https://example.invalid` } }] } })) + "\n");
+    await runScan(opts);
+    const on = await runScan({ ...opts, maskEntropy: true });
+    expect(on.scan.files).toMatchObject({ indexed: 3, skipped: 0 });
+    const db = openReadOnly(opts.dbPath!);
+    const row = db.prepare("SELECT command_line, secret_kinds FROM events WHERE command_line LIKE '%X-Api%'").get();
+    db.close();
+    expect(row).toEqual({ command_line: 'curl -H "X-Api: …[masked]" https://example.invalid', secret_kinds: '["high_entropy"]' });
+    expect((await runScan(opts)).scan.files).toMatchObject({ indexed: 3 }); // off again: the plain parse comes back
+  });
+
   test("a changed file re-evaluates its whole session", async () => {
     await runScan(opts);
     appendFileSync(join(root, "projects", "-home-x-acme", "s1.jsonl"), JSON.stringify(cmd("s1", 5)) + "\n");
@@ -131,6 +147,61 @@ describe("runScan", () => {
     expect(r.findings).toEqual([]);
   });
 
+  test("a session split over groups (legacy flat agent-*.jsonl) is re-read whole when one of its files changes", async () => {
+    // "many" fires on the main file's hits, "sub" on the sub-agent file's: each finding needs the other group re-read.
+    writeFileSync(join(dir, "rules", "sub.yml"), "title: Sub\nname: sub\nlevel: low\nlogsource: { product: ai_coding_agent }\n"
+      + "detection:\n    selection: { agent_id: b1 }\n    condition: selection\n");
+    const proj = join(root, "projects", "-home-x-acme");
+    put(join(proj, "s3.jsonl"), [cmd("s3", 1), cmd("s3", 2), cmd("s3", 3)]);
+    put(join(proj, "agent-b1.jsonl"), [cmd("s3", 11, { agentId: "b1" })]);
+    const s3 = (r: Awaited<ReturnType<typeof runScan>>) => [...new Set(r.findings.filter((f) => f.session_id === "s3").map((f) => f.rule_id))].sort();
+    expect(s3(await runScan(opts))).toEqual(["many", "sub"]);
+    appendFileSync(join(proj, "agent-b1.jsonl"), JSON.stringify(cmd("s3", 20, { agentId: "b1" })) + "\n");
+    expect(s3(await runScan(opts))).toEqual(["many", "sub"]);
+    appendFileSync(join(proj, "s3.jsonl"), JSON.stringify(cmd("s3", 21)) + "\n");
+    const r = await runScan(opts);
+    expect(r.scan.files).toMatchObject({ indexed: 1 });
+    expect(s3(r)).toEqual(["many", "sub"]);
+  });
+
+  test("a scan of another root under new rules does not mark this root's findings current (0006)", async () => {
+    const other = { ...opts, root: join(dir, "other") };
+    put(join(other.root, "projects", "-home-x-b", "s9.jsonl"), [cmd("s9", 1)]);
+    expect((await runScan(opts)).findings.length).toBe(1);
+    writeFileSync(join(dir, "rules", "r.yml"), HIT + RULE(9));
+    await runScan(other);
+    expect((await runScan(opts)).findings).toEqual([]);
+  });
+
+  test("an index from before run scopes re-evaluates once after the upgrade, and its chain verifies", async () => {
+    writeFileSync(join(dir, "rules", "r.yml"), HIT + RULE(9));
+    await runScan({ ...opts, root: join(dir, "empty") });
+    writeFileSync(join(dir, "rules", "r.yml"), HIT + RULE(3));
+    expect((await runScan(opts)).findings.length).toBe(1);
+    // The v4 shape, its last run under RULE(9): the state a scan of another root left behind before this fix.
+    const db = open(opts.dbPath!);
+    db.exec(`UPDATE rule_runs SET rule_set_hash = (SELECT rule_set_hash FROM rule_runs ORDER BY id LIMIT 1);
+      ALTER TABLE rule_runs DROP COLUMN scope; PRAGMA user_version = 4`);
+    db.close();
+    writeFileSync(join(dir, "rules", "r.yml"), HIT + RULE(9));
+    expect((await runScan(opts)).findings).toEqual([]);
+    const ro = openReadOnly(opts.dbPath!);
+    expect(verifyChain(ro).ok).toBe(true);
+    ro.close();
+  });
+
+  test("noIndex orders findings like the index, by (ts, id), in JSON and SARIF", async () => {
+    put(join(root, "projects", "-home-x-acme", "a9.jsonl"), [cmd("a9", 40), cmd("a9", 41), cmd("a9", 42)]); // read before s1
+    const mem = await runScan({ ...opts, noIndex: true });
+    const idx = await runScan(opts);
+    expect(mem.findings.map((f) => f.session_id)).toEqual(["s1", "a9"]);
+    const jsonIds = (r: typeof mem) => JSON.parse(toJson(r)).findings.map((f: { id: string }) => f.id);
+    const sarifIds = (r: typeof mem) => JSON.parse(toSarif(r)).runs[0].results.map((x: { partialFingerprints: Record<string, string> }) => x.partialFingerprints["retrohound/v1"]);
+    expect(jsonIds(mem)).toEqual(jsonIds(idx));
+    expect(sarifIds(mem)).toEqual(sarifIds(idx));
+    expect(sarifIds(mem)).toEqual(jsonIds(mem));
+  });
+
   test("noIndex evaluates everything and writes nothing", async () => {
     const r = await runScan({ ...opts, noIndex: true });
     expect(r.findings.length).toBe(1);
@@ -145,6 +216,17 @@ describe("runScan", () => {
     const r = await runScan(opts);
     expect(r.scan).toMatchObject({ sessions: 1, archived_sessions: ["s1"], files: { gone: 3 } });
     expect(r.findings.length).toBe(1);
+  });
+
+  test("a split session with one file gone keeps the finding that needed the gone part's events", async () => {
+    await runScan(opts);
+    const proj = join(root, "projects", "-home-x-acme");
+    rmSync(join(proj, "s1.jsonl")); // 2 of the 4 hits the correlation needs
+    const extra = { type: "user", uuid: "u-x", sessionId: "s1", timestamp: "2026-11-07T10:00:07.000Z", message: { content: "hi" } };
+    appendFileSync(join(proj, "s1.orphaned-1.jsonl"), JSON.stringify(extra) + "\n"); // touched: the session re-evaluates
+    const r = await runScan(opts);
+    expect(r.scan.files).toMatchObject({ gone: 1, indexed: 1 });
+    expect(r.findings.map((f) => f.rule_id)).toEqual(["many"]);
   });
 
   test("level, project and since filters", async () => {
@@ -303,6 +385,18 @@ x-retrohound: { requires: [first_seen] }
     expect(fired(await runScan({ ...opts, noIndex: true }))).toEqual(want);
     expect(fired(await runScan(opts))).toEqual(want);
     expect(fired(await runScan(opts))).toEqual(want); // a warm rescan keeps them
+  });
+
+  test("pinned (ADR 0016): another scope's scan does not re-evaluate untouched sessions, so their findings stay as of their scan", async () => {
+    writeFileSync(join(dir, "rules", "fs.yml"), FS);
+    const proj = join(root, "projects", "-home-x-acme");
+    put(join(proj, "s09.jsonl"), [fetch("s09", "2026-10-01T10:00:00.000Z", "https://base.example.invalid/")]);
+    put(join(proj, "s10.jsonl"), [fetch("s10", "2026-10-20T10:00:00.000Z", "https://a.example.invalid/")]);
+    expect(fired(await runScan(opts))).toEqual(["fs-global s10 a.example.invalid", "fs-project s10 a.example.invalid"]);
+    // a second root, same index: its older use of the domain (inside the baseline) would make s10 no longer the first
+    const other = join(dir, "claude2");
+    put(join(other, "projects", "-home-x-acme", "s08.jsonl"), [fetch("s08", "2026-10-10T10:00:00.000Z", "https://a.example.invalid/")]);
+    expect(fired(await runScan({ ...opts, root: other }))).toEqual(["fs-global s10 a.example.invalid", "fs-project s10 a.example.invalid"]);
   });
 
   test("cold start: nothing fires while the data spans under 14 days", async () => {

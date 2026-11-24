@@ -51,7 +51,8 @@ export function groupKey(path: string, zstd: Zstd | null = defaultZstd): string 
  * reports that as a failed file with the message). */
 export async function parseFileWith(path: string, zstd: Zstd | null): Promise<ParsedFile & { sha256?: string }> {
   const file = normalizeSlashes(path);
-  const canonical = file.replace(/\.zst$/, ""); // ids must not change when Codex compresses the file (R2)
+  // ids must not change when Codex compresses the file (R2) or `codex archive` moves it to archived_sessions/
+  const canonical = file.slice(file.lastIndexOf("/") + 1).replace(/\.zst$/, "");
   const stats: ParsedFile["stats"] = { lines: 0, malformed: 0, unknown_types: {} };
   const events: RawEvent[] = [];
   const unknown = new Map<string, number>();

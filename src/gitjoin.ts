@@ -3,7 +3,7 @@
 // only fingerprints and kinds leave this module, never a value.
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { secretFingerprints } from "./normalize/mask.ts";
+import { fpKinds, secretFingerprints } from "./normalize/mask.ts";
 import { openReadOnly } from "./store/index.ts";
 
 export type Seen = { kinds: Set<string>; sessions: Set<string>; first_ts: string };
@@ -23,7 +23,7 @@ export function seenSecrets(dbPath: string, project?: string): { seen: Map<strin
       if (project !== undefined && !String(r.project ?? "").includes(project)) continue;
       const fp = String(r.fp);
       const s = seen.get(fp) ?? { kinds: new Set(), sessions: new Set(), first_ts: String(r.ts) };
-      for (const k of JSON.parse(String(r.kinds ?? "[]")) as string[]) s.kinds.add(k);
+      for (const k of fpKinds(fp, JSON.parse(String(r.kinds ?? "[]")))[1]) s.kinds.add(k);
       s.sessions.add(String(r.sid));
       seen.set(fp, s);
       if (r.project) projects.add(String(r.project));
@@ -80,7 +80,7 @@ export async function joinSecrets(dbPath: string, project?: string): Promise<Joi
       if (key.has(`${fp} ${commit} ${file}`)) return;
       key.add(`${fp} ${commit} ${file}`);
       const s = seen.get(fp)!;
-      res.hits.push({ fp, kinds: [...s.kinds], project: p, commit, file, date, sessions: [...s.sessions] });
+      res.hits.push({ fp: fpKinds(fp)[0], kinds: [...s.kinds], project: p, commit, file, date, sessions: [...s.sessions] });
     });
     (ok ? res.scanned : res.skipped).push(p);
   }

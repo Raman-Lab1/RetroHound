@@ -16,7 +16,7 @@ tags:
 falsepositives:
   - A benign case the user may have asked for.
 x-retrohound:
-  lane: hunt                        # hunt (attack-shaped, quiet) | enforce (candidate for blocking in v0.2)
+  lane: hunt                        # hunt (attack-shaped, quiet) | enforce (the live hook can block it)
 logsource:
   product: ai_coding_agent
   category: process_creation        # always set one: a rule without it runs on every event

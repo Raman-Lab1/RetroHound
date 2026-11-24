@@ -58,9 +58,9 @@ absent, not `[]`, when empty, so `|exists` is true only when something was found
 | `denial_category` | Claude Code's classifier category, when it gave one (for example `credential_materialization`). |
 | `permission_mode`, `prompt_source`, `entrypoint` | Carried-forward mode; `typed`/`sdk`/`system`; `cli`/`claude-desktop`. |
 | `attribution` | `skill:<x>`, `mcp:<server>` or `plugin:<x>`. |
-| `secret_kinds` | Names of secret patterns found in tool input or content. Never values. |
+| `secret_kinds` | Names of secret patterns found in tool input or content (`high_entropy` with `scan --mask-entropy`). Never values. |
 | `result_secret_kinds` | Same, in the tool output. |
-| `secret_fps` | First 16 hex of sha256 of each strong secret, to group "rotate these". |
+| `secret_fps` | `kind/fp` per strong secret: fp is the first 16 hex of a per-install HMAC-SHA256 (ADR 0007), to group "rotate these". |
 | `text_excerpt` | Masked, at most 500 chars. |
 
 ### Match-only fields (ADR 0006)
@@ -155,15 +155,32 @@ and MCP servers, and the project scope for domains.
 - Findings are as of the scan that evaluated the session: an older transcript found later does not change an untouched
   session's findings until the rule set changes. Indexed values are masked, in-memory ones are not.
 
+`instruction_named_package` (boolean, `true`/`false` only, no modifiers; ADR 0017): true on an event whose
+`command_line` installs a package that an instruction text loaded earlier in the same session names. Instruction text
+is the `content` of an `instruction_load` event, a `Skill` call or an `@file` read. A package is named by an install
+command in that text (`npm|pnpm|yarn|bun|pip|uv|cargo|go|gem`, as in `exec_package_install_new`) or by a backticked
+name followed by `package`, `library`, `module` or `dependency`; names compare lower-cased without version pins or
+extras. The pre-pass runs inside `evaluate`, per call, only when a loaded rule reads the field. A rule that reads it
+must declare `x-retrohound: { requires: [instruction_provenance] }` (`provenance-not-required` otherwise) and be lane
+`hunt` (`provenance-enforce`). `content` exists only while a transcript is parsed, so the field is false on index
+re-evaluation and in the live hook. Because `rules test` evaluates a detection's positive lines one by one, ship such a
+rule as a correlation over a silenced helper, so the test file holds the instruction line and the install line.
+
 ## Correlation
 
-Supported types: `event_count`, `temporal_ordered`, `temporal` (ADR 0004). `generate` defaults to false: a rule that
-only a non-generating correlation references emits nothing alone (`rules list` marks it silenced).
+Supported types: `event_count`, `temporal_ordered`, `temporal` (ADR 0004). `generate` defaults to false: a rule
+referenced by a non-generating correlation in its own file, and by no generating one, emits nothing alone (`rules list`
+marks it silenced). A correlation in another file (an `--extra-rules` pack) never silences it. `generate` may sit inside
+the `correlation:` block (Sigma) or at the top level of the document; the block wins when both are set.
 
-- `group-by` must contain `session_id`. `agent_id` is optional (ADR 0004 amendment).
+- `group-by` must contain `session_id` or `project_path`. `agent_id` is optional with `session_id` (ADR 0004
+  amendments).
   - `[session_id]`: one group across the main conversation and all sub-agents, ordered by `ts`, then `(agent_id, seq)`
     on a tie. Use it when a main-agent read and a sub-agent send should join.
   - `[session_id, agent_id]`: one group per transcript stream, in `seq` order.
+  - `[project_path]` (no `session_id`): one group across every session in that directory, so a nested `claude -p` or
+    `codex exec` joins its parent. Ordered by `ts`; `agent_id` is rejected (`unsupported-group-by`), `timespan` is at
+    most `1h` (`project-group-timespan`), and events with no `project_path` are skipped.
 - `x-retrohound.max_events_between: N` (seq distance) needs `agent_id` in `group-by`; otherwise the rule is rejected
   (`max-events-needs-agent-id`). `timespan` works either way. With both set, both must hold.
 - `x-retrohound.differ_by: [field, ...]` (`temporal_ordered` only, stored fields): each later step's event must differ
@@ -173,20 +190,33 @@ only a non-generating correlation references emits nothing alone (`rules list` m
   correlation (`bad-x-retrohound` there). It is the only known value; anything else rejects the rule.
 - `event_count`: at most one finding per session per rule. `temporal_ordered`: order of `rules:`, non-strict, so one
   event can satisfy consecutive steps; one finding per first-step event.
+- `event_count` uses suffix windows for every condition (`eventCount` in `src/engine/correlate.ts`).
+  The group's matches are taken in order; each one anchors a window that runs forward to the last match still within
+  `timespan` (and `max_events_between`) of it. The first window, in anchor order, whose size meets the condition fires.
+  The last match always anchors a window of size 1, and when all k matches fall in one `timespan` the windows hold
+  k, k-1, ... 1. So with at least one match, `lt: N` (N > 1), `lte: N` (N >= 1) and `neq: N` (N != 1) always fire, and
+  `eq: N` fires whenever N is at most the largest window, not only when the group holds exactly N. A group with no
+  matches has no window and never fires, so "fewer than N" can never mean "none". Write "many" rules with `gt`/`gte`.
 - A missing or bad `ts` sorts first and never fits a window, so clock skew between streams can hide a match.
 - `aliases` and the `value_*` types are rejected.
 
 ## Matching rules
 
 Map = AND, list = OR. A plain value matches the whole field, case-insensitive, with `*` and `?` globs. Modifiers:
-`contains`, `startswith`, `endswith`, `all`, `re`, `cased`, `exists`, `gt`/`gte`/`lt`/`lte`, `fieldref`. Anything else,
-keyword lists, `timeframe` and `|` aggregation reject the rule.
+`contains`, `startswith`, `endswith`, `all`, `re`, `cased`, `exists`, `gt`/`gte`/`lt`/`lte`, `fieldref`, `windash` (a
+`-` or `/` that starts a flag, such as `-enc` or `/c`, also matches the other one, an en dash, an em dash or a
+horizontal bar; not with `re`). Anything else, keyword lists, `timeframe` and `|` aggregation reject the rule.
 
 `re` limits:
 
 - Flags are `|re|i`, `|re|m`, `|re|s`. Case-sensitive and unanchored by default. No lookarounds, backreferences, POSIX
   classes, or `\u{...}`.
-- **8 KiB cap:** `re` tests only the first 8,192 characters of a field. A match after that is missed.
+- **Windows:** a bounded pattern (no `*`, `+` or `{n,}`) tests the whole field. An unbounded one tests overlapping 8 KiB
+  windows (4 KiB step) over the first 256 KiB of the field, plus its last 8 KiB: a match longer than 4 KiB, or one in
+  the middle of a field over 256 KiB, can be missed, and `^`, `$` or `\b` can match at a window edge. Write
+  `\s{1,9}` for `\s+` to cover any length.
+- **Nested quantifiers** such as `(a+)+` or `(a|b?){1,9}` are rejected at load (`regex-nested-quantifier`): they
+  backtrack exponentially.
 - **One-`.*` guard:** `retrohound rules test` fails a rule whose `re` pattern has more than one unescaped `.*` or
   `.+`, because `.*a.*b` is cubic in V8 (about 1 s per KiB). Use bounded classes such as `[^;&|]{0,200}`.
 

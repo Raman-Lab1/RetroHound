@@ -55,3 +55,8 @@ followed by a successful one through another kind of tool) and `exec_mass_delete
   sessions. `differ_by: [session_id]` limits a rule to cross-session pairs and so avoids repeating the session-scoped
   rule's hits. The only such rule is `secrets_read_then_egress_project` (medium, hunt lane): joining by directory also
   matches two unrelated agents in one checkout.
+
+- Amendment 2026-11-13: silencing is per file. A non-generating correlation silences a referenced rule only when both
+  sit in the same file; a generating one anywhere lifts it. A rule pack loaded with `--extra-rules` can add a
+  correlation over shipped rules but cannot mute them. `rules list` and `rules show` print `silenced` after the
+  category. `generate` is also accepted at the top level of the document; the value inside `correlation:` wins.

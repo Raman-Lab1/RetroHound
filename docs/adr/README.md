@@ -19,6 +19,9 @@ describe the code as it is; amendments are dated inside the record.
 | [0014](0014-output-schema-scan-json.md) | Output | One `retrohound.scan/0.1` JSON document; SARIF and ECS/OCSF NDJSON are transforms of it. |
 | [0015](0015-tamper-evident-index.md) | Integrity | A hash chain over every write to events, findings and indexed files; `verify --head` checks it against a recorded head. |
 | [0016](0016-first-seen-fields.md) | First seen | `first_seen_project` / `first_seen_global`: derived booleans from a scan pre-pass, never stored; rules declare `requires: [first_seen]`, hunt lane only. |
+| [0017](0017-instruction-named-package.md) | Instruction provenance | `instruction_named_package`: a derived boolean from a per-session pre-pass in `evaluate`, never stored; rules declare `requires: [instruction_provenance]`, hunt lane only. |
+
+Numbers 0012 and 0013 are not published.
 
 Licensing is stated in [LICENSE](../../LICENSE) (code, Apache-2.0) and [rules/LICENSE](../../rules/LICENSE)
 (detection rules, DRL 1.1).

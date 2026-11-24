@@ -212,10 +212,14 @@ describe("event_count", () => {
   test("streams count apart", () => {
     expect(only("{ gte: 2 }", [hit(1), hit(2, { agent_id: "a" })])).toEqual([]);
   });
-  test("an event matched by two referenced rules counts once", () => {
-    const docs = [base("x", "{ command_line: hit }"), base("y", "{ command_line|contains: hit }"), correlation("many", "event_count", ["x", "y"], "condition: { gte: 2 }")];
-    expect(run(docs, [hit(1)]).filter((m) => m.rule.name === "many")).toEqual([]);
-    expect(run(docs, [hit(1), hit(2)]).filter((m) => m.rule.name === "many").map(seqs)).toEqual([[1, 2]]);
+  test("an event matched by two referenced rules counts once, in any group-by", () => {
+    for (const groupBy of ["[session_id, agent_id]", "[session_id]", "[project_path]"]) {
+      const many = correlation("many", "event_count", ["x", "y"], "condition: { gte: 2 }").replace("[session_id, agent_id]", groupBy);
+      const docs = [base("x", "{ command_line: hit }"), base("y", "{ command_line|contains: hit }"), many];
+      const p = { project_path: "/p" };
+      expect(run(docs, [hit(1, p)]).filter((m) => m.rule.name === "many")).toEqual([]);
+      expect(run(docs, [hit(1, p), hit(2, p)]).filter((m) => m.rule.name === "many").map(seqs)).toEqual([[1, 2]]);
+    }
   });
   test("extra group-by keys split further", () => {
     const yaml = correlation("many", "event_count", ["h"], "condition: { gte: 2 }").replace("[session_id, agent_id]", "[session_id, agent_id, tool_name]");

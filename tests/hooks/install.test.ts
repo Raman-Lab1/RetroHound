@@ -1,12 +1,13 @@
 // Installer: every test edits a temp settings file; none touches the real ~/.claude.
 import { afterAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { readdirSync, readFileSync, rmSync, mkdtempSync, writeFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync, mkdtempSync, writeFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Command } from "commander";
 import { registerHook } from "../../src/cli/hook.ts";
 import type { IO } from "../../src/cli/io.ts";
-import { checkPaths, install, isOurs, settingsPath, status, uninstall, type InstallOpts, type SafetyEnv } from "../../src/hooks/install.ts";
+import { checkPaths, install, InstallUsageError, isOurs, settingsPath, status, uninstall, type InstallOpts, type SafetyEnv } from "../../src/hooks/install.ts";
+import { UsageError } from "../../src/cli/io.ts";
 
 setDefaultTimeout(60_000);
 const dir = mkdtempSync(join(tmpdir(), "rh-inst-"));
@@ -259,6 +260,7 @@ describe("--agent codex and antigravity (JSON hook files, command-string handler
     expect(norm(settingsPath("user", "/w", {}, "antigravity"))).toEndWith("/.gemini/config/hooks.json");
     expect(norm(settingsPath("project", "/w", {}, "antigravity"))).toBe("/w/.agents/hooks.json");
     expect(() => settingsPath("local", "/w", {}, "codex")).toThrow(/no local scope/);
+    expect(norm(settingsPath("user", "/w", { CODEX_HOME: "/ch" }, "codex"))).toBe("/ch/hooks.json");
   });
   test("CLI: --agent antigravity install/status/uninstall against --settings only", async () => {
     const p = file(AGY);
@@ -275,5 +277,51 @@ describe("--agent codex and antigravity (JSON hook files, command-string handler
     expect(text).toContain("installed (mode block)");
     expect(text).toContain("removed");
     expect(read(p)).toEqual(JSON.parse(AGY));
+  });
+});
+
+describe("validation fixes (2026-11-13)", () => {
+  test("a missing parent dir is created 0700, for every agent", () => {
+    for (const agent of ["claude_code", "codex", "antigravity"] as const) {
+      const p = join(dir, `fresh-${agent}`, "sub", "hooks.json");
+      expect(install(opts(p, { agent, mode: "log" })).status).toBe("installed");
+      expect(isOurs(read(p)[agent === "antigravity" ? "retrohound" : "hooks"].PreToolUse[0].hooks[0])).toBe(true);
+      if (process.platform !== "win32") expect(statSync(join(dir, `fresh-${agent}`, "sub")).mode & 0o777).toBe(0o700);
+    }
+    install(opts(join(dir, "fresh-dry", "settings.json"), { dryRun: true }));
+    expect(existsSync(join(dir, "fresh-dry"))).toBe(false);
+  });
+  test("hooks that is not an object, or PreToolUse that is not an array, is refused untouched", () => {
+    for (const bad of ['{"hooks": "x"}', '{"hooks": null}', '{"hooks": []}', '{"hooks": {"PreToolUse": {"matcher": "*"}}}']) {
+      const p = file(bad);
+      expect(() => install(opts(p))).toThrow(/refusing to touch it/);
+      expect(readFileSync(p, "utf8")).toBe(bad);
+    }
+    expect(install(opts(file('{"hooks": "x"}'), { agent: "antigravity" })).status).toBe("installed"); // its root is `retrohound`
+  });
+  test.skipIf(process.platform === "win32")("a FIFO at the settings path is refused, not read", () => {
+    const p = join(dir, "fifo.json");
+    Bun.spawnSync(["mkfifo", p]);
+    expect(() => install(opts(p))).toThrow(/not a regular file/);
+    expect(() => status(p, [])).toThrow(/not a regular file/);
+  });
+  test("codex --fail-closed / confirm: a usage error (exit 2) through the CLI", async () => {
+    expect(() => install(opts(file("{}"), { agent: "codex", failClosed: true }))).toThrow(InstallUsageError);
+    let err: unknown;
+    const prog = new Command().exitOverride();
+    const quiet = { out: () => {}, err: () => {}, isTTY: false, env: {} } as unknown as IO;
+    registerHook(prog, async (fn) => { try { await fn(); } catch (e) { err = e; } }, quiet);
+    await prog.parseAsync(["hook", "install", "--agent", "codex", "--mode", "confirm", "--settings", file("{}")], { from: "user" });
+    expect(err).toBeInstanceOf(UsageError);
+  });
+  test("CLI --dry-run says would install and prints no check line", async () => {
+    const p = file("{}");
+    const out: string[] = [];
+    const prog = new Command().exitOverride();
+    registerHook(prog, async (fn) => void (await fn()), { out: (s: string) => out.push(s), err: () => {}, isTTY: false, env: {} } as IO);
+    await prog.parseAsync(["hook", "install", "--dry-run", "--allow-unsafe-path", "--settings", p], { from: "user" });
+    expect(out.join("")).toStartWith("would install: ");
+    expect(out.join("")).not.toContain("Check it with /hooks");
+    expect(readFileSync(p, "utf8")).toBe("{}");
   });
 });

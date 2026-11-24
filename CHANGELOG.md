@@ -5,6 +5,121 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-24
+
+### Added
+- Rules for cloud credential theft and cover-up:
+  - `secrets_cloud_metadata` and `secrets_cloud_metadata_web` (hunt): a command or web request to the instance metadata
+    service (169.254.169.254, fd00:ec2::254, metadata.google.internal, the ECS endpoint 169.254.170.2).
+  - `files_transcript_tamper_command` (enforce): deleting, moving away or truncating agent transcripts or history, or
+    `~/.retrohound`. A read-only grep/rg search of transcripts and an `mv` that restores one do not fire.
+  - `control_plane_transcript_retention_lowered` (enforce): agent settings that shorten transcript retention
+    (`cleanupPeriodDays` 0-9) or turn Codex history off. A settings Write that keeps or raises the current value passes.
+  - `control_plane_hook_self_removal` (enforce): the agent runs `retrohound hook uninstall`. A commit message, search
+    or PR body that only names the command does not fire.
+  - `secrets_recon_read_egress` (hunt): identity recon (`whoami`, `id`, `aws sts get-caller-identity` and similar),
+    then a secret-file read, then egress in one session within 1h.
+- Indirect prompt injection rules (hunt): `injection_untrusted_then_download_run`, `_pipe_to_shell`,
+  `_package_install` and `_secret_egress` fire when web, search, MCP or `gh` issue/PR text enters a session and a risky
+  action follows within 10 minutes. `control_plane_skill_package_install` flags a package install made while a skill
+  or plugin was in charge.
+- `scan --mask-entropy` (opt-in) also masks unnamed high-entropy strings as secret kind `high_entropy`. It is noisy:
+  long random-looking ids and base64 blobs can match.
+- `preflight` warns (stderr, and `preflight.unsafe_hooks` in JSON) when an installed RetroHound hook runs a runtime or
+  entry path that others can modify, the same check `hook status` runs.
+- A seeded fuzz test for every transcript parser, and a test that stops a placeholder tarball SHA-256 from shipping in
+  the Homebrew formula or the Velociraptor artifact.
+- SECURITY.md: threat model and limits (same-user tampering is detected, not prevented) and the advisory policy.
+  Private vulnerability reporting is on. CONTRIBUTING.md: how to donate a reduced, defanged sample transcript.
+- `injection_untrusted_then_secret_comment` (hunt): web, MCP or `gh` content enters a session, then a secret is read
+  or minted, then something is posted to GitHub with `gh` (issue or PR comment, review, release notes, `gh api`
+  POST/PATCH) within 30 minutes. This is the case of a CI agent that leaks its key into a comment.
+- `control_plane_instruction_named_package_install` (hunt): the agent installs a package that an instruction file or
+  skill loaded earlier in the session named. It uses a new derived per-session field, `instruction_named_package`
+  (ADR 0017), computed before evaluation and never stored, so it runs only while a transcript is parsed.
+- `preflight` reads more agent config: `.gemini/settings.json`, `.cursor/mcp.json`, `.vscode/mcp.json`, `.codex/`
+  (`config.toml`, `hooks.json`), `.envrc`, husky hooks, `devcontainer.json`, Copilot instruction files and nested
+  CLAUDE.md/AGENTS.md (depth 4, 50 files at most). `files_mcp_server_added` also covers the Cursor and VS Code MCP files.
+- `files_config_runs_repo_script`: a hook, devcontainer lifecycle command, husky hook, `.envrc` line or folder-open
+  task that runs a script from the repo. `files_oversized_agent_file`: an instruction, config or hook-script file over
+  100,000 bytes.
+- `docs/formats/copilot-cli.md`: where Copilot CLI keeps its sessions. There is no collector yet; the local session
+  folders inspected were empty, and a parser is written only from real transcripts.
+
+### Changed
+- Secret fingerprints are keyed per install: HMAC-SHA256 under a random key in `~/.retrohound/fp.key` (mode 0600).
+  A guessed weak secret can no longer be confirmed from an index or incident pack, and fingerprints no longer match
+  across machines. Each entry is now `kind/fingerprint`, so rotate lists show each secret's own kind. Parser versions
+  were bumped (Claude Code v4, Antigravity v5, Codex v8), so the next scan re-parses transcripts still on disk.
+- In the live hook, a full-file Write of agent settings that holds a hooks section trips
+  `control_plane_agent_config_risky_write`, so an agent cannot drop the hook entry silently.
+- README rewritten: shorter, plainer, with sections for people who code with agents and for security teams, and how
+  to check the package's provenance (`npm audit signatures`).
+- Docs: `event_count` suffix-window semantics for `lt`/`lte`/`eq`/`neq`; NDJSON keeps absolute paths on purpose.
+- The Homebrew formula and the Velociraptor artifact pin the latest published tarball; they move to a new version in
+  the commit after it is on npm, with its real hash.
+- The Homebrew formula and the Velociraptor artifact carry the SHA-256 of the 0.3.1 tarball.
+- Docs: `group-by: [project_path]` correlations and the `windash` modifier are documented; ADR 0001 notes that
+  `.jsonl.zst` needs Node 22.15; ADR 0005 amended (older sub-agent layouts are parsed); performance figures re-run.
+- Index schema migration 5: rule runs are recorded per scope (agent plus root). After the upgrade each scope is
+  re-evaluated once in full.
+- Codex parser: event ids use the rollout's file name, so every Codex file is re-parsed once. Sessions that
+  `codex archive` moved before this version keep their duplicate events.
+- Hook commands in exec form (`command` plus `args`) are read with their arguments. On the first scan after the upgrade
+  the footprint shows each exec-form hook (RetroHound's own included) as removed and added once.
+- `query` accepts only `SELECT`/`WITH` queries. `show` opens the index read-only, so it also reads an evidence copy on
+  read-only media.
+- `exec_decode_to_shell` (enforce) also catches `powershell -e`, `-ec` and `/enc`, only when flags alone sit between
+  the executable and the switch.
+- `rules list` and `rules show` mark silenced rules; `rules test` skips cold-start baseline lines of `first_seen` rules.
+- `hook install --dry-run` says "would install"; ECS `gen_ai.provider.name` is set for Codex (`openai`) and
+  Antigravity (`gcp.gemini`).
+- `secrets_recon_read_egress`: the harvest step also counts an environment dump or a cloud CLI call that prints or
+  mints a token, not only a secret-file read.
+- `files_transcript_tamper_command` (enforce) also catches python, node, bun, ruby, perl and php one-liners that delete
+  transcripts or `~/.retrohound`. A one-liner that only reads a transcript passes.
+- The live hook marks Codex `apply_patch` edits of agent settings the way it marks Write and Edit, for the hook and
+  retention rules.
+- `preflight --fail-on` also fails on the unsafe RetroHound hook warning (counted as high). The default exit code does
+  not change.
+- `purge --all` also deletes the fingerprint key `~/.retrohound/fp.key`, so fingerprints differ after the next scan.
+- The live hook no longer computes secret fingerprints (no rule reads them), so a read-only HOME gives no key warning.
+- `injection_untrusted_then_secret_comment` also counts a `gh api` post made with `-f`, `-F`, `--field`, `--raw-field`
+  or `--input` and no method (gh posts when given fields). `-X GET`, `HEAD`, `PUT` or `DELETE` with fields does not count.
+
+### Fixed
+- `exec_decode_to_shell` (enforce) matched an unrelated later ` -enc ` after `powershell`, and missed `-enc` after a
+  colon-separated or quoted flag value (`-ExecutionPolicy:Bypass`, `-WindowStyle "Hidden"`).
+- An incident pack's `rule_set_hash` came from the newest scan of any root, not the one that covered its sessions.
+- `hook install` failed when the settings folder did not exist yet (project scope in most repos); it now creates it.
+  Codex user scope honours `CODEX_HOME`. Malformed `hooks` values and non-regular settings files are refused instead
+  of being rewritten or hanging. `hook run` creates `~/.retrohound` with mode 0700.
+- Preflight and the footprint dropped exec-form hook `args`, so `sh -c "curl … | sh"` and a repointed hook went unseen.
+- A scan of one agent or root marked the rule set current for all, so other agents kept stale findings after a rule
+  change. A session split over legacy flat `agent-*.jsonl` files lost findings on a warm scan.
+- `codex archive` (moving a rollout to `archived_sessions/`) duplicated its events.
+- Piping output into a reader that closes early (`| head`) crashed with EPIPE.
+- `scan` honours `CLAUDE_CONFIG_DIR`; `--root <dir>/projects` reads that dir's settings and history; `--no-index --db`
+  uses the given index for the history line; `verify` names a file that is not an index; `query` no longer writes a
+  copy with `VACUUM INTO`.
+- `incident --anonymize` left project names in tool names and attribution, and dir names after a space or inside a
+  quoted path with an apostrophe.
+- OCSF kept only the first sub-technique of a parent; tactic names read "Command And Control"; `--no-index` listed
+  findings in another order than an indexed scan.
+- `event_count` counted one event twice when two referenced rules matched it in a session or project group.
+- Rule test fixtures used an agent value that does not exist (`codex_cli`).
+- SARIF: Codex and Antigravity findings pointed under `CLAUDE_PROJECTS` with a truncated path (every Antigravity
+  finding shared one URI). Each agent now has its own `uriBaseId` (`CODEX_HOME`, `ANTIGRAVITY_HOME`) and URIs are
+  percent-encoded.
+- A session split over several transcript files lost findings that needed a deleted file's events on re-evaluation;
+  the stored rows of the gone files are now included.
+- `--anonymize` hashed the kept parts of a quoted home path that contains a space.
+- On the Bun runtime, `verify` and `query` could not open a WAL index copied without its `-wal`/`-shm` files.
+- `files_transcript_tamper_command` (enforce) denied a lone `git commit` or `git tag` whose message named a transcript
+  delete. A single commit or tag line with no `; & | \` $ > (` or newline now passes; chained, substituted and
+  `git -c` spellings still fire. Process substitution (`<(...)`) no longer slips past the read-only search filter either.
+- ADR 0016 now says that another scope's scan does not re-evaluate untouched sessions for first-seen fields.
+
 ## [0.3.1] - 2026-11-12
 
 ### Added

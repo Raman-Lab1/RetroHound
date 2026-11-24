@@ -23,7 +23,10 @@ export type SessionRow = {
   event_count: number;
   archived: boolean; // every source file is gone (0008)
 };
-export type RuleRun = { rule_set_hash: string; started_at: string; finished_at: string; events: number; findings: number };
+export type RuleRun = {
+  rule_set_hash: string; started_at: string; finished_at: string; events: number; findings: number;
+  scope?: string[]; // the (agent, root) scopes the run evaluated; recorded, not read back
+};
 
 const EVENT_COLUMNS = [
   "source_file",
@@ -48,7 +51,7 @@ const UPSERT_EVENT = `INSERT INTO events (${EVENT_COLUMNS.join(", ")}) VALUES ($
   ON CONFLICT(id) DO UPDATE SET ${SETS.map(([c, v]) => `${c} = ${v}`).join(", ")}
   WHERE (${SETS.map(([c]) => `events.${c}`).join(", ")}) IS NOT (${SETS.map(([, v]) => v).join(", ")}) RETURNING *`;
 
-const SESSION_SELECT = `SELECT s.*, NOT EXISTS (
+export const SESSION_SELECT = `SELECT s.*, NOT EXISTS (
     SELECT 1 FROM events e JOIN files_indexed f ON f.path = e.source_file
     WHERE e.session_id = s.session_id AND f.gone_at IS NULL
   ) AS archived FROM sessions s`;
@@ -68,7 +71,7 @@ function eventParams(sourceFile: string, e: AgentEvent): SqlValue[] {
   ];
 }
 
-function rowToEvent(row: Row): AgentEvent {
+export function rowToEvent(row: Row): AgentEvent {
   const event: AgentEvent = {
     id: row.id as string,
     schema_version: row.schema_version as AgentEvent["schema_version"],
@@ -85,11 +88,11 @@ function rowToEvent(row: Row): AgentEvent {
   return event;
 }
 
-function rowToSession(row: Row): SessionRow {
+export function rowToSession(row: Row): SessionRow {
   return { ...plain<SessionRow>(row), archived: Boolean(row.archived) };
 }
 
-function rowToFinding(row: Row): Finding {
+export function rowToFinding(row: Row): Finding {
   return { ...plain<Finding>(row), events: JSON.parse(row.events as string) as AgentEvent[] };
 }
 
@@ -185,6 +188,8 @@ export function openStore(path: string = defaultDbPath()) {
       ON CONFLICT(session_id) DO UPDATE SET agent = excluded.agent, project_path = excluded.project_path,
         first_ts = excluded.first_ts, last_ts = excluded.last_ts, event_count = excluded.event_count`),
     sessionEvents: db.prepare("SELECT * FROM events WHERE session_id = ? ORDER BY ts, seq, id"),
+    goneEvents: db.prepare(`SELECT e.* FROM events e JOIN files_indexed f ON f.path = e.source_file
+      WHERE e.session_id = ? AND f.gone_at IS NOT NULL ORDER BY e.ts, e.seq, e.id`),
     getSession: db.prepare(`${SESSION_SELECT} WHERE s.session_id = ?`),
     listSessions: db.prepare(`${SESSION_SELECT} ORDER BY s.first_ts, s.session_id`),
     // A repeat refreshes the rule's wording but keeps the stored events: a re-evaluation from DB rows may no longer
@@ -197,10 +202,12 @@ export function openStore(path: string = defaultDbPath()) {
         coalesce(sum(agent_id IS NOT NULL), 0) AS subagent FROM events
       WHERE (? IS NULL OR session_id IN (SELECT value FROM json_each(?)))`), // plain ? twice: Node 22.13 can't bind ?NNN
     listFindings: db.prepare("SELECT * FROM findings WHERE (? IS NULL OR session_id = ?) ORDER BY ts, id"),
-    insertRuleRun: db.prepare(`INSERT INTO rule_runs (rule_set_hash, started_at, finished_at, events, findings)
-      VALUES (?, ?, ?, ?, ?)`),
-    lastRuleRun: db.prepare(`SELECT rule_set_hash, started_at, finished_at, events, findings
-      FROM rule_runs ORDER BY id DESC LIMIT 1`),
+    insertRuleRun: db.prepare(`INSERT INTO rule_runs (rule_set_hash, started_at, finished_at, events, findings, scope)
+      VALUES (?, ?, ?, ?, ?, ?)`),
+    lastRuleRun: db.prepare(`SELECT rule_set_hash, started_at, finished_at, events, findings FROM rule_runs
+      WHERE (? IS NULL OR EXISTS (SELECT 1 FROM json_each(scope) WHERE value = ?)) ORDER BY id DESC LIMIT 1`),
+    sessionFiles: db.prepare(`SELECT DISTINCT source_file FROM events WHERE session_id IN
+      (SELECT session_id FROM events WHERE source_file IN (SELECT value FROM json_each(?)))`),
     // ADR 0016: the earliest (ts, id) event per (kind, value) and per (project, kind, value). The keys must match
     // engine/first-seen.ts, which does the same over in-memory events for --no-index.
     firstSeen: db.prepare(`WITH k AS (
@@ -314,6 +321,9 @@ export function openStore(path: string = defaultDbPath()) {
 
     sessionEvents: (sessionId: string): AgentEvent[] => q.sessionEvents.all(sessionId).map(rowToEvent),
 
+    /** The session's events whose file is gone: masked rows, the only copy left (0008). */
+    goneEvents: (sessionId: string): AgentEvent[] => q.goneEvents.all(sessionId).map(rowToEvent),
+
     getSession(sessionId: string): SessionRow | undefined {
       const row = q.getSession.get(sessionId);
       return row && rowToSession(row);
@@ -348,7 +358,14 @@ export function openStore(path: string = defaultDbPath()) {
     },
 
     recordRuleRun(run: RuleRun): void {
-      q.insertRuleRun.run(run.rule_set_hash, run.started_at, run.finished_at, run.events, run.findings);
+      const scope = run.scope ? JSON.stringify(run.scope.map(mask)) : null;
+      q.insertRuleRun.run(run.rule_set_hash, run.started_at, run.finished_at, run.events, run.findings, scope);
+    },
+
+    /** Every indexed file (masked path) holding events of a session that one of `paths` holds: a session can span
+     * groups of files (a legacy flat `agent-*.jsonl` next to its main transcript), and is re-read whole. */
+    sessionFiles(paths: string[]): string[] {
+      return q.sessionFiles.all(JSON.stringify(paths.map(mask))).map((r) => r.source_file as string);
     },
 
     /** Ids of the events that first carried a domain, MCP server, hook command or skill/plugin, at or after `cutoff`
@@ -362,8 +379,10 @@ export function openStore(path: string = defaultDbPath()) {
       return fs;
     },
 
-    lastRuleRun(): RuleRun | undefined {
-      const row = q.lastRuleRun.get();
+    /** The last run, or the last that evaluated `scope`. */
+    lastRuleRun(scope?: string): RuleRun | undefined {
+      const s = scope === undefined ? null : mask(scope);
+      const row = q.lastRuleRun.get(s, s);
       return row && plain<RuleRun>(row);
     },
 

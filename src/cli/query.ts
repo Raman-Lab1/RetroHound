@@ -11,6 +11,8 @@ const cell = (v: Row[string]): string | number | null =>
 
 function runQuery(sql: string, format: string, dbPath: string, io: IO): number {
   const fmt = oneOf("format", format, ["table", "json"] as const);
+  // prepare() compiles only the first statement, so a leading SELECT/WITH also stops `VACUUM INTO` (it writes a file).
+  if (!/^\s*(?:select|with)\b/i.test(sql)) throw new UsageError("only a SELECT or WITH query is allowed");
   let rows: Record<string, string | number | null>[];
   try {
     const db = openReadOnly(dbPath);

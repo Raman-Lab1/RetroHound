@@ -93,7 +93,7 @@ export const CASES: [name: string, run: (dir: string) => Promise<void>][] = [
     const before = first.sessionEvents("s1").map((e) => e.id);
     first.close();
     const old = open(path);
-    old.exec("CREATE INDEX events_category ON events (category); CREATE INDEX events_ts ON events (ts); CREATE INDEX events_target_path ON events (target_path); CREATE INDEX events_domain ON events (domain); DROP TABLE chain; DROP TABLE config_snapshots; ALTER TABLE rule_runs DROP COLUMN config_items; PRAGMA user_version = 1");
+    old.exec("CREATE INDEX events_category ON events (category); CREATE INDEX events_ts ON events (ts); CREATE INDEX events_target_path ON events (target_path); CREATE INDEX events_domain ON events (domain); DROP TABLE chain; DROP TABLE config_snapshots; ALTER TABLE rule_runs DROP COLUMN config_items; ALTER TABLE rule_runs DROP COLUMN scope; PRAGMA user_version = 1");
     old.close();
     const store = openStore(path);
     assert.deepEqual(store.sessionEvents("s1").map((e) => e.id), before);

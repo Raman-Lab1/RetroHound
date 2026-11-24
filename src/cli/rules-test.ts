@@ -1,12 +1,13 @@
 // `retrohound rules test`: the rule-quality gate. Every non-silenced rule needs
 // <tests>/<name>/{positive,negative}.jsonl; each line is a partial RawEvent (defaults fill the contract fields) and a
-// file is one session. Positive: every line fires a detection rule alone, a correlation fires on the whole file.
+// file is one session. Positive: every line fires a detection rule alone (for a first_seen_* rule, every line after the
+// cold-start window), a correlation fires on the whole file.
 // Negative: non-empty, never fires. Also bans `re` patterns with more than one unescaped .* / .+ (ReDoS).
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { parseAllDocuments } from "yaml";
 import { evaluate } from "../engine/evaluate.ts";
-import { firstSeenOf, setFirstSeen } from "../engine/first-seen.ts";
+import { coldStartCutoff, FIRST_SEEN_FIELDS, firstSeenOf, setFirstSeen } from "../engine/first-seen.ts";
 import type { Rule } from "../engine/load.ts";
 import { mask } from "../normalize/mask.ts";
 import type { RawEvent } from "../normalize/types.ts";
@@ -34,7 +35,8 @@ const reValues = (x: unknown, re = false): string[] =>
   : x && typeof x === "object" ? Object.entries(x).flatMap(([k, v]) => reValues(v, k.split("|").includes("re")))
   : [];
 
-// The engine caps `re` text at 8 KiB, which bounds quadratic patterns but not `.*a.*b` (cubic in V8, ~1 s per KiB).
+// The engine runs an unbounded `re` on 8 KiB windows (modifiers.ts regexTest), which bounds quadratic patterns but not
+// `.*a.*b` (cubic in V8, ~1 s per KiB).
 function badRePatterns(rules: Rule[]): string[] {
   return [...new Set(rules.map((r) => r.path))].flatMap((path) =>
     parseAllDocuments(readFileSync(path, "utf8")).flatMap((d) => reValues((d.toJS() as { detection?: unknown } | null)?.detection))
@@ -62,10 +64,15 @@ function checkOne(rule: Rule, testsDir: string): RuleCheck {
       setFirstSeen();
     }
   };
-  const positive = run(pos, (evs) =>
-    rule.kind === "correlation"
-      ? hits(rule, evs) ? [] : ["correlation did not fire on the positive file"]
-      : evs.filter((e) => hits(rule, [e]) === 0).map((e) => `positive line ${e.raw_ref.line} did not fire`));
+  // A first_seen rule's baseline lines (before the cold-start cutoff) can never fire: only the later lines must.
+  const cold = rule.kind === "detection" && FIRST_SEEN_FIELDS.some((f) => rule.fields.includes(f));
+  const positive = run(pos, (evs) => {
+    if (rule.kind === "correlation") return hits(rule, evs) ? [] : ["correlation did not fire on the positive file"];
+    const cutoff = cold ? coldStartCutoff(evs.map((e) => e.ts)) : "";
+    const live = evs.filter((e) => e.ts >= cutoff);
+    if (!live.length) return ["no positive line after the cold-start window"];
+    return live.filter((e) => hits(rule, [e]) === 0).map((e) => `positive line ${e.raw_ref.line} did not fire`);
+  });
   const negative = run(neg, (evs) => (hits(rule, evs) ? ["fired on the negative file"] : []));
   return { name, files, positive, negative };
 }

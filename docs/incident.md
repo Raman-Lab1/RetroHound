@@ -13,17 +13,21 @@ to. A prefix matching more than one id is a usage error (exit 2) that lists the 
 
 | file | holds |
 |---|---|
-| `incident.json` | `schema: retrohound.incident/0.1`: tool version, the rules behind the findings (id, name, level, sha256 of the rule file) the index's last `rule_set_hash` and `index_head` (the index's hash-chain head when the pack was written: `retrohound verify --head <index_head>` later shows the index still holds what the pack came from, and lists what was added since), the sessions (with `archived`), counts by outcome (blocked, success, error, unknown), the rotate list (secret kind and fingerprint, never a value), findings (rule, level, event ids, primary first), the sub-agent tree (main and each sub-agent with the tool call that spawned it), evidence provenance per transcript file (path, sha256, first seen, last seen, gone at) and the masked timeline. |
+| `incident.json` | `schema: retrohound.incident/0.1`: tool version, the rules behind the findings (id, name, level, sha256 of the rule file) the `rule_set_hash` of the last scan that covered these sessions' root and `index_head` (the index's hash-chain head when the pack was written: `retrohound verify --head <index_head>` later shows the index still holds what the pack came from, and lists what was added since), the sessions (with `archived`), counts by outcome (blocked, success, error, unknown), the rotate list (secret kind and fingerprint, never a value), findings (rule, level, event ids, primary first), the sub-agent tree (main and each sub-agent with the tool call that spawned it), evidence provenance per transcript file (path, sha256, first seen, last seen, gone at) and the masked timeline. |
 | `index.html` | The same data, readable in a browser. One self-contained file: no scripts, links, fonts or images, and a Content-Security-Policy that blocks loading anything. |
 | `manifest.json` | The sha256 of `incident.json` and `index.html`. |
 
 - **Index only.** The pack reads the index read-only and never the transcripts, so it works the same for sessions
   whose transcripts the agent already deleted (ADR 0008).
 - **Masked.** Every string is masked again on the way out (ADR 0007). Secrets appear as kind and fingerprint only.
-  Paths are as the index holds them; `--anonymize` hashes project names, the user name and project dirs in paths and
-  commands, as `wrapped --anonymize` does.
+  Paths are as the index holds them; `--anonymize` hashes project names, the user name and project dirs in paths,
+  commands, tool names and attribution (an MCP server named after a project), as `wrapped --anonymize` does. In a
+  path field every dir under a home is hashed, spaces included; in a command a dir with a space is hashed whole only
+  inside quotes. An unquoted `cat ~/My Projects/clientc/a.txt` is a known limit: the hashing stops at the space, so
+  `clientc` stays.
 - **New folder only.** `--out` (default `./retrohound-incident-<first 8 chars of the id>`) must not exist or be empty:
   a pack never overwrites or mixes with other files, so the manifest describes the whole folder. Files are written
   0600 in a 0700 folder.
-- **Reproducible.** No generation time, every list sorted: the same index gives byte-identical files. A later scan
+- **Reproducible.** No generation time, every list sorted: the same index gives byte-identical files, except with
+  `--anonymize` (a random key per run, by design, so hashes cannot be linked across packs). A later scan
   changes `last_seen`, so a pack is tied to the index state it was built from.

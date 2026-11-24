@@ -8,10 +8,12 @@ import { join } from "node:path";
 import { Command } from "commander";
 import { registerIncident } from "../../src/cli/incident.ts";
 import { UsageError, type IO } from "../../src/cli/io.ts";
+import { anonymizer } from "../../src/cli/wrapped.ts";
 import type { Pack } from "../../src/incident/pack.ts";
 import { runScan } from "../../src/scan.ts";
 import { verifyChain } from "../../src/store/chain.ts";
 import { openReadOnly } from "../../src/store/index.ts";
+import { open } from "../../src/store/sqlite.ts";
 
 const base = mkdtempSync(join(tmpdir(), "rh-incident-"));
 afterAll(() => rmSync(base, { recursive: true, force: true }));
@@ -77,7 +79,13 @@ beforeAll(async () => {
     result(A, 8, "t4", { agentId: "a1" }),
   ];
   writeFileSync(join(proj, `${A}.jsonl`), lines.map((l) => JSON.stringify(l)).join("\n") + "\n");
-  writeFileSync(join(proj, `${B}.jsonl`), JSON.stringify(use(B, 9, "t9", "Bash", { command: "hitcmd" })) + "\n");
+  const linesB = [
+    use(B, 9, "t9", "Bash", { command: "hitcmd" }),
+    use(B, 10, "t10", "mcp__acme-crm__lookup", { q: "x" }, { attributionMcpServer: "acme-crm" }),
+    use(B, 11, "t11", "Read", { file_path: "/home/x/My Projects/clientc/a.txt" }),
+    use(B, 12, "t12", "Bash", { command: 'cat "/home/x/My Projects/clientc/b.txt"' }),
+  ];
+  writeFileSync(join(proj, `${B}.jsonl`), linesB.map((l) => JSON.stringify(l)).join("\n") + "\n");
   await scan();
 });
 
@@ -163,6 +171,30 @@ describe("incident", () => {
     expect([p.sessions[0]!.project_path, ...p.provenance.map((f) => f.path)].filter((s) => s?.includes("acme"))).toEqual([]);
   });
 
+  test("the anonymizer (also wrapped's spiciest command) hashes dirs with spaces in quotes and in path fields", () => {
+    const fix = anonymizer([], []);
+    expect(fix(`cat '~/My Projects/clientc/a.txt' | grep x`)).toMatch(/^cat '~\/anon-\w+\/anon-\w+\/a\.txt' \| grep x$/);
+    expect(fix.path("C:\\Users\\bob\\Google Drive\\clientc\\a.txt")).toMatch(/^C:\\Users(\\anon-\w+){3}\\a\.txt$/);
+    expect(fix(`cat "~/Bob's Stuff/clientc/a.txt"`)).not.toContain("clientc"); // the other quote inside does not end it
+    expect(fix("cat ~/My Projects/clientc/a.txt")).toContain("clientc"); // unquoted: stops at the space (docs/incident.md)
+  });
+
+  test("a quoted path's kept parts are not hashed a second time up to their space", () => {
+    const fix = anonymizer([], []);
+    expect(fix(`cat "~/Desktop/My Notes.txt"`)).toBe(`cat "~/Desktop/My Notes.txt"`);
+    expect(fix(`cat '/home/bob/docs/Q3 plan.md' ~/Desktop/x.txt`)).toBe(`cat '/home/anon-${/anon-(\w+)/.exec(fix("/home/bob/x"))![1]}/docs/Q3 plan.md' ~/Desktop/x.txt`);
+  });
+
+  test("--anonymize hides project and dir names in tool names, attribution and paths with spaces", async () => {
+    const d = fresh();
+    expect(await cli(B, "--out", d, "--anonymize")).toBe(0);
+    const p = readPack(d);
+    const mcp = p.timeline.find((e) => e.attribution)!;
+    expect([mcp.tool_name, mcp.attribution]).toEqual([expect.stringMatching(/^mcp__anon-\w+-crm__lookup$/), expect.stringMatching(/^mcp:anon-\w+-crm$/)]);
+    expect(strings(p).filter((s) => /acme|clientc|My Projects/.test(s))).toEqual([]);
+    expect(p.timeline.find((e) => e.target_path)?.target_path).toMatch(/^\/home\/anon-\w+\/anon-\w+\/anon-\w+\/a\.txt$/);
+  });
+
   test("an archived session (transcripts gone) still packs, from the index alone", async () => {
     rmSync(join(dir, "claude", "projects"), { recursive: true });
     mkdirSync(join(dir, "claude", "projects"));
@@ -173,5 +205,17 @@ describe("incident", () => {
     expect(p.sessions[0]!.archived).toBe(true);
     expect(p.provenance[0]!.gone_at).not.toBeNull();
     expect(p.counts.events).toBe(readPack(first).counts.events);
+  });
+
+  test("rule_set_hash is the last run that scanned the session's scope, not another root's newer run", async () => {
+    const mine = readPack(first).rule_set_hash;
+    expect(mine).toMatch(/^[0-9a-f]{64}$/);
+    const w = open(db);
+    w.prepare("INSERT INTO rule_runs (rule_set_hash, started_at, finished_at, events, findings, scope) VALUES (?, ?, ?, 0, 0, ?)")
+      .run("other", ts(1), ts(2), JSON.stringify(["codex:/elsewhere"]));
+    w.close();
+    const d = fresh();
+    expect(await cli(A, "--out", d)).toBe(0);
+    expect(readPack(d).rule_set_hash).toBe(mine);
   });
 });
