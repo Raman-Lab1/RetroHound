@@ -3,9 +3,9 @@
 class Retrohound < Formula
   desc "Audit what your AI coding agent did: Sigma rules over agent transcripts, offline"
   homepage "https://github.com/Raman-Lab1/RetroHound"
-  url "https://registry.npmjs.org/retrohound/-/retrohound-0.3.1.tgz"
+  url "https://registry.npmjs.org/retrohound/-/retrohound-0.3.2.tgz"
   # SHA-256 of the published tarball: `curl -sL <url> | shasum -a 256`.
-  sha256 "67d41c76524eb9d77ad4b7e61b8d6f95ce97a3326b9b7564c916b2a6e6876757"
+  sha256 "becb9b18264d04eb5bc6506ca3c4d531e8b88a59bf1c004eb14980101b85aa20"
   license "Apache-2.0"
 
   depends_on "node"

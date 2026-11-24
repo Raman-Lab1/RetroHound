@@ -5,6 +5,9 @@ and versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- The Homebrew formula and the Velociraptor artifact pin the published 0.3.2 tarball and its SHA-256.
+
 ## [0.3.2] - 2026-11-24
 
 ### Added
