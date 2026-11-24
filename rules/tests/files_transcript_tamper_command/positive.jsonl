@@ -54,3 +54,18 @@
 {"category": "process_creation", "tool_name": "Bash", "command_line": "git fetch --upload-pack='rm -rf ~/.claude/projects' origin"}
 {"category": "process_creation", "tool_name": "Bash", "command_line": "git -c core.fsmonitor='mv ~/.claude/projects /tmp/x' status"}
 {"category": "process_creation", "tool_name": "Bash", "command_line": "git -c core.pager='python3 -c \"import shutil; shutil.rmtree(\\\"/home/dev/.claude/projects\\\")\"' log"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git -c alias.x='!rm -rf ~/.claude/projects' x"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git config alias.wipe '!rm -rf ~/.claude/projects'"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git -c alias.x='!mv ~/.claude/projects /tmp/x' x"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git -c alias.x='!python3 -c \"import shutil; shutil.rmtree(\\\"/home/dev/.claude/projects\\\")\"' x"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "/bin/rm -rf ~/.claude/projects"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "/usr/bin/rm -rf ~/.claude/projects"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "sudo /bin/rm -rf ~/.codex/sessions"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "GIT_EDITOR='/bin/rm -rf ~/.claude/projects' git commit"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git -c core.fsmonitor='/bin/rm -rf ~/.claude/projects' status"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "/bin/mv ~/.claude/projects /tmp/x"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "GIT_EDITOR=\"bash -c 'rm -rf ~/.claude/projects'\" git commit"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git -c core.fsmonitor=\"sh -c 'rm -rf ~/.claude/projects'\" status"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git -c core.sshCommand='sh -c \"rm -rf ~/.codex/sessions\"' fetch"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git -c core.fsmonitor='\"rm\" -rf ~/.claude/projects' status"}
+{"category": "process_creation", "tool_name": "Bash", "command_line": "git -c core.fsmonitor=rm\\ -rf\\ ~/.claude/projects status"}
