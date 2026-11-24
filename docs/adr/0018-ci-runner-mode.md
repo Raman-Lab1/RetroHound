@@ -1,14 +1,13 @@
 # 0018. CI-runner mode: scan the runner's transcripts after the agent step, optionally guard it with the hook
 
-- Status: Proposed (for 0.4; deferred from 0.3.2 on 2026-11-22)
+- Status: Proposed (for 0.4)
 - Date: 2026-11-25
 - Related: 0007, 0008, 0009, 0014, 0016, 0017
 
 ## Context
 Coding agents now run inside CI: a GitHub Action that reviews pull requests, answers issues or fixes a failing build
 with Claude Code, Codex or Antigravity CLI. The text the agent works on (a PR description, a diff, an issue comment)
-is written by whoever opened it. The "Comment-and-Control" class, public since April 2026, is that text steering the
-agent into reading a secret (an environment dump, a token file) and posting it back as a comment or review, where
+is written by whoever opened it. The "Comment-and-Control" class is that text steering the agent into reading a secret (an environment dump, a token file) and posting it back as a comment or review, where
 anyone can read it. No network egress rule sees that: the post goes to the GitHub API the job needs anyway.
 
 What exists today:
@@ -18,7 +17,8 @@ What exists today:
 - `injection_untrusted_then_secret_comment` (hunt lane, `medium`) is the Comment-and-Control shape as a
   `temporal_ordered` correlation: untrusted content in, a secret harvest, then `gh issue|pr comment`, `gh pr review`,
   a posting `gh api` call or `gh release create|edit` with notes, within 30 minutes in one session. Its siblings
-  `injection_untrusted_then_secret_egress`, `_pipe_to_shell`, `_download_run` and `_package_install` share step one.
+  `injection_untrusted_then_secret_egress`, `_pipe_to_shell`, `_download_run` (all `medium`) and `_package_install`
+  (`low`) share step one.
 - The live hook (ADR 0009) is log-first, decides only with enforce-lane single-event rules, and fails open.
 
 None of this is wired for a runner. The transcripts are written where the runner user's home is, and an ephemeral
@@ -62,15 +62,25 @@ collectors' defaults, not observations from a runner.
 ## Decision
 ### 1. Post-step scan (the default)
 - The scan runs in the same job as the agent, after the agent step, with `if: always()`, so it also runs when the
-  agent step fails or is cancelled by a timeout. It reads the runner's default roots: `--agent all`, or one agent with
-  `--root` when the agent action moved its config directory (the scan step then gets the same environment variable).
-- It runs `scan --no-index` as the action already does: nothing is written on the runner except the report.
+  agent step fails or is cancelled by a timeout. It reads the runner's default roots with `--agent all`. The
+  collectors already read `CLAUDE_CONFIG_DIR` and `CODEX_HOME`, so when the agent action moves its config directory
+  through those variables the scan step gets the same variables and keeps `--agent all` (which refuses `--root`).
+  `--root`, one agent per scan step, is only for a location not set through them, such as a Docker container action
+  whose `HOME` is `/github/home`: on the host that is `$RUNNER_TEMP/_github_home`, so for Claude Code
+  `--agent claude_code --root "$RUNNER_TEMP/_github_home/.claude"` (to be confirmed by the validation run).
+- It runs `scan --no-index` as the action already does, so no index is written. It is not write-free: the first
+  secret seen creates the fingerprint key `~/.retrohound/fp.key` (ADR 0007), and a block-mode hook (section 2)
+  writes `rules-cache-*.json` next to it. On an ephemeral runner each job makes a new random key, so the secret
+  fingerprints in reports from different jobs cannot be compared; on a self-hosted runner the key persists between
+  jobs, as on a laptop. A key supplied to the job for comparable fingerprints is not proposed here.
 - Output is SARIF (`--format sarif`) or ECS/OCSF NDJSON (ADR 0014), written to `output` and uploaded with
   `actions/upload-artifact` under `if: always()`. The report is masked like every other output (ADR 0007). SARIF upload
   to code scanning stays optional: transcripts are not repo files and code scanning may drop such results
   (docs/output-schema.md).
 - `--fail-on` decides the job. The CI recommendation is `fail-on: medium`, because the injection correlations are
-  `medium`; the action's default stays `high` for `preflight`.
+  `medium`, except `injection_untrusted_then_package_install` at `low`, which `medium` does not fail the job on. The
+  action has one `fail-on` default, `high`, for both commands; open question 3 asks whether it should depend on
+  `command`.
 - On a self-hosted runner that keeps `$HOME` between jobs, the scan would report earlier jobs' sessions again. The
   documented fix is a per-job config directory (`CLAUDE_CONFIG_DIR` / `CODEX_HOME` under `$RUNNER_TEMP`) for the agent
   step and the scan; `--since` is the fallback.
@@ -100,6 +110,16 @@ Shape of the workflow (versions illustrative; pin actions by SHA in real use):
   agent settings (ADR 0009 installer, unchanged). For 0.4 this is a new `command` value on the action; the hook runs
   the copy the action installed under `$RUNNER_TEMP` with the Node that `setup-node` put on the runner, and
   `hook status` must report that both pass the path check.
+- Risks for that path check, unverified on a runner: `checkPaths` (src/hooks/install.ts) refuses a command or entry
+  file under `os.tmpdir()`, and walks their parent directories for group- or world-writable ones and other owners.
+  Whether `TMPDIR` resolves to `$RUNNER_TEMP`, and how `/opt/hostedtoolcache` and the work directories are owned, may
+  make the install refuse; open question 1 includes checking this.
+- The install step needs the same `CLAUDE_CONFIG_DIR` / `CODEX_HOME` as the agent step, or it writes a settings file
+  the agent never reads (`settingsPath`, user scope).
+- The agent also loads the project `.claude/settings.json` from the PR checkout, which can change hook behaviour (for
+  example `disableAllHooks`). Preflight has no check for a hooks-disabling key today; `disableAllHooks` appears only
+  in the write rules (`control_plane_agent_config_risky_write`, `_risky_shell_write`). Adding it to preflight is
+  follow-up work, not part of this ADR.
 - Block, not log: on a runner nobody reads the trial log during the run, and nobody is there to answer `confirm`.
   Only enforce-lane single-event rules decide, as on a laptop; the correlations, including the Comment-and-Control
   one, never block. The useful block is the harvest step: `secrets_env_dump`, `secrets_read_secret_file`,
@@ -107,9 +127,10 @@ Shape of the workflow (versions illustrative; pin actions by SHA in real use):
 - **Fail-closed is acceptable here.** On a laptop `--fail-closed` can lock the user out of their own agent; on a
   disposable runner the worst case is a failed job. For Claude Code the CI recommendation is `--fail-closed`. What it
   covers is unchanged (ADR 0009, amendment of 2026-11-13): a missing runtime or entry file, a crash before `hookRun`
-  starts, or a timeout blocks every tool call; an internal error (bad payload, rules that do not load) still exits 0
-  with no decision and one stderr line that the agent, not the job log, receives. The post-step scan is the backstop
-  for what the hook let through, and runs whatever the hook did.
+  starts, or a timeout blocks the tool call it happened on; an internal error (bad payload, rules that do not load)
+  still exits 0 with no decision and writes one line to stderr. That line is not in the job log; whether the agent
+  sees a hook's stderr on exit 0 has not been checked. The post-step scan is the backstop for what the hook let
+  through, and runs whatever the hook did.
 - Codex has no fail-closed setting and runs a new hook only after it is trusted in `/hooks`; whether `codex exec`
   on a runner runs an untrusted hook at all is unknown, so the Codex hook in CI is unsupported until tested.
   Antigravity CLI's hook still needs its live check (ADR 0009).
@@ -120,10 +141,15 @@ Shape of the workflow (versions illustrative; pin actions by SHA in real use):
   `network_new_domain_after_secret_read`), `github_post_via_gh` as their step three, and the enforce-lane secret
   rules. `--level` and `--fail-on` are enough to cut noise; a pack or a lane filter is revisited after the first real
   run shows what fires.
-- A known gap: an agent action usually puts the issue or PR text into the prompt itself rather than fetching it with
-  `gh issue view`. Then `untrusted_content_received` never matches and the correlations miss the attack, even though
-  the secret harvest and the post are in the transcript. Closing it (for example treating a CI session's first prompt
-  as untrusted content) needs the transcript of a real run first.
+- A known gap, with two vectors where `untrusted_content_received` never matches and the correlations miss the
+  attack, even though the secret harvest and the post are in the transcript:
+  - prompt-borne: an agent action usually puts the issue or PR text into the prompt itself rather than fetching it
+    with `gh issue view`;
+  - file-borne: the agent reads attacker text from the checked-out PR (a `Read` of a changed file, or the diff on
+    disk). A review agent reading the PR's own files is the usual case, and the helper says it does not cover a file
+    read from a just-cloned repo.
+  Closing either (for example treating a CI session's first prompt, or files of the checked-out PR, as untrusted
+  content) needs the transcript of a real run first.
 
 ### Constraints that stay
 - RetroHound makes zero network calls; the runner fetches the npm package, the product does not. No telemetry.
@@ -147,7 +173,8 @@ Shape of the workflow (versions illustrative; pin actions by SHA in real use):
    settings land and whether the hook ran. Which action and which repository?
 2. Should the hook be a `command` value on the existing action, or a second action in the same repository?
 3. Recommend `fail-on: medium` for CI in the docs only, or make the action's default depend on `command`?
-4. Should `hook run` also append internal errors to the hook log, so the post-step can fail the job when the hook
-   was not deciding?
-5. Is the prompt-borne untrusted content gap worth a derived field (in the manner of ADR 0016/0017), once a real CI
-   transcript shows how the prompt is recorded?
+4. Should the job fail when the hook was not deciding? `hook run` writes the hook log only in log mode, and the scan
+   never reads that log, so this needs both: `hook run` recording internal errors in block mode, and a scan-side
+   reader or a separate step that fails on them.
+5. Are the prompt-borne and file-borne untrusted content gaps worth a derived field (in the manner of ADR
+   0016/0017), once a real CI transcript shows how the prompt and the PR's files are recorded?
